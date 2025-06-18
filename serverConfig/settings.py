@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-+#ds1yk1fdrx$=3&yf+!q$r9sy!l$vjl8ea@_fhya_t3(okl!p
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', ".vercel.app", ".now.sh", ".vercel.sh", "127.0.0.1"]
+ALLOWED_HOSTS = ['localhost', ".vercel.app", ".now.sh", ".vercel.sh", "127.0.0.1",]
 
 
 # Application definition
@@ -160,10 +160,12 @@ REST_FRAMEWORK = {
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173"
+    "http://localhost:5173",
+    "https://docs-maker-demo.vercel.app"
 ]
 CORS_ORIGIN_WHITELIST = [
-    "http://localhost:5173"
+    "http://localhost:5173",
+    "https://docs-maker-demo.vercel.app",
 ]
 
 JWT_COOKIE_SAMESITE = 'None'  # Allow cross-site cookies
