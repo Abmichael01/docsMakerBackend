@@ -55,7 +55,7 @@ class PurchasedTemplate(models.Model):
     form_fields = models.JSONField(default=dict, blank=True)
     test = models.BooleanField(default=True)
 
-    tracking_id = models.CharField(max_length=100, blank=True, null=True)
+    tracking_id = models.CharField(max_length=100, blank=True, null=True, unique=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="",)
 
     created_at = models.DateTimeField(auto_now_add=True)
