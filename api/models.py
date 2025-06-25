@@ -48,6 +48,8 @@ class PurchasedTemplate(models.Model):
 
     buyer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="purchased_templates")
     template = models.ForeignKey("Template", on_delete=models.CASCADE, related_name="purchases")
+    
+    name = models.CharField(max_length=255, blank=True)
 
     svg = models.TextField()
     form_fields = models.JSONField(default=dict, blank=True)
@@ -60,8 +62,14 @@ class PurchasedTemplate(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
+        # Auto-generate name if not provided
+        if not self.name:
+            count = PurchasedTemplate.objects.filter(buyer=self.buyer, template=self.template).count() + 1
+            self.name = f"{self.template.name} #{count}"
+
         if self.svg:
             self.form_fields = parse_svg_to_form_fields(self.svg)
+
         super().save(*args, **kwargs)
 
     def __str__(self):
