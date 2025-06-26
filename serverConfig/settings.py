@@ -71,6 +71,7 @@ ROOT_URLCONF = 'serverConfig.urls'
 
 
 
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -154,6 +155,7 @@ AUTH_USER_MODEL = 'accounts.User'
 
 REST_AUTH = {
     'LOGIN_SERIALIZER': 'accounts.serializers.LoginSerializer',
+    "USER_DETAILS_SERIALIZER": "accounts.serializers.CustomUserDetailsSerializer",
 }
 
 REST_FRAMEWORK = {
