@@ -56,7 +56,7 @@ class PurchasedTemplate(models.Model):
     test = models.BooleanField(default=True)
 
     tracking_id = models.CharField(max_length=100, blank=True, null=True, unique=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="",)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="processing",)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
