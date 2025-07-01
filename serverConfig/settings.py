@@ -31,7 +31,7 @@ SECRET_KEY = 'django-insecure-+#ds1yk1fdrx$=3&yf+!q$r9sy!l$vjl8ea@_fhya_t3(okl!p
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', ".vercel.app", ".now.sh", ".vercel.sh", "127.0.0.1",]
+ALLOWED_HOSTS = ['localhost', ".vercel.app", ".now.sh", ".vercel.sh", "127.0.0.1", "9bad-102-89-68-147.ngrok-free.app"]
 
 
 # Application definition
@@ -51,9 +51,12 @@ INSTALLED_APPS = [
     'corsheaders',
     
     
+    'channels',
+    
     #local apps
     "accounts",
     "api",
+    "wallet",
 ]
 
 MIDDLEWARE = [
@@ -70,6 +73,23 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'serverConfig.urls'
 
 
+ASGI_APPLICATION = 'serverConfig.asgi.application'
+
+# Redis channel layer
+# CHANNEL_LAYERS = {
+#     'default': {
+#         'BACKEND': 'channels.layers.InMemoryChannelLayer'
+#     }
+# }
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [os.environ.get("REDIS_URL", "redis://localhost:6379")],
+        },
+    },
+}
 
 
 TEMPLATES = [
