@@ -197,13 +197,15 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "https://docs-maker-demo.vercel.app",
     "http://localhost:3000",
-    "https://order-tracker-demo.vercel.app"
+    "https://order-tracker-demo.vercel.app",
+    "https://sharptoolz.com",
 ]
 CORS_ORIGIN_WHITELIST = [
     "http://localhost:5173",
     "https://docs-maker-demo.vercel.app",
     "http://localhost:3000",
-    "https://order-tracker-demo.vercel.app"
+    "https://order-tracker-demo.vercel.app",
+    "https://sharptoolz.com",
 ]
 
 JWT_COOKIE_SAMESITE = 'None'  # Allow cross-site cookies
