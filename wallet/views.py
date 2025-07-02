@@ -32,7 +32,7 @@ class WalletDetailView(APIView):
         serializer = WalletSerializer(wallet)
         return Response(serializer.data)
 
-
+ 
 class CreateCryptoPaymentView(APIView):
     TICKER = "bep20/usdt"
     RECEIVING_ADDRESS = "0x8482a1d4716736bf3b71736fafac9e8cd679fae8"
