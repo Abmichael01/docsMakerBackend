@@ -8,7 +8,8 @@ from rest_framework import status
 from django.urls import reverse
 
 from wallet.models import Transaction
-
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from wallet.serializers import WalletSerializer
 
 
@@ -23,8 +24,6 @@ def send_wallet_update(user):
             "data": data,
         },
     )
-    
-    print(data)
 
 
 class WalletDetailView(APIView):
@@ -90,9 +89,19 @@ class CreateCryptoPaymentView(APIView):
             "tx_id": tx.tx_id,  # ← Include tx_id in the response
         }, status=status.HTTP_201_CREATED)
 
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
-from wallet.serializers import WalletSerializer
+
+class CancelCryptoPaymentView(APIView):
+    def post(self, request):
+        tx_id = request.data.get("id")
+        if not tx_id:
+            return Response({"detail": "Transaction ID required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            tx = Transaction.objects.get(id=tx_id, wallet=request.user.wallet, status=Transaction.Status.PENDING)
+        except Transaction.DoesNotExist:
+            return Response({"detail": "Pending transaction not found."}, status=status.HTTP_404_NOT_FOUND)
+        tx.delete()
+        send_wallet_update(request.user)
+        return Response({"detail": "Transaction cancelled successfully."}, status=status.HTTP_200_OK)
 
 
 
