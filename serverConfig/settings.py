@@ -34,6 +34,8 @@ DEBUG = True
 ALLOWED_HOSTS = ['localhost', ".vercel.app", ".now.sh", ".vercel.sh", "127.0.0.1", "9bad-102-89-68-147.ngrok-free.app", "api.sharptoolz.com"]
 
 
+
+
 # Application definition
 
 INSTALLED_APPS = [ 
