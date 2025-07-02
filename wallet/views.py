@@ -59,7 +59,7 @@ class CreateCryptoPaymentView(APIView):
             "priority": "default",
         }
 
-        try:
+        try: 
             res = requests.get(cryptapi_url, params=params, timeout=10)
             res.raise_for_status()
             data = res.json()
