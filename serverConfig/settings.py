@@ -77,22 +77,23 @@ ROOT_URLCONF = 'serverConfig.urls'
 
 ASGI_APPLICATION = 'serverConfig.asgi.application'
 
-# Redis channel layer
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer'
+ENV = os.getenv("ENV", "development")  # default to development
+
+if ENV == "production":
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [os.environ.get("REDIS_URL", "redis://localhost:6379")],
+            },
+        }
     }
-}
-
-# CHANNEL_LAYERS = {
-#     "default": {
-#         "BACKEND": "channels_redis.core.RedisChannelLayer",
-#         "CONFIG": {
-#             "hosts": [os.environ.get("REDIS_URL", "redis://localhost:6379")],
-#         },
-#     },
-# }
-
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer"
+        }
+    }
 
 TEMPLATES = [
     {
