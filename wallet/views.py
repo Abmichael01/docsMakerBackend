@@ -44,7 +44,7 @@ class CreateCryptoPaymentView(APIView):
 
         # Build a unique callback URL per request
         callback_url = (
-            "https://9bad-102-89-68-147.ngrok-free.app/api/webhook/cryptapi/"
+            "https://api.sharptoolz.com/api/webhook/cryptapi/"
             f"?secret={self.CALLBACK_SECRET}&uuid={tx_id}"
         )
 
