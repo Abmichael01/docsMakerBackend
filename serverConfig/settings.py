@@ -79,6 +79,7 @@ ASGI_APPLICATION = 'serverConfig.asgi.application'
 
 ENV = os.getenv("ENV", "development")  # default to development
 
+
 if ENV == "production":
     CHANNEL_LAYERS = {
         "default": {
