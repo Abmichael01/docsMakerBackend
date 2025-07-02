@@ -26,3 +26,4 @@ __pycache__/
 
 # Secrets (never commit)
 .env
+__pycache__/ 
