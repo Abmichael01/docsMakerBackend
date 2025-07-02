@@ -1,1 +1,28 @@
+# Virtual environment
+env/
+
+.venv/
+
+# Static files
+staticfiles/
+
+# Daphne socket and lock files
+*.sock
+*.sock.lock
+
+# Compiled Python
+__pycache__/
+*.py[cod]
+
+# VSCode or JetBrains settings (optional)
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# DB (if using SQLite for dev)
+*.sqlite3
+
+# Secrets (never commit)
 .env
