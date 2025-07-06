@@ -8,6 +8,6 @@ router.register(r'purchased-templates', PurchasedTemplateViewSet, basename='purc
 
 urlpatterns = [
     path("track/<str:tracking_id>/", PublicTemplateTrackingView.as_view(), name="track-template"),
+    path("download-doc/", DownloadDoc.as_view(), name="download-doc"),
 ]
-
 urlpatterns += router.urls
