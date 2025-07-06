@@ -51,6 +51,7 @@ class PublicTemplateTrackingView(APIView):
             return Response({"detail": "Template not found."}, status=status.HTTP_404_NOT_FOUND)
 
 
+
 class DownloadDoc(APIView):
     def post(self, request):
         svg_content = request.data.get("svg")
