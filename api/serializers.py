@@ -67,7 +67,7 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
             # watermark = f'<text x="{x}" y="{y}" transform="rotate({angle}, {x}, {y})" fill="black" font-size="40" pointer-events="none">TEST TEMPLATE</text>'
             watermark = (
                 f'<g transform="rotate({angle}, {x}, {y})">'
-                f'<text x="{x}" y="{y}" fill="red" font-size="40" pointer-events="none">'
+                f'<text x="{x}" y="{y}" fill="black" font-size="40" pointer-events="none">'
                 f'TEST DOCUMENT</text></g>'
             )
             watermarks.append(watermark)
