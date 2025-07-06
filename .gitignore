@@ -28,3 +28,6 @@ __pycache__/
 .env
 __pycache__/ 
 -e "\n__pycache__/\n*.pyc" 
+__pycache__/
+*.pyc
+
