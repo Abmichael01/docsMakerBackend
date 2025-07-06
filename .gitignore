@@ -26,8 +26,8 @@ __pycache__/
 
 # Secrets (never commit)
 .env
-__pycache__/ 
--e "\n__pycache__/\n*.pyc" 
-__pycache__/
-*.pyc
+api/__pycache__/
+-e "\napi/__pycache__/\n*.pyc" 
+api/__pycache__/
+api/*.pyc
 
