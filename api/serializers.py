@@ -80,7 +80,7 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
         """Get SVG width and height"""
         # Default size 
         width, height = 400, 300
-        
+
         # Try viewBox first
         viewbox = re.search(r'viewBox=["\']([^"\']+)["\']', svg_content)
         if viewbox:
