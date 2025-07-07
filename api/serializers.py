@@ -78,7 +78,7 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
 
     def get_svg_size(self, svg_content):
         """Get SVG width and height"""
-        # Default size
+        # Default size 
         width, height = 400, 300
         
         # Try viewBox first
