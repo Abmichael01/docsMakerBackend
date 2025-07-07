@@ -26,7 +26,7 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
         model = PurchasedTemplate
         fields = '__all__'
         read_only_fields = ('buyer',)
-    
+
     def to_representation(self, instance):
         # Get the base representation
         representation = super().to_representation(instance)
