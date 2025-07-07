@@ -26,6 +26,27 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
         model = PurchasedTemplate
         fields = '__all__'
         read_only_fields = ('buyer',)
+        
+    def update(self, instance, validated_data):
+        old_test = instance.test
+        new_test = validated_data.get("test", old_test)
+
+        # Only charge if test changes from True ➝ False
+        if old_test is True and new_test is False:
+            user = instance.buyer
+
+            if not hasattr(user, "wallet"):
+                raise serializers.ValidationError("User does not have a wallet.")
+
+            charge_amount = 5
+
+            if user.wallet.balance < charge_amount:
+                raise serializers.ValidationError("Insufficient funds to remove watermark.")
+
+            user.wallet.debit(charge_amount, description="Template purchase")
+
+        # Proceed to update
+        return super().update(instance, validated_data)
 
     def to_representation(self, instance):
         # Get the base representation
