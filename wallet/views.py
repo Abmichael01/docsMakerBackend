@@ -17,7 +17,7 @@ def send_wallet_update(user, new_payment):
     channel_layer = get_channel_layer()
     wallet = user.wallet
     data = WalletSerializer(wallet).data
-    async_to_sync(channel_layer.group_send)(
+    async_to_sync(channel_layer.group_send)( # type: ignore
         f"user_wallet_{user.id}",
         {
             "type": "wallet.updated",
