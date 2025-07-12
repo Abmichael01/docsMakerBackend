@@ -22,6 +22,19 @@ class TemplateViewSet(viewsets.ModelViewSet):
         if self.request.method in SAFE_METHODS:
             return []  # No authentication for GET/HEAD/OPTIONS
         return super().get_authenticators()
+    
+    def get_queryset(self):
+        queryset = Template.objects.all().order_by('-created_at')
+        hot_param = self.request.query_params.get("hot")
+
+        if hot_param is not None:
+            # Convert string to boolean
+            if hot_param.lower() == "true":
+                queryset = queryset.filter(hot=True)
+            elif hot_param.lower() == "false":
+                queryset = queryset.filter(hot=False)
+        
+        return queryset
 
 
 class PurchasedTemplateViewSet(viewsets.ModelViewSet):
