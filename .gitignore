@@ -30,4 +30,9 @@ api/__pycache__/
 -e "\napi/__pycache__/\n*.pyc" 
 api/__pycache__/
 api/*.pyc 
+# Ignore Python compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
