@@ -25,7 +25,7 @@ def send_wallet_update(user, new_payment):
             "new_payment": new_payment,
         },
     )
- 
+  
 
 class WalletDetailView(APIView):
     def get(self, request):
