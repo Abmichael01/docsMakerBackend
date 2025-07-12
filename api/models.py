@@ -24,6 +24,7 @@ class Template(models.Model):
     form_fields = models.JSONField(default=dict, blank=True)
     type = models.CharField(max_length=20, choices=TEMPLATE_TYPE_CHOICES)
     created_at = models.DateTimeField(auto_now_add=True)
+    hot = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         if self.svg:

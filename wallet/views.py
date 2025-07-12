@@ -13,7 +13,7 @@ from channels.layers import get_channel_layer
 from wallet.serializers import WalletSerializer
 
 
-def send_wallet_update(user):
+def send_wallet_update(user, new_payment):
     channel_layer = get_channel_layer()
     wallet = user.wallet
     data = WalletSerializer(wallet).data
@@ -22,6 +22,7 @@ def send_wallet_update(user):
         {
             "type": "wallet.updated",
             "data": data,
+            "new_payment": new_payment,
         },
     )
  
@@ -80,7 +81,7 @@ class CreateCryptoPaymentView(APIView):
             description="Wallet Funding"
         )
         
-        send_wallet_update(request.user)
+        send_wallet_update(request.user, False)
 
         return Response({
             "transaction_id": str(tx.id),
@@ -100,7 +101,7 @@ class CancelCryptoPaymentView(APIView):
         except Transaction.DoesNotExist:
             return Response({"detail": "Pending transaction not found."}, status=status.HTTP_404_NOT_FOUND)
         tx.delete()
-        send_wallet_update(request.user)
+        send_wallet_update(request.user, False)
         return Response({"detail": "Transaction cancelled successfully."}, status=status.HTTP_200_OK)
 
 
@@ -154,7 +155,7 @@ class CryptAPIWebhookView(APIView):
         tx.save()
         print("done")
         tx.wallet.credit(credited_amount)
-        send_wallet_update(tx.wallet.user)
+        send_wallet_update(tx.wallet.user, True)
         print("hey")
 
         return Response({"detail": "Wallet credited successfully."}, status=status.HTTP_200_OK)

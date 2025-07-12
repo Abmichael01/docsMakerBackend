@@ -14,14 +14,32 @@ ROLE_CODES = {
 
 class CustomUserDetailsSerializer(UserDetailsSerializer):
     role = serializers.SerializerMethodField()
+    wallet_balance = serializers.SerializerMethodField()
+    total_purchases = serializers.SerializerMethodField()
+    downloads = serializers.SerializerMethodField()
 
     class Meta(UserDetailsSerializer.Meta):
-        fields = UserDetailsSerializer.Meta.fields + ("role",)
+        fields = UserDetailsSerializer.Meta.fields + (
+            "role",
+            "wallet_balance",
+            "total_purchases",
+            "downloads",
+        )
 
     def get_role(self, user):
         if user.is_superuser:
             return ROLE_CODES["admin"]
         return ROLE_CODES["user"]
+
+    def get_wallet_balance(self, user):
+        return getattr(user.wallet, "balance", 0)
+
+    def get_total_purchases(self, user):
+        return user.purchased_templates.count()
+
+    def get_downloads(self, user):
+        return user.downloads
+
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(

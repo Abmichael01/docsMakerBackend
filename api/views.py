@@ -73,6 +73,10 @@ class DownloadDoc(APIView):
                 content_type = "image/png"
                 filename = "output.png"
 
+            user = request.user
+            user.downloads += 1
+            user.save()
+            
             response = HttpResponse(output, content_type=content_type)
             response["Content-Disposition"] = f'attachment; filename="{filename}"'
             return response

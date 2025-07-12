@@ -60,6 +60,7 @@ class Wallet(models.Model):
 
     @transaction.atomic
     def debit(self, amount: Decimal, *, description=''):
+        print("isHere")
         amount = Decimal(amount)
         if amount <= 0:
             raise ValueError("Debit amount must be positive")
