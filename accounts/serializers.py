@@ -19,7 +19,7 @@ class CustomUserDetailsSerializer(UserDetailsSerializer):
     downloads = serializers.SerializerMethodField()
 
     class Meta(UserDetailsSerializer.Meta):
-        fields = UserDetailsSerializer.Meta.fields + (
+        fields = UserDetailsSerializer.Meta.fields + ( 
             "role",
             "wallet_balance",
             "total_purchases",
