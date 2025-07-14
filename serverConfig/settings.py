@@ -33,9 +33,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['localhost', ".vercel.app", ".now.sh", ".vercel.sh", "127.0.0.1", "9bad-102-89-68-147.ngrok-free.app", "api.sharptoolz.com", "38.242.198.49"]
 
-
 # Application definition
-
 INSTALLED_APPS = [ 
     'django.contrib.admin',
     'django.contrib.auth',
@@ -49,7 +47,6 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'dj_rest_auth',
     'corsheaders',
-    
     
     'channels',
     
