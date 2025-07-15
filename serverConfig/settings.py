@@ -198,6 +198,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://order-tracker-demo.vercel.app",
     "https://sharptoolz.com",
+    "http://38.242.198.49",
 ]
 CORS_ORIGIN_WHITELIST = [
     "http://localhost:5173",
@@ -205,6 +206,7 @@ CORS_ORIGIN_WHITELIST = [
     "http://localhost:3000",
     "https://order-tracker-demo.vercel.app",
     "https://sharptoolz.com",
+    "http://38.242.198.49",
 ]
 
 JWT_COOKIE_SAMESITE = 'None'  # Allow cross-site cookies
