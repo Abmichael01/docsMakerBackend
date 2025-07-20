@@ -10,6 +10,13 @@ from django.conf import settings
 from .serializers import *
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.shortcuts import get_object_or_404
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.core.mail import send_mail
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from django.views import View
+from django.http import JsonResponse
+from django.conf import settings
 
 
 class RegisterView(APIView):
@@ -21,7 +28,7 @@ class RegisterView(APIView):
             user = serializer.save()
             return Response({
                 "detail": "Registration successful",
-                "email": user.email,
+                "email": user.email, # type: ignore
             }, status=status.HTTP_201_CREATED)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -29,7 +36,7 @@ class RegisterView(APIView):
 class LoginView(BaseLoginView):
     permission_classes = [AllowAny]
     authentication_classes = [] 
-    def get_response(self):
+    def get_response(self): # type: ignore
         super().get_response()  # This sets the cookies or does other side-effects if needed
 
         if not self.user:
@@ -69,7 +76,54 @@ class LoginView(BaseLoginView):
         )
 
         return response
-    
+
+class ForgotPasswordView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = [] 
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data["email"] # type: ignore
+        user = User.objects.filter(email=email).first()
+
+        if user:
+            token = PasswordResetTokenGenerator().make_token(user)
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+
+            reset_url = f"{settings.FRONTEND_URL}/auth/reset-password?uid={uid}&token={token}"
+
+            send_mail(
+                "Reset Your Password",
+                f"Click the link to reset your password: {reset_url}",
+                settings.DEFAULT_FROM_EMAIL,
+                [email],
+                fail_silently=False,
+            )
+
+        return Response({"detail": "If this email exists, a reset link will be sent."}, status=status.HTTP_200_OK)
+
+class ResetPasswordConfirmView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = [] 
+    def post(self, request):
+        serializer = ResetPasswordConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"detail": "Password reset successful."}, status=status.HTTP_200_OK)
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+
+        request.user.set_password(serializer.validated_data['new_password']) # type: ignore
+        request.user.save()
+
+        return Response({"detail": "Password changed successfully."})
+
 class LogoutView(APIView):
     
     def post(self, request, *args, **kwargs):
