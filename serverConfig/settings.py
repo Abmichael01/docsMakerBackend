@@ -198,6 +198,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://order-tracker-demo.vercel.app",
     "https://sharptoolz.com",
+    "https://parcelfinda.com",
     "http://38.242.198.49",
 ]
 CORS_ORIGIN_WHITELIST = [
@@ -207,47 +208,48 @@ CORS_ORIGIN_WHITELIST = [
     "https://order-tracker-demo.vercel.app",
     "https://sharptoolz.com",
     "http://38.242.198.49",
+    "https://parcelfinda.com",
 ]
 
-# JWT_COOKIE_SAMESITE = 'None'  # Allow cross-site cookies
-# JWT_COOKIE_SECURE = True      # Must be True if using HTTPS
-# JWT_COOKIE_HTTPONLY = True    # Prevent XSS
-# JWT_COOKIE_PATH = '/'         # Available site-wide
+JWT_COOKIE_SAMESITE = 'None'  # Allow cross-site cookies
+JWT_COOKIE_SECURE = True      # Must be True if using HTTPS
+JWT_COOKIE_HTTPONLY = True    # Prevent XSS
+JWT_COOKIE_PATH = '/'         # Available site-wide
 
-# CSRF_COOKIE_SAMESITE = 'None'     # Allow cross-site cookies (for use with HTTPS)
-# CSRF_COOKIE_SECURE = True         # Cookie only sent over HTTPS
-# CSRF_COOKIE_HTTPONLY = False      # CSRF cookie must be accessible via JavaScript
-# CSRF_COOKIE_PATH = '/' 
+CSRF_COOKIE_SAMESITE = 'None'     # Allow cross-site cookies (for use with HTTPS)
+CSRF_COOKIE_SECURE = True         # Cookie only sent over HTTPS
+CSRF_COOKIE_HTTPONLY = False      # CSRF cookie must be accessible via JavaScript
+CSRF_COOKIE_PATH = '/' 
 
-# SESSION_COOKIE_SAMESITE = 'None'     # Allow cross-site cookies (for use with HTTPS)
-# SESSION_COOKIE_SECURE = True         # Cookie only sent over HTTPS
-# SESSION_COOKIE_HTTPONLY = False      # CSRF cookie must be accessible via JavaScript
-# SESSION_COOKIE_PATH = '/' 
+SESSION_COOKIE_SAMESITE = 'None'     # Allow cross-site cookies (for use with HTTPS)
+SESSION_COOKIE_SECURE = True         # Cookie only sent over HTTPS
+SESSION_COOKIE_HTTPONLY = False      # CSRF cookie must be accessible via JavaScript
+SESSION_COOKIE_PATH = '/' 
 
-# JWT / Auth cookies
-JWT_COOKIE_SAMESITE = 'Lax'
-JWT_COOKIE_SECURE = False
-JWT_COOKIE_HTTPONLY = True
-JWT_COOKIE_PATH = '/'
+# # JWT / Auth cookies
+# JWT_COOKIE_SAMESITE = 'Lax'
+# JWT_COOKIE_SECURE = False
+# JWT_COOKIE_HTTPONLY = True
+# JWT_COOKIE_PATH = '/'
 
-# CSRF
-CSRF_COOKIE_SAMESITE = 'Lax'
-CSRF_COOKIE_SECURE = False
-CSRF_COOKIE_HTTPONLY = False
-CSRF_COOKIE_PATH = '/'
+# # CSRF
+# CSRF_COOKIE_SAMESITE = 'Lax'
+# CSRF_COOKIE_SECURE = False
+# CSRF_COOKIE_HTTPONLY = False
+# CSRF_COOKIE_PATH = '/'
 
-# Session (if used)
-SESSION_COOKIE_SAMESITE = 'Lax'
-SESSION_COOKIE_SECURE = False
-SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_PATH = '/'
+# # Session (if used)
+# SESSION_COOKIE_SAMESITE = 'Lax'
+# SESSION_COOKIE_SECURE = False
+# SESSION_COOKIE_HTTPONLY = True
+# SESSION_COOKIE_PATH = '/'
 
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-    'ROTATE_REFRESH_TOKENS': False,
-    'BLACKLIST_AFTER_ROTATION': False,
+    # 'ROTATE_REFRESH_TOKENS': False,
+    # 'BLACKLIST_AFTER_ROTATION': False,
     'SIGNING_KEY': 'your-secret-key-here',  # use env var in prod
 }
 
