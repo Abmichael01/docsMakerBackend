@@ -20,6 +20,7 @@ class CustomUserDetailsSerializer(UserDetailsSerializer):
 
     class Meta(UserDetailsSerializer.Meta):
         fields = UserDetailsSerializer.Meta.fields + ( 
+            "email",
             "role",
             "wallet_balance",
             "total_purchases",
