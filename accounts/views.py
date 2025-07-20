@@ -40,11 +40,7 @@ class LoginView(BaseLoginView):
         refresh_token = str(refresh)
 
         # Serialize user data
-        user_data = {
-            'id': self.user.id,
-            'email': self.user.email,
-            'username': self.user.username
-        }
+        user = CustomUserDetailsSerializer(self.user, many=False)
 
         # Get cookie settings from settings.py
         cookie_settings = {
@@ -58,7 +54,7 @@ class LoginView(BaseLoginView):
             cookie_settings['domain'] = settings.JWT_COOKIE_DOMAIN
 
         # Set access token cookie
-        response = JsonResponse({'user': user_data})
+        response = JsonResponse(user.data)
         response.set_cookie(
             key='access_token',
             value=access_token,
