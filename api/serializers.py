@@ -17,6 +17,9 @@ class TemplateSerializer(serializers.ModelSerializer):
         view = self.context.get('view')
         if view and view.action == 'list':
             representation.pop('form_fields', None)  # Remove it on list
+        else:
+            representation['svg'] = WaterMark().add_watermark(representation['svg'])
+        
         return representation
 
 
