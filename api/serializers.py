@@ -24,7 +24,6 @@ class TemplateSerializer(serializers.ModelSerializer):
 
 
 
-
 class PurchasedTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchasedTemplate
