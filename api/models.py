@@ -69,8 +69,8 @@ class PurchasedTemplate(models.Model):
             count = PurchasedTemplate.objects.filter(buyer=self.buyer, template=self.template).count() + 1
             self.name = f"{self.template.name} #{count}"
 
-        if self.svg:
-            self.form_fields = parse_svg_to_form_fields(self.svg)
+        # if self.svg:
+        #     self.form_fields = parse_svg_to_form_fields(self.svg)
 
         super().save(*args, **kwargs)
 

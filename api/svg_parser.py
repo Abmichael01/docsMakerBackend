@@ -20,10 +20,12 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
         dependency = None
 
         # Handle select options
-        if any(p.startswith("select_") for p in parts):
+        select_part = next((p for p in parts if p.startswith("select_")), None)
+        if select_part:
+            label = select_part[len("select_"):].replace("_", " ")
             option = {
                 "value": el_id,
-                "label": el_id.replace("_", " "),
+                "label": label,
                 "svgElementId": el_id,
             }
             if base_id not in select_options_map:
@@ -67,12 +69,10 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
         fields_map[field_id] = {
             "id": field_id,
             "name": field_id.replace("_", " ").title(),
-            "type": "text",  # Can be overridden in frontend
+            "type": "select",  # Set type to 'select' for select fields
             "options": options,
             "defaultValue": options[0]["value"] if options else "",
             "currentValue": options[0]["value"] if options else "",
         }
 
     return list(fields_map.values())
-
-    

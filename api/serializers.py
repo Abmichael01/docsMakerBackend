@@ -176,6 +176,11 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
             user.wallet.debit(charge_amount, description="Document purchase")
             print("Charging ₦5 for watermark removal...")
 
+            # Remove watermark from SVG
+            svg = validated_data.get("svg")
+            if svg:
+                validated_data["svg"] = WaterMark().remove_watermark(svg)
+
     def update(self, instance, validated_data):
         self.charge_if_test_false(instance, validated_data, is_update=True)
         return super().update(instance, validated_data)
