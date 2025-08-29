@@ -33,6 +33,11 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
             select_options_map[base_id].append(option)
             continue
 
+        # Check for link before splitting by dots
+        if "link_" in el_id:
+            link_start = el_id.find("link_")
+            url = el_id[link_start + 5:]  # 5 is length of "link_"
+        
         for part in parts[1:]:
             if part.startswith("max_"):
                 try:
@@ -63,6 +68,8 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
             fields_map[base_id]["max"] = max_value
         if dependency:
             fields_map[base_id]["dependsOn"] = dependency
+        if 'url' in locals():
+            fields_map[base_id]["link"] = url
 
     # Merge select options into fields
     for field_id, options in select_options_map.items():

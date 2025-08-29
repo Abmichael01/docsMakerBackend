@@ -223,6 +223,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://38.242.198.49",
     "https://myflightlookup.com",
 ]
+
 CORS_ORIGIN_WHITELIST = [
     "http://localhost:5173",
     "http://localhost:5174",
@@ -238,6 +239,10 @@ CORS_ORIGIN_WHITELIST = [
 # CSRF Trusted Origins - Required for CSRF validation
 CSRF_TRUSTED_ORIGINS = [
     "https://api.sharptoolz.com",  # Add your API domain
+    "https://myflightlookup.com",
+    "https://sharptoolz.com",
+    "https://parcelfinda.com",
+    "https://myflightlookup.com",
 ]
 
 JWT_COOKIE_SAMESITE = 'None'  # Allow cross-site cookies
