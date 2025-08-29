@@ -162,6 +162,26 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
+# Media files (User uploaded content)
+if ENV == "production":
+    # Use your production domain for media files
+    MEDIA_URL = os.getenv('MEDIA_URL', 'https://api.sharptoolz.com/media/')
+else:
+    MEDIA_URL = os.getenv('MEDIA_URL', '/media/')
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# File Upload Settings
+DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 1000
+FILE_UPLOAD_TEMP_DIR = os.path.join(BASE_DIR, 'temp_uploads')
+
+# Additional upload settings for better performance
+FILE_UPLOAD_HANDLERS = [
+    'django.core.files.uploadhandler.MemoryFileUploadHandler',
+    'django.core.files.uploadhandler.TemporaryFileUploadHandler',
+]
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -194,21 +214,25 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "http://localhost:5174",
     "https://docs-maker-demo.vercel.app",
     "http://localhost:3000",
     "https://order-tracker-demo.vercel.app",
     "https://sharptoolz.com",
     "https://parcelfinda.com",
     "http://38.242.198.49",
+    "https://myflightlookup.com",
 ]
 CORS_ORIGIN_WHITELIST = [
     "http://localhost:5173",
+    "http://localhost:5174",
     "https://docs-maker-demo.vercel.app",
     "http://localhost:3000",
     "https://order-tracker-demo.vercel.app",
     "https://sharptoolz.com",
     "http://38.242.198.49",
     "https://parcelfinda.com",
+    "https://myflightlookup.com",
 ]
 
 # CSRF Trusted Origins - Required for CSRF validation

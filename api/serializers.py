@@ -143,10 +143,28 @@ class TemplateSerializer(serializers.ModelSerializer):
         representation = super().to_representation(instance)
         request = self.context.get('request')
         view = self.context.get('view')
+        
+        # Handle banner URL for production
+        if 'banner' in representation and representation['banner']:
+            if request and hasattr(request, 'build_absolute_uri'):
+                # Use request to build absolute URL
+                representation['banner'] = request.build_absolute_uri(representation['banner'])
+            else:
+                # Fallback: check if we're in production
+                from django.conf import settings
+                if getattr(settings, 'ENV', 'development') == 'production':
+                    # Use production domain
+                    representation['banner'] = f"https://api.sharptoolz.com{representation['banner']}"
+        
         if view and view.action == 'list':
-            representation.pop('form_fields', None)  # Remove it on list
+            # For list view: remove SVG and form_fields, keep banner
+            representation.pop('svg', None)
+            representation.pop('form_fields', None)
+            # Banner will be included automatically since it's in fields
         else:
-            representation['svg'] = WaterMark().add_watermark(representation['svg'])
+            # For detail view: add watermark to SVG, keep banner
+            if 'svg' in representation and representation['svg']:
+                representation['svg'] = WaterMark().add_watermark(representation['svg'])
         
         return representation
 
@@ -177,9 +195,9 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
             print("Charging ₦5 for watermark removal...")
 
             # Remove watermark from SVG
-            svg = validated_data.get("svg")
-            if svg:
-                validated_data["svg"] = WaterMark().remove_watermark(svg)
+        svg = validated_data.get("svg")
+        if svg:
+            validated_data["svg"] = WaterMark().remove_watermark(svg)
 
     def update(self, instance, validated_data):
         self.charge_if_test_false(instance, validated_data, is_update=True)

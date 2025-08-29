@@ -21,10 +21,12 @@ class Template(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     svg = models.TextField()
+    banner = models.ImageField(upload_to='template_banners/', blank=True, null=True, help_text="Banner image for the template")
     form_fields = models.JSONField(default=dict, blank=True)
     type = models.CharField(max_length=20, choices=TEMPLATE_TYPE_CHOICES)
     created_at = models.DateTimeField(auto_now_add=True)
     hot = models.BooleanField(default=False)
+    
 
     def save(self, *args, **kwargs):
         if self.svg:
