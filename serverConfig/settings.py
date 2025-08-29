@@ -174,12 +174,22 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 1000
-FILE_UPLOAD_TEMP_DIR = os.path.join(BASE_DIR, 'temp_uploads')
+
+# Create temp uploads directory if it doesn't exist
+if ENV == "production":
+    # Use system temp directory in production
+    import tempfile
+    FILE_UPLOAD_TEMP_DIR = tempfile.gettempdir()
+else:
+    # Use local temp_uploads directory in development
+    temp_uploads_dir = os.path.join(BASE_DIR, 'temp_uploads')
+    if not os.path.exists(temp_uploads_dir):
+        os.makedirs(temp_uploads_dir, exist_ok=True)
+    FILE_UPLOAD_TEMP_DIR = temp_uploads_dir
 
 # Additional upload settings for better performance
 FILE_UPLOAD_HANDLERS = [
     'django.core.files.uploadhandler.MemoryFileUploadHandler',
-    'django.core.files.uploadhandler.TemporaryFileUploadHandler',
 ]
 
 
