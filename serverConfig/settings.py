@@ -232,6 +232,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://parcelfinda.com",
     "http://38.242.198.49",
     "https://myflightlookup.com",
+    "https://api.sharptoolz.com",
 ]
 
 CORS_ORIGIN_WHITELIST = [
@@ -244,6 +245,7 @@ CORS_ORIGIN_WHITELIST = [
     "http://38.242.198.49",
     "https://parcelfinda.com",
     "https://myflightlookup.com",
+    "https://api.sharptoolz.com",
 ]
 
 # CSRF Trusted Origins - Required for CSRF validation
