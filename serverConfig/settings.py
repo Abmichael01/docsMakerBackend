@@ -58,30 +58,16 @@ INSTALLED_APPS = [
     "wallet",
 ]
 
-if ENV == "production":
-    MIDDLEWARE = [
-        'corsheaders.middleware.CorsMiddleware',
-        'django.middleware.security.SecurityMiddleware',
-        'django.contrib.sessions.middleware.SessionMiddleware',
-        'django.middleware.cache.UpdateCacheMiddleware',  # Cache middleware for production
-        'django.middleware.common.CommonMiddleware',
-        'django.middleware.cache.FetchFromCacheMiddleware',  # Cache middleware for production
-        'django.middleware.csrf.CsrfViewMiddleware',
-        'django.contrib.auth.middleware.AuthenticationMiddleware',
-        'django.contrib.messages.middleware.MessageMiddleware',
-        'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    ]
-else:
-    MIDDLEWARE = [
-        'corsheaders.middleware.CorsMiddleware',
-        'django.middleware.security.SecurityMiddleware',
-        'django.contrib.sessions.middleware.SessionMiddleware',
-        'django.middleware.common.CommonMiddleware',
-        'django.middleware.csrf.CsrfViewMiddleware',
-        'django.contrib.auth.middleware.AuthenticationMiddleware',
-        'django.contrib.messages.middleware.MessageMiddleware',
-        'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    ]
+MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
 
 ROOT_URLCONF = 'serverConfig.urls'
 
@@ -219,41 +205,12 @@ FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
 REQUEST_BODY_SIZE_LIMIT = 100 * 1024 * 1024  # 100MB
 
 # Cache Configuration for better performance
-if ENV == "production":
-    CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-            'LOCATION': os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/1'),
-            'OPTIONS': {
-                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-                'CONNECTION_POOL_KWARGS': {
-                    'max_connections': 50,
-                    'retry_on_timeout': True,
-                },
-            },
-            'KEY_PREFIX': 'sharptoolz',
-            'TIMEOUT': 300,  # 5 minutes default
-        }
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
     }
-    
-    # Use Redis for session storage in production
-    SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
-    SESSION_CACHE_ALIAS = 'default'
-    
-    # Cache middleware for better performance
-    CACHE_MIDDLEWARE_SECONDS = 300
-    CACHE_MIDDLEWARE_KEY_PREFIX = 'sharptoolz'
-else:
-    # Use local memory cache for development
-    CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-            'LOCATION': 'unique-snowflake',
-        }
-    }
-    
-    # Use database for session storage in development
-    SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+}
 
 
 # Default primary key field type
@@ -272,26 +229,11 @@ REST_AUTH = {
     "USER_DETAILS_SERIALIZER": "accounts.serializers.CustomUserDetailsSerializer",
 }
 
-if ENV == "production":
-    REST_FRAMEWORK = {
-        'DEFAULT_AUTHENTICATION_CLASSES': (
-            'accounts.authentication.JWTAuthenticationFromCookies',
-        ),
-        'DEFAULT_THROTTLE_CLASSES': [
-            'rest_framework.throttling.AnonRateThrottle',
-            'rest_framework.throttling.UserRateThrottle'
-        ],
-        'DEFAULT_THROTTLE_RATES': {
-            'anon': '100/hour',
-            'user': '1000/hour'
-        },
-    }
-else:
-    REST_FRAMEWORK = {
-        'DEFAULT_AUTHENTICATION_CLASSES': (
-            'accounts.authentication.JWTAuthenticationFromCookies',
-        ),
-    }
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'accounts.authentication.JWTAuthenticationFromCookies',
+    ),
+}
 
 # AUTHENTICATION_BACKENDS = [
 #     'accounts.backends.EmailBackend',
