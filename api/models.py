@@ -33,6 +33,13 @@ class Template(models.Model):
             self.form_fields = parse_svg_to_form_fields(self.svg)
         super().save(*args, **kwargs)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['type']),
+            models.Index(fields=['hot']),
+            models.Index(fields=['created_at']),
+        ]
+
     def __str__(self):
         return self.name
 
@@ -75,6 +82,16 @@ class PurchasedTemplate(models.Model):
         #     self.form_fields = parse_svg_to_form_fields(self.svg)
 
         super().save(*args, **kwargs)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['buyer']),
+            models.Index(fields=['template']),
+            models.Index(fields=['status']),
+            models.Index(fields=['tracking_id']),
+            models.Index(fields=['created_at']),
+            models.Index(fields=['buyer', 'status']),
+        ]
 
     def __str__(self):
         return f"{self.buyer.username} - {self.template.name} ({'test' if self.test else 'paid'})"

@@ -21,6 +21,8 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Environment configuration
+ENV = os.getenv("ENV", "development")  # default to development
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -56,23 +58,35 @@ INSTALLED_APPS = [
     "wallet",
 ]
 
-MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-]
+if ENV == "production":
+    MIDDLEWARE = [
+        'corsheaders.middleware.CorsMiddleware',
+        'django.middleware.security.SecurityMiddleware',
+        'django.contrib.sessions.middleware.SessionMiddleware',
+        'django.middleware.cache.UpdateCacheMiddleware',  # Cache middleware for production
+        'django.middleware.common.CommonMiddleware',
+        'django.middleware.cache.FetchFromCacheMiddleware',  # Cache middleware for production
+        'django.middleware.csrf.CsrfViewMiddleware',
+        'django.contrib.auth.middleware.AuthenticationMiddleware',
+        'django.contrib.messages.middleware.MessageMiddleware',
+        'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    ]
+else:
+    MIDDLEWARE = [
+        'corsheaders.middleware.CorsMiddleware',
+        'django.middleware.security.SecurityMiddleware',
+        'django.contrib.sessions.middleware.SessionMiddleware',
+        'django.middleware.common.CommonMiddleware',
+        'django.middleware.csrf.CsrfViewMiddleware',
+        'django.contrib.auth.middleware.AuthenticationMiddleware',
+        'django.contrib.messages.middleware.MessageMiddleware',
+        'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    ]
 
 ROOT_URLCONF = 'serverConfig.urls'
 
 
 ASGI_APPLICATION = 'serverConfig.asgi.application'
-
-ENV = os.getenv("ENV", "development")  # default to development
 
 
 if ENV == "production":
@@ -114,7 +128,18 @@ WSGI_APPLICATION = 'serverConfig.wsgi.application'
 
 if ENV == "production":
     DATABASES = {
-        'default': dj_database_url.parse(os.getenv("DATABASE_URL"), conn_max_age=600) # type: ignore
+        'default': {
+            **dj_database_url.parse(os.getenv("DATABASE_URL")),
+            'OPTIONS': {
+                'MAX_CONNS': 20,  # Maximum connections in pool
+                'MIN_CONNS': 5,   # Minimum connections in pool
+                'CONN_MAX_AGE': 600,  # Connection lifetime
+                'CONN_HEALTH_CHECKS': True,  # Health check connections
+            },
+            'CONN_MAX_AGE': 600,
+            'ATOMIC_REQUESTS': False,  # Disable for better performance
+            'AUTOCOMMIT': True,
+        }
     }
 else:
     DATABASES = {
@@ -199,6 +224,43 @@ FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
 # Increase request body size limit for large SVG files
 REQUEST_BODY_SIZE_LIMIT = 100 * 1024 * 1024  # 100MB
 
+# Cache Configuration for better performance
+if ENV == "production":
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/1'),
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                'CONNECTION_POOL_KWARGS': {
+                    'max_connections': 50,
+                    'retry_on_timeout': True,
+                },
+            },
+            'KEY_PREFIX': 'sharptoolz',
+            'TIMEOUT': 300,  # 5 minutes default
+        }
+    }
+    
+    # Use Redis for session storage in production
+    SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+    SESSION_CACHE_ALIAS = 'default'
+    
+    # Cache middleware for better performance
+    CACHE_MIDDLEWARE_SECONDS = 300
+    CACHE_MIDDLEWARE_KEY_PREFIX = 'sharptoolz'
+else:
+    # Use local memory cache for development
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'unique-snowflake',
+        }
+    }
+    
+    # Use database for session storage in development
+    SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -216,11 +278,26 @@ REST_AUTH = {
     "USER_DETAILS_SERIALIZER": "accounts.serializers.CustomUserDetailsSerializer",
 }
 
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'accounts.authentication.JWTAuthenticationFromCookies',
-    ),
-}
+if ENV == "production":
+    REST_FRAMEWORK = {
+        'DEFAULT_AUTHENTICATION_CLASSES': (
+            'accounts.authentication.JWTAuthenticationFromCookies',
+        ),
+        'DEFAULT_THROTTLE_CLASSES': [
+            'rest_framework.throttling.AnonRateThrottle',
+            'rest_framework.throttling.UserRateThrottle'
+        ],
+        'DEFAULT_THROTTLE_RATES': {
+            'anon': '100/hour',
+            'user': '1000/hour'
+        },
+    }
+else:
+    REST_FRAMEWORK = {
+        'DEFAULT_AUTHENTICATION_CLASSES': (
+            'accounts.authentication.JWTAuthenticationFromCookies',
+        ),
+    }
 
 # AUTHENTICATION_BACKENDS = [
 #     'accounts.backends.EmailBackend',
