@@ -130,13 +130,7 @@ if ENV == "production":
     DATABASES = {
         'default': {
             **dj_database_url.parse(os.getenv("DATABASE_URL")),
-            'OPTIONS': {
-                'MAX_CONNS': 20,  # Maximum connections in pool
-                'MIN_CONNS': 5,   # Minimum connections in pool
-                'CONN_MAX_AGE': 600,  # Connection lifetime
-                'CONN_HEALTH_CHECKS': True,  # Health check connections
-            },
-            'CONN_MAX_AGE': 600,
+            'CONN_MAX_AGE': 600,  # Connection lifetime
             'ATOMIC_REQUESTS': False,  # Disable for better performance
             'AUTOCOMMIT': True,
         }
