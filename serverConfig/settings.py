@@ -171,9 +171,9 @@ else:
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # File Upload Settings
-DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
-FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
-DATA_UPLOAD_MAX_NUMBER_FIELDS = 1000
+DATA_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024  # 100MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024  # 100MB
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 2000
 
 # Create temp uploads directory if it doesn't exist
 if ENV == "production":
@@ -191,6 +191,13 @@ else:
 FILE_UPLOAD_HANDLERS = [
     'django.core.files.uploadhandler.MemoryFileUploadHandler',
 ]
+
+# Additional settings for large file uploads
+FILE_UPLOAD_PERMISSIONS = 0o644
+FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
+
+# Increase request body size limit for large SVG files
+REQUEST_BODY_SIZE_LIMIT = 100 * 1024 * 1024  # 100MB
 
 
 # Default primary key field type
