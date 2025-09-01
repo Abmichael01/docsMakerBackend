@@ -5,8 +5,8 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
     root = ET.fromstring(svg_text)
     elements = root.findall(".//*[@id]")
 
-    fields_map: dict[str, dict] = {}
-    select_options_map: dict[str, list[dict]] = {}
+    fields_list = []  # Use list to maintain order
+    select_options_map = {}  # Track select options for each field
 
     for el in elements:
         el_id = el.attrib.get("id", "")
@@ -18,6 +18,12 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
         field_type = base_id  # default fallback
         max_value = None
         dependency = None
+        url = None
+
+        # Check for link before processing parts
+        if "link_" in el_id:
+            link_start = el_id.find("link_")
+            url = el_id[link_start + 5:]  # 5 is length of "link_"
 
         # Handle select options
         select_part = next((p for p in parts if p.startswith("select_")), None)
@@ -28,16 +34,34 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
                 "label": label,
                 "svgElementId": el_id,
             }
+            
+            # If this is the first select option for this field, create the field
             if base_id not in select_options_map:
                 select_options_map[base_id] = []
+                # Create the select field in its original position
+                field = {
+                    "id": base_id,
+                    "name": name,
+                    "type": "select",
+                    "svgElementId": el_id,  # Use the first select element's ID
+                    "options": [],
+                    "defaultValue": "",
+                    "currentValue": "",
+                }
+                fields_list.append(field)
+            
             select_options_map[base_id].append(option)
+            # Update the field's options
+            for field in fields_list:
+                if field["id"] == base_id:
+                    field["options"] = select_options_map[base_id]
+                    if not field["defaultValue"] and select_options_map[base_id]:
+                        field["defaultValue"] = select_options_map[base_id][0]["value"]
+                        field["currentValue"] = select_options_map[base_id][0]["value"]
+                    break
             continue
 
-        # Check for link before splitting by dots
-        if "link_" in el_id:
-            link_start = el_id.find("link_")
-            url = el_id[link_start + 5:]  # 5 is length of "link_"
-        
+        # Process field type and other properties for non-select fields
         for part in parts[1:]:
             if part.startswith("max_"):
                 try:
@@ -55,7 +79,7 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
 
         default_value = False if field_type == "checkbox" else text_content
 
-        fields_map[base_id] = {
+        field = {
             "id": base_id,
             "name": name,
             "type": field_type,
@@ -65,21 +89,12 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
         }
 
         if max_value is not None:
-            fields_map[base_id]["max"] = max_value
+            field["max"] = max_value
         if dependency:
-            fields_map[base_id]["dependsOn"] = dependency
-        if 'url' in locals():
-            fields_map[base_id]["link"] = url
+            field["dependsOn"] = dependency
+        if url:
+            field["link"] = url
 
-    # Merge select options into fields
-    for field_id, options in select_options_map.items():
-        fields_map[field_id] = {
-            "id": field_id,
-            "name": field_id.replace("_", " ").title(),
-            "type": "select",  # Set type to 'select' for select fields
-            "options": options,
-            "defaultValue": options[0]["value"] if options else "",
-            "currentValue": options[0]["value"] if options else "",
-        }
+        fields_list.append(field)
 
-    return list(fields_map.values())
+    return fields_list

@@ -162,9 +162,14 @@ class TemplateSerializer(serializers.ModelSerializer):
             representation.pop('form_fields', None)
             # Banner will be included automatically since it's in fields
         else:
-            # For detail view: add watermark to SVG, keep banner
+            # For detail view: add watermark to SVG, keep banner (skip for admin users)
             if 'svg' in representation and representation['svg']:
-                representation['svg'] = WaterMark().add_watermark(representation['svg'])
+                # Check if user is admin
+                user = request.user if request else None
+                is_admin = user and user.is_authenticated and user.is_staff
+                
+                if not is_admin:
+                    representation['svg'] = WaterMark().add_watermark(representation['svg'])
         
         return representation
 

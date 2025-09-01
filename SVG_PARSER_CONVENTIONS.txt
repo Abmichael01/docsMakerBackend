@@ -1,113 +1,84 @@
-SVG PARSER - FORM FIELD CONVENTIONS
-=====================================
+SVG PARSER CONVENTIONS
+======================
 
-This SVG parser converts SVG text elements into form fields based on their ID attributes.
+This document explains how to name SVG element IDs to create form fields automatically.
 
 BASIC FIELD TYPES
 =================
 
-Text Input
-----------
-<text id="fieldname.text">Default text here</text>
+1. TEXT FIELD
+   ID: Company_Name.text
+   Meaning: Creates a text input field with the label "Company Name"
 
-Examples:
-<text id="Company_Name.text">Enter company name</text>
-<text id="Phone_Number.text">Enter phone number</text>
+2. TEXTAREA FIELD  
+   ID: Description.textarea
+   Meaning: Creates a large text area with the label "Description"
 
-Textarea (Multi-line)
----------------------
-<text id="fieldname.textarea">Default text here</text>
+3. DROPDOWN FIELD
+   ID: Country.select_OPTION1
+   ID: Country.select_OPTION2  
+   ID: Country.select_OPTION3
+   Meaning: Creates a dropdown with options "OPTION1", "OPTION2", "OPTION3"
+   Example: 
+   Country.select_USA
+   Country.select_Canada
+   Country.select_Mexico
+   Creates dropdown with USA, Canada, Mexico options
 
-Examples:
-<text id="Description.textarea">Enter description</text>
-<text id="Address.textarea">Enter full address</text>
+4. RANDOM CODE FIELD
+   ID: Reference_Code.gen.max_8
+   Meaning: Creates a field that generates random 8-character codes
+   Example: Reference_Code.gen.max_10 generates 10-character codes
 
-FIELD EXTENSIONS
+5. DEPENDENT FIELD
+   ID: City.depends_Country
+   Meaning: This field copies the same content as the "Country" field - when Country changes, this field shows the same content
+
+SPECIAL TRACKING FIELD
+======================
+
+TRACKING_ID FIELD
+ID: Tracking_ID.gen.max_12.link_https://example.com/track
+Meaning: Creates a tracking field that:
+- Generates random 12-character tracking codes
+- Includes a link to https://example.com/track for tracking
+
+IMPORTANT RULES
 ===============
 
-Random Code Generation (.gen)
-----------------------------
-<text id="fieldname.gen.max_12">Generated code will appear here</text>
-- Creates random alphanumeric code
-- .max_12 = 12 characters long
+1. Field names must use Title_Case (capital first letter of each word)
+   Examples: Company_Name, Reference_Code, Tracking_ID
 
-Examples:
-<text id="Reference_Code.gen.max_8">REF12345</text>
-<text id="Order_Number.gen.max_10">ORD98765432</text>
+2. Tracking_ID must always be uppercase exactly as shown ("For now, will be updated later")
 
-Character Limit (.max)
----------------------
-<text id="fieldname.text.max_50">Enter text (max 50 chars)</text>
-<text id="fieldname.textarea.max_200"> Enter text (max 200 chars) </text>
+3. For dropdowns, create separate elements for each option
+   Example: 
+   Country.select_USA
+   Country.select_Canada  
+   Country.select_Mexico
 
-Dropdown Options (.select)
---------------------------
-<text id="fieldname.select_option1">Option 1 Name</text>
-<text id="fieldname.select_option2">Option 2 Name</text>
-All elements with same base ID + .select_ become one dropdown.
+4. For random codes, use .gen.max_N where N is the number of characters
+   Example: Reference_Code.gen.max_8
 
-Examples:
-<text id="Country.select_usa">United States</text>
-<text id="Country.select_canada">Canada</text>
-<text id="Country.select_uk">United Kingdom</text>
-
-Field Sync (.depends)
---------------------
-<text id="fieldname.depends_ANOTHER_ID">This field will sync with ANOTHER_ID</text>
-When ANOTHER_ID changes, this field copies the same value.
-
-Examples:
-<text id="Company_Name.text">Enter company name</text>
-<text id="Company_Display.depends_Company_Name">Will show same as company name</text>
-
-Tracking ID with Link
---------------------
-<text id="Tracking_ID.gen.max_10.link_https://example.com">Generated tracking code</text>
-- Must use exact name: Tracking_ID (uppercase)
-- Generates random code
-- Adds clickable link
-
-Examples:
-<text id="Tracking_ID.gen.max_8.link_https://track.example.com">TRK12345</text>
-<text id="Tracking_ID.gen.max_12.link_https://orders.example.com">TRK123456789</text>
+5. For links, use .link_URL where URL is the full website address
+   Example: Tracking_ID.gen.max_12.link_https://example.com/track
 
 EXAMPLES
 ========
 
-Simple Form
------------
-<text id="Company_Name.text">Enter company name</text>
-<text id="Description.textarea.max_300">Company description</text>
-<text id="Tracking_ID.gen.max_8.link_https://track.example.com">TRK12345</text>
+Company_Name.text
+- Creates: Text field labeled "Company Name"
 
-Form with Sync Fields
---------------------
-<text id="Full_Name.text">Enter full name</text>
-<text id="Display_Name.depends_Full_Name">Will show same as full name</text>
+Reference_Code.gen.max_8
+- Creates: Random 8-character code generator
 
-Form with Dropdown
------------------
-<text id="Country.select_usa">United States</text>
-<text id="Country.select_canada">Canada</text>
-<text id="Country.select_uk">United Kingdom</text>
+Country.select_USA
+Country.select_Canada
+Country.select_Mexico
+- Creates: Dropdown with USA, Canada, Mexico options
 
-QUICK REFERENCE
-===============
+Tracking_ID.gen.max_12.link_https://track.example.com
+- Creates: Random 12-character tracking code with link to track.example.com
 
-Extension          What it does                    Example
----------          -----------                     -------
-.text              Single-line text               id="name.text"
-.textarea          Multi-line text                id="description.textarea"
-.gen.max_N         Random code (N chars)          id="code.gen.max_8"
-.max_N             Character limit                id="title.text.max_100"
-.select_OPTION     Dropdown option                id="country.select_usa"
-.depends_FIELD     Sync with field                id="confirm.depends_email"
-Tracking_ID.gen.max_N.link_URL  Tracking code with link  id="Tracking_ID.gen.max_8.link_https://..."
-
-IMPORTANT NOTES
-===============
-
-- Use Tracking_ID (uppercase) for tracking codes with links
-- Field names should use Title_Case format (e.g., Company_Name, Reference_Code)
-- The parser converts SVG text elements into form fields automatically
-- The field title will be exactly as written in the ID (e.g., "Reference_Code" becomes "Reference Code")
+City.depends_Country
+- Creates: City field that copies the same content as Country field
