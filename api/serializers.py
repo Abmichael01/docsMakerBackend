@@ -3,7 +3,7 @@ from rest_framework import serializers
 from django.db.models import Sum, Count
 from django.contrib.auth import get_user_model
 from api.watermark import WaterMark
-from .models import Template, PurchasedTemplate
+from .models import Template, PurchasedTemplate, Tool
 from wallet.models import Wallet
 from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
@@ -11,6 +11,12 @@ from datetime import timedelta
 from accounts.serializers import CustomUserDetailsSerializer
 
 User = get_user_model()
+
+
+class ToolSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tool
+        fields = '__all__'
 
 
 class AdminOverviewSerializer(serializers.Serializer):

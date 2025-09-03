@@ -151,8 +151,9 @@ class LogoutView(APIView):
         return response
     
 class RefreshTokenView(APIView):
-    permission_classes=[]
-    authentication_classes=[]
+    permission_classes = []
+    authentication_classes = []
+    
     def post(self, request):
         refresh_token = request.COOKIES.get('refresh_token')
 
@@ -171,18 +172,27 @@ class RefreshTokenView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
+        # Get cookie settings from settings.py (same as LoginView)
+        cookie_settings = {
+            'httponly': settings.JWT_COOKIE_HTTPONLY,
+            'secure': settings.JWT_COOKIE_SECURE,
+            'samesite': settings.JWT_COOKIE_SAMESITE,
+            'path': settings.JWT_COOKIE_PATH,
+        }
+
+        if hasattr(settings, 'JWT_COOKIE_DOMAIN') and settings.JWT_COOKIE_DOMAIN:
+            cookie_settings['domain'] = settings.JWT_COOKIE_DOMAIN
+
         response = JsonResponse({
             "detail": "Access token refreshed",
             "access_token": new_access_token
         })
+        
         response.set_cookie(
             key='access_token',
             value=new_access_token,
-            httponly=True,
-            secure=False,  # Set to True in production
-            samesite='Lax',
-            path='/',
-            max_age=3600  # 1 hour
+            **cookie_settings
         )
+        
         return response
     

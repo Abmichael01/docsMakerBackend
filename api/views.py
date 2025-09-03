@@ -26,6 +26,7 @@ class TemplateViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Template.objects.all().order_by('-created_at')
         hot_param = self.request.query_params.get("hot")
+        tool_param = self.request.query_params.get("tool")
 
         if hot_param is not None:
             # Convert string to boolean
@@ -34,7 +35,38 @@ class TemplateViewSet(viewsets.ModelViewSet):
             elif hot_param.lower() == "false":
                 queryset = queryset.filter(hot=False)
         
+        if tool_param:
+            queryset = queryset.filter(tool__id=tool_param)
+        
         return queryset
+    
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        purchased_count = instance.purchases.count()
+        
+        response = super().destroy(request, *args, **kwargs)
+        
+        if purchased_count > 0:
+            return Response(
+                {
+                    "message": f"Template deleted successfully. {purchased_count} purchased template(s) are now orphaned but preserved.",
+                    "purchased_count": purchased_count
+                },
+                status=status.HTTP_200_OK
+            )
+        
+        return response
+
+
+class ToolViewSet(viewsets.ModelViewSet):
+    queryset = Tool.objects.all().order_by('name')
+    serializer_class = ToolSerializer
+    permission_classes = [IsAdminOrReadOnly]
+    
+    def get_authenticators(self):
+        if self.request.method in SAFE_METHODS:
+            return []  # No authentication for GET/HEAD/OPTIONS
+        return super().get_authenticators()
 
 
 class PurchasedTemplateViewSet(viewsets.ModelViewSet):

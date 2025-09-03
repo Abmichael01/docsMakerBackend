@@ -11,6 +11,19 @@ from .svg_parser import parse_svg_to_form_fields
 User = get_user_model()
 
 
+class Tool(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name_plural = "Tools"
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+
 
 class Template(models.Model):
     TEMPLATE_TYPE_CHOICES = [
@@ -24,6 +37,7 @@ class Template(models.Model):
     banner = models.ImageField(upload_to='template_banners/', blank=True, null=True, help_text="Banner image for the template")
     form_fields = models.JSONField(default=dict, blank=True)
     type = models.CharField(max_length=20, choices=TEMPLATE_TYPE_CHOICES)
+    tool = models.ForeignKey(Tool, on_delete=models.SET_NULL, null=True, blank=True, related_name='templates')
     created_at = models.DateTimeField(auto_now_add=True)
     hot = models.BooleanField(default=False)
     
@@ -38,7 +52,16 @@ class Template(models.Model):
             models.Index(fields=['type']),
             models.Index(fields=['hot']),
             models.Index(fields=['created_at']),
+            models.Index(fields=['tool']),
         ]
+
+    def get_purchased_count(self):
+        """Get the number of purchased templates for this template"""
+        return self.purchases.count()
+    
+    def has_purchases(self):
+        """Check if this template has any purchased templates"""
+        return self.purchases.exists()
 
     def __str__(self):
         return self.name
@@ -57,7 +80,7 @@ class PurchasedTemplate(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     buyer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="purchased_templates")
-    template = models.ForeignKey("Template", on_delete=models.CASCADE, related_name="purchases")
+    template = models.ForeignKey("Template", on_delete=models.SET_NULL, null=True, blank=True, related_name="purchases")
     
     name = models.CharField(max_length=255, blank=True)
 
@@ -75,8 +98,13 @@ class PurchasedTemplate(models.Model):
     def save(self, *args, **kwargs):
         # Auto-generate name if not provided
         if not self.name:
-            count = PurchasedTemplate.objects.filter(buyer=self.buyer, template=self.template).count() + 1
-            self.name = f"{self.template.name} #{count}"
+            if self.template:
+                count = PurchasedTemplate.objects.filter(buyer=self.buyer, template=self.template).count() + 1
+                self.name = f"{self.template.name} #{count}"
+            else:
+                # Handle orphaned purchased templates
+                count = PurchasedTemplate.objects.filter(buyer=self.buyer, template__isnull=True).count() + 1
+                self.name = f"Orphaned Template #{count}"
 
         # if self.svg:
         #     self.form_fields = parse_svg_to_form_fields(self.svg)
@@ -94,4 +122,5 @@ class PurchasedTemplate(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.buyer.username} - {self.template.name} ({'test' if self.test else 'paid'})"
+        template_name = self.template.name if self.template else "Orphaned Template"
+        return f"{self.buyer.username} - {template_name} ({'test' if self.test else 'paid'})"
