@@ -97,4 +97,4 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
 
         fields_list.append(field)
 
-    return fields_list
+    return fields_list 
