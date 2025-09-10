@@ -24,6 +24,29 @@ This SVG parser converts SVG text elements into form fields based on their ID at
 <text id="address.textarea">Enter full address</text>
 ```
 
+### File Upload
+```xml
+<text id="fieldname.upload">Upload file</text>
+<text id="fieldname.file">Upload file</text>
+```
+**Examples:**
+```xml
+<text id="company_logo.upload">Upload company logo</text>
+<text id="product_image.file">Upload product image</text>
+<text id="document.upload">Upload document</text>
+```
+
+### Signature Field
+```xml
+<text id="fieldname.sign">Signature</text>
+```
+**Examples:**
+```xml
+<text id="author_signature.sign">Author Signature</text>
+<text id="witness_signature.sign">Witness Signature</text>
+<text id="approval_signature.sign">Approval Signature</text>
+```
+
 ## Field Extensions
 
 ### Random Code Generation (.gen)
@@ -113,6 +136,9 @@ When `ANOTHER_ID` changes, this field copies the same value.
 |-----------|-------------|---------|
 | `.text` | Single-line text | `id="name.text"` |
 | `.textarea` | Multi-line text | `id="description.textarea"` |
+| `.upload` | File upload field | `id="logo.upload"` |
+| `.file` | File upload field | `id="document.file"` |
+| `.sign` | Signature field | `id="signature.sign"` |
 | `.gen.max_N` | Random code (N chars) | `id="code.gen.max_8"` |
 | `.max_N` | Character limit | `id="title.text.max_100"` |
 | `.select_OPTION` | Dropdown option | `id="country.select_usa"` |

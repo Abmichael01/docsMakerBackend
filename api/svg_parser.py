@@ -73,7 +73,7 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
             elif part in [
                 "text", "textarea", "checkbox", "date", "upload",
                 "number", "email", "tel", "gen", "password",
-                "range", "color", "file", "status"
+                "range", "color", "file", "status", "sign"
             ]:
                 field_type = part
 
