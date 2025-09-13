@@ -10,10 +10,28 @@ class WaterMark():
         # Get SVG dimensions
         width, height = self.get_svg_size(svg_content)
         
-        # Calculate number of watermarks based on area
+        # Calculate number of watermarks based on area with better scaling
         area = width * height
-        watermark_count = int(area / 5000)  # 1 watermark per 5000 square units
-        watermark_count = max(10, min(watermark_count, 100))  # Between 10-100 watermarks
+        
+        # More intelligent scaling based on SVG size
+        if area < 30000:  # ID card size SVGs (< ~173x173)
+            watermark_count = max(1, int(area / 20000))  # 1 watermark per 20k units, minimum 1
+        elif area < 80000:  # Very small SVGs (< ~283x283)
+            watermark_count = max(1, int(area / 15000))  # 1 watermark per 15k units, minimum 1
+        elif area < 200000:  # Small SVGs (< ~447x447)
+            watermark_count = max(2, int(area / 20000))  # 1 watermark per 20k units, minimum 2
+        elif area < 500000:  # Medium SVGs (< ~707x707)
+            watermark_count = max(3, int(area / 25000))  # 1 watermark per 25k units, minimum 3
+        else:  # Large SVGs
+            watermark_count = max(5, int(area / 30000))  # 1 watermark per 30k units, minimum 5
+        
+        # Cap maximum watermarks to prevent overcrowding
+        watermark_count = min(watermark_count, 50)  # Maximum 50 watermarks
+        
+        # Calculate appropriate font size based on SVG dimensions
+        # Scale font size to be proportional to SVG size
+        avg_dimension = (width + height) / 2
+        font_size = max(12, min(60, int(avg_dimension / 15)))  # Font size between 12-60px
         
         # Generate watermarks
         watermarks = []
@@ -24,7 +42,7 @@ class WaterMark():
             
             watermark = (
                 f'<g transform="rotate({angle}, {x}, {y})">'
-                f'<text x="{x}" y="{y}" fill="black" font-size="40" pointer-events="none">'
+                f'<text x="{x}" y="{y}" fill="black" font-size="{font_size}" pointer-events="none">'
                 f'TEST DOCUMENT</text></g>'
             )
             watermarks.append(watermark)
