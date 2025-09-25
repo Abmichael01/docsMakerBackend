@@ -11,6 +11,7 @@ router.register(r'purchased-templates', PurchasedTemplateViewSet, basename='purc
 urlpatterns = [
     path("track/<str:tracking_id>/", PublicTemplateTrackingView.as_view(), name="track-template"),
     path("download-doc/", DownloadDoc.as_view(), name="download-doc"),
+    path("remove-background/", RemoveBackgroundView.as_view(), name="remove-background"),
 
     # Admin views
     path("admin/overview/", AdminOverview.as_view(), name="admin-overview"),

@@ -329,6 +329,9 @@ ACCOUNT_EMAIL_VERIFICATION = 'none'  # Set to 'mandatory' if needed
 
 FRONTEND_URL = os.getenv("FRONTEND_URL")  # or your production frontend
 
+# Remove.bg API configuration
+REMOVEBG_API_KEY = os.getenv("REMOVEBG_API_KEY")
+
 # And configure your email backend:
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = "smtp.zoho.com"
