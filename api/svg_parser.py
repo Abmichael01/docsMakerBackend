@@ -28,11 +28,17 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
         # Handle select options
         select_part = next((p for p in parts if p.startswith("select_")), None)
         if select_part:
+            # Preserve original case in the label by replacing underscores with spaces
             label = select_part[len("select_"):].replace("_", " ")
+            # Get the actual text content from the SVG element for the value
+            # This preserves the original case in the select options
+            option_text = (el.text or "").strip()
+            
             option = {
                 "value": el_id,
                 "label": label,
                 "svgElementId": el_id,
+                "displayText": option_text or label  # Use element text if available, otherwise use label
             }
             
             # If this is the first select option for this field, create the field
@@ -70,14 +76,25 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
                     pass
             elif part.startswith("depends_"):
                 dependency = part.replace("depends_", "")
-            elif part in [
+            elif part.startswith("hide") or part in [
                 "text", "textarea", "checkbox", "date", "upload",
                 "number", "email", "tel", "gen", "password",
                 "range", "color", "file", "status", "sign"
             ]:
-                field_type = part
+                field_type = "hide" if part.startswith("hide") else part
 
-        default_value = False if field_type == "checkbox" else text_content
+        # Handle default values for different field types
+        if field_type == "checkbox":
+            default_value = False
+        elif field_type == "hide":
+            # For hide fields, determine default state based on part name
+            # hide_checked = visible by default, hide_unchecked = hidden by default
+            hide_part = next((p for p in parts if p.startswith("hide")), "hide")
+            
+            # Default is false (hidden) unless explicitly marked as checked
+            default_value = hide_part == "hide_checked"  # True if checked (visible)
+        else:
+            default_value = text_content
 
         field = {
             "id": base_id,

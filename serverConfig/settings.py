@@ -69,6 +69,10 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# Add custom middleware for media CORS in development
+if ENV == "development":
+    MIDDLEWARE.append('serverConfig.middleware.MediaCorsMiddleware')
+
 ROOT_URLCONF = 'serverConfig.urls'
 
 
@@ -173,6 +177,9 @@ if ENV == "production":
     MEDIA_URL = os.getenv('MEDIA_URL', 'https://api.sharptoolz.com/media/')
 else:
     MEDIA_URL = os.getenv('MEDIA_URL', '/media/')
+    # Add Cross-Origin-Resource-Policy header for development
+    SECURE_CROSS_ORIGIN_OPENER_POLICY = None
+    SECURE_REFERRER_POLICY = 'no-referrer-when-downgrade'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # File Upload Settings
@@ -267,6 +274,11 @@ CORS_ORIGIN_WHITELIST = [
     "https://myflightlookup.com",
     "https://api.sharptoolz.com",
 ]
+
+# Additional CORS settings to fix image loading in development
+CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins in development
+CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
+CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 
 # CSRF Trusted Origins - Required for CSRF validation
 CSRF_TRUSTED_ORIGINS = [
