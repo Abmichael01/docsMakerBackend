@@ -40,6 +40,7 @@ class TemplateViewSet(viewsets.ModelViewSet):
         
         return queryset
     
+    
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         purchased_count = instance.purchases.count()
