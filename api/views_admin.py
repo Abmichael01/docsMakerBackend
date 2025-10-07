@@ -190,7 +190,6 @@ class AdminUserDetails(APIView):
                     'template_name': purchase.template.name,
                     'name': purchase.name,
                     'test': purchase.test,
-                    'status': purchase.status,
                     'tracking_id': purchase.tracking_id,
                     'created_at': purchase.created_at.isoformat(),
                     'updated_at': purchase.updated_at.isoformat(),

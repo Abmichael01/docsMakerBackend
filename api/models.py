@@ -68,15 +68,6 @@ class Template(models.Model):
 
 
 class PurchasedTemplate(models.Model):
-    STATUS_CHOICES = [
-        ("", ""),
-        ("processing", "Processing"),
-        ("in_transit", "In Transit"),
-        ("delivered", "Delivered"),
-        ("error_message", "Error Message"),
-    ]
-
-
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     buyer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="purchased_templates")
@@ -87,10 +78,8 @@ class PurchasedTemplate(models.Model):
     svg = models.TextField()
     form_fields = models.JSONField(default=dict, blank=True)
     test = models.BooleanField(default=True)
-    error_message = models.TextField(blank=True)
 
     tracking_id = models.CharField(max_length=100, blank=True, null=True, unique=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="processing",)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -115,12 +104,21 @@ class PurchasedTemplate(models.Model):
         indexes = [
             models.Index(fields=['buyer']),
             models.Index(fields=['template']),
-            models.Index(fields=['status']),
             models.Index(fields=['tracking_id']),
             models.Index(fields=['created_at']),
-            models.Index(fields=['buyer', 'status']),
         ]
 
     def __str__(self):
         template_name = self.template.name if self.template else "Orphaned Template"
         return f"{self.buyer.username} - {template_name} ({'test' if self.test else 'paid'})"
+
+
+class Tutorial(models.Model):
+    template = models.OneToOneField(Template, on_delete=models.CASCADE, related_name='tutorial')
+    url = models.URLField(help_text="Tutorial video URL")
+    title = models.CharField(max_length=255, blank=True, help_text="Optional tutorial title")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.template.name} - Tutorial"

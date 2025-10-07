@@ -3,7 +3,7 @@ from rest_framework import serializers
 from django.db.models import Sum, Count
 from django.contrib.auth import get_user_model
 from api.watermark import WaterMark
-from .models import Template, PurchasedTemplate, Tool
+from .models import Template, PurchasedTemplate, Tool, Tutorial
 from wallet.models import Wallet
 from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
@@ -139,10 +139,60 @@ class AdminUsersSerializer(serializers.Serializer):
         }
 
 
+class TutorialSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tutorial
+        fields = ['id', 'template', 'url', 'title', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
 class TemplateSerializer(serializers.ModelSerializer):
+    tutorial = TutorialSerializer(read_only=True)
+    
     class Meta:
         model = Template
         fields = '__all__'
+    
+    def create(self, validated_data):
+        # Extract tutorial data from request data
+        request = self.context.get('request')
+        tutorial_url = request.data.get('tutorial_url') if request else None
+        tutorial_title = request.data.get('tutorial_title') if request else None
+        
+        # Create the template
+        template = Template.objects.create(**validated_data)
+        
+        # Create tutorial if URL is provided
+        if tutorial_url:
+            Tutorial.objects.create(
+                template=template,
+                url=tutorial_url,
+                title=tutorial_title or ''
+            )
+        
+        return template
+    
+    def update(self, instance, validated_data):
+        # Extract tutorial data from request data
+        request = self.context.get('request')
+        tutorial_url = request.data.get('tutorial_url') if request else None
+        tutorial_title = request.data.get('tutorial_title') if request else None
+        
+        # Update the template
+        instance = super().update(instance, validated_data)
+        
+        # Update or create tutorial
+        if tutorial_url is not None:  # Allow clearing tutorial by sending empty string
+            tutorial, created = Tutorial.objects.get_or_create(
+                template=instance,
+                defaults={'url': tutorial_url, 'title': tutorial_title or ''}
+            )
+            if not created:
+                tutorial.url = tutorial_url
+                tutorial.title = tutorial_title or ''
+                tutorial.save()
+        
+        return instance
         
     def to_representation(self, instance):
         # Get the base representation

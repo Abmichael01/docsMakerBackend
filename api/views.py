@@ -1,7 +1,7 @@
 # templates/views.py
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from .models import *
+from .models import Template, PurchasedTemplate, Tool, Tutorial
 from .serializers import *
 from .permissions import *
 from rest_framework.permissions import SAFE_METHODS
@@ -266,3 +266,16 @@ class RemoveBackgroundView(APIView):
                 {"error": f"Background removal failed: {str(e)}"}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class TutorialViewSet(viewsets.ModelViewSet):
+    queryset = Tutorial.objects.all()
+    serializer_class = TutorialSerializer
+    permission_classes = [IsAdminOrReadOnly]
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        template_id = self.request.query_params.get('template')
+        if template_id:
+            queryset = queryset.filter(template_id=template_id)
+        return queryset
