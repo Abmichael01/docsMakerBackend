@@ -12,18 +12,22 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
         el_id = el.attrib.get("id", "")
         text_content = (el.text or "").strip()
 
+        # Extract link URL before splitting (URLs contain dots that would break splitting)
+        url = None
+        if ".link_" in el_id:
+            # Find the link part and extract everything after "link_"
+            link_start = el_id.index(".link_") + 6  # 6 = len(".link_")
+            # Get everything from link_start to the end
+            url = el_id[link_start:]
+            # Remove the link part from el_id before splitting
+            el_id = el_id[:el_id.index(".link_")]
+
         parts = el_id.split(".")
         base_id = parts[0]
         name = base_id.replace("_", " ").title()
         field_type = base_id  # default fallback
         max_value = None
         dependency = None
-        url = None
-
-        # Check for link in parts instead of directly in el_id
-        link_part = next((p for p in parts if p.startswith("link_")), None)
-        if link_part:
-            url = link_part[5:]  # 5 is length of "link_"
 
         # Handle select options
         select_part = next((p for p in parts if p.startswith("select_")), None)
@@ -63,6 +67,7 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
                 print(f"   📝 Creating new select field for: {base_id}")
                 select_options_map[base_id] = []
                 # Create the select field in its original position
+                # Note: currentValue is set to empty string - actual value will come from frontend
                 field = {
                     "id": base_id,
                     "name": name,
@@ -78,16 +83,33 @@ def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
             else:
                 print(f"   📝 Adding option to existing field: {base_id}")
             
+            # Check if this option element is visible in the SVG
+            is_visible = True
+            opacity = el.attrib.get("opacity", "1")
+            visibility = el.attrib.get("visibility", "visible")
+            display = el.attrib.get("display", "")
+            
+            # An element is hidden if opacity is 0, visibility is hidden, or display is none
+            if opacity == "0" or visibility == "hidden" or display == "none":
+                is_visible = False
+            
             select_options_map[base_id].append(option)
-            print(f"   📝 Added option to map. Total options for {base_id}: {len(select_options_map[base_id])}")
+            print(f"   📝 Added option to map. Total options for {base_id}: {len(select_options_map[base_id])}, visible: {is_visible}")
             
             # Update the field's options
             for field in fields_list:
                 if field["id"] == base_id:
                     field["options"] = select_options_map[base_id]
-                    if not field["defaultValue"] and select_options_map[base_id]:
+                    
+                    # Set defaultValue to first option if not set
+                    if not field.get("defaultValue") and select_options_map[base_id]:
                         field["defaultValue"] = select_options_map[base_id][0]["value"]
-                        field["currentValue"] = select_options_map[base_id][0]["value"]
+                    
+                    # Set currentValue to the visible option (the one that's shown in the SVG)
+                    # If this option is visible, it's the currently selected one
+                    if is_visible:
+                        field["currentValue"] = option["value"]
+                        print(f"   📝 Set currentValue to visible option: {option['value']}")
                     
                     # Set tracking role if this select option has one
                     if tracking_role:

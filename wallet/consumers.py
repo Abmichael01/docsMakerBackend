@@ -20,7 +20,9 @@ class WalletConsumer(AsyncWebsocketConsumer):
             }))
 
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        # Only discard if group_name was set (i.e., user was authenticated)
+        if hasattr(self, 'group_name'):
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     @database_sync_to_async
     def get_wallet_data(self):

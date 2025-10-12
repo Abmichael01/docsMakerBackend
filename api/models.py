@@ -95,8 +95,8 @@ class PurchasedTemplate(models.Model):
                 count = PurchasedTemplate.objects.filter(buyer=self.buyer, template__isnull=True).count() + 1
                 self.name = f"Orphaned Template #{count}"
 
-        # if self.svg:
-        #     self.form_fields = parse_svg_to_form_fields(self.svg)
+        if self.svg:
+            self.form_fields = parse_svg_to_form_fields(self.svg)
 
         super().save(*args, **kwargs)
 
