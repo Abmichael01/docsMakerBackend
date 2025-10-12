@@ -117,11 +117,12 @@ When `ANOTHER_ID` changes, this field copies the same value.
 ```
 - Maps fields to specific roles for tracking website display
 - Must be the last extension (after `.gen`, `.max_`, `.link_`, `.editable`, etc.)
-- Common roles: `track_name`, `track_status`, `track_destination`, `track_package`, `track_weight`, `track_error_message`
+- Common roles: `track_name`, `track_email`, `track_status`, `track_destination`, `track_package`, `track_weight`, `track_error_message`
 
 **Examples:**
 ```xml
 <text id="Customer_Name.text.track_name">John Doe</text>
+<text id="Customer_Email.email.track_email">john@example.com</text>
 <text id="Destination.text.track_destination">123 Main St</text>
 <text id="Status.select_Processing">Processing</text>
 <text id="Status.select_Delivered.track_status">Delivered</text>
@@ -157,6 +158,7 @@ When `ANOTHER_ID` changes, this field copies the same value.
 ```xml
 <text id="Tracking_ID.gen.max_12.tracking_id.link_https://parcelfinda.com">TRK123456789</text>
 <text id="Customer_Name.text.track_name">John Doe</text>
+<text id="Customer_Email.email.track_email">john@example.com</text>
 <text id="Destination.text.track_destination">123 Main St</text>
 <text id="Status.select_Processing">Processing</text>
 <text id="Status.select_In_Transit">In Transit</text>

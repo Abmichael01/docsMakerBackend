@@ -48,12 +48,13 @@ TRACKING ROLE FIELDS (.track_)
 ⚠️ IMPORTANT: .track_ extensions MUST ALWAYS be the LAST extension in the ID chain
 
 ID: Customer_Name.text.track_name
+ID: Customer_Email.email.track_email
 ID: Destination.text.track_destination
 ID: Status.select_Delivered.track_status
 ID: Status.select_Error.editable.track_status
 
 Meaning: Maps fields to specific roles for tracking website display
-- Common roles: track_name, track_status, track_destination, track_package, track_weight, track_error_message
+- Common roles: track_name, track_email, track_status, track_destination, track_package, track_weight, track_error_message
 - Must be the last extension (after .gen, .max_, .link_, .editable, etc.)
 - For select fields with .track_, only ONE option needs the extension
 
@@ -116,6 +117,9 @@ City.depends_Country
 
 Customer_Name.text.track_name
 - Creates: Text field for customer name, mapped to "name" role for tracking sites
+
+Customer_Email.email.track_email
+- Creates: Email field for customer email, mapped to "email" role for tracking sites
 
 Status.select_Processing
 Status.select_In_Transit  
