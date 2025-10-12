@@ -34,14 +34,37 @@ BASIC FIELD TYPES
    ID: City.depends_Country
    Meaning: This field copies the same content as the "Country" field - when Country changes, this field shows the same content
 
-SPECIAL TRACKING FIELD
-======================
+SPECIAL TRACKING FIELDS
+=======================
 
-TRACKING_ID FIELD
-ID: Tracking_ID.gen.max_12.link_https://example.com/track
+TRACKING ID FIELD
+ID: Order_Number.gen.max_12.tracking_id.link_https://example.com/track
 Meaning: Creates a tracking field that:
 - Generates random 12-character tracking codes
+- Marks it as the main tracking ID with .tracking_id
 - Includes a link to https://example.com/track for tracking
+
+TRACKING ROLE FIELDS (.track_)
+⚠️ IMPORTANT: .track_ extensions MUST ALWAYS be the LAST extension in the ID chain
+
+ID: Customer_Name.text.track_name
+ID: Destination.text.track_destination
+ID: Status.select_Delivered.track_status
+ID: Status.select_Error.editable.track_status
+
+Meaning: Maps fields to specific roles for tracking website display
+- Common roles: track_name, track_status, track_destination, track_package, track_weight, track_error_message
+- Must be the last extension (after .gen, .max_, .link_, .editable, etc.)
+- For select fields with .track_, only ONE option needs the extension
+
+EDITABLE FIELDS
+ID: Status.text.editable
+ID: Notes.textarea.editable
+ID: Status.select_Delivered.editable.track_status
+
+Meaning: Marks fields as editable even after document purchase
+- By default, all fields become non-editable after purchase
+- Must come BEFORE .track_ extension if both are used
 
 IMPORTANT RULES
 ===============
@@ -61,7 +84,15 @@ IMPORTANT RULES
    Example: Reference_Code.gen.max_8
 
 5. For links, use .link_URL where URL is the full website address
-   Example: Tracking_ID.gen.max_12.link_https://example.com/track
+   Example: Order_Number.gen.max_12.tracking_id.link_https://example.com/track
+
+6. ⚠️ .track_ extensions MUST ALWAYS be the LAST extension
+   Example: Customer_Name.text.track_name
+   Example with editable: Status.text.editable.track_status
+
+7. For editable fields, use .editable (must come before .track_ if both are used)
+   Example: Notes.textarea.editable
+   Example with tracking: Status.select_Delivered.editable.track_status
 
 EXAMPLES
 ========
@@ -77,8 +108,21 @@ Country.select_Canada
 Country.select_Mexico
 - Creates: Dropdown with USA, Canada, Mexico options
 
-Tracking_ID.gen.max_12.link_https://track.example.com
+Order_Number.gen.max_12.tracking_id.link_https://track.example.com
 - Creates: Random 12-character tracking code with link to track.example.com
 
 City.depends_Country
 - Creates: City field that copies the same content as Country field
+
+Customer_Name.text.track_name
+- Creates: Text field for customer name, mapped to "name" role for tracking sites
+
+Status.select_Processing
+Status.select_In_Transit  
+Status.select_Delivered.editable.track_status
+Status.select_Error
+- Creates: Status dropdown with options, editable after purchase, mapped to "status" role
+- Note: .editable comes before .track_status (track_ must be last)
+
+Error_Message.textarea.editable.track_error_message
+- Creates: Editable error message field mapped to "error_message" role for tracking sites

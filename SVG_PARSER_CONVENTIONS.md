@@ -94,18 +94,54 @@ When `ANOTHER_ID` changes, this field copies the same value.
 <text id="company_display.text.depends_company_name">Will show same as company name</text>
 ```
 
-### Tracking ID with Link
+### Tracking ID with Link (.tracking_id .link_)
 ```xml
-<text id="Tracking_ID.gen.max_10.link_https://example.com">Generated tracking code</text>
+<text id="Order_Number.gen.max_10.tracking_id.link_https://example.com">Generated tracking code</text>
 ```
-- Must use exact name: `Tracking_ID` (uppercase)
-- Generates random code
-- Adds clickable link
+- Use `.tracking_id` to mark field as tracking ID
+- Use `.link_URL` to add clickable link
+- Generates random code with `.gen.max_N`
 
 **Examples:**
 ```xml
-<text id="Tracking_ID.gen.max_8.link_https://track.example.com">TRK12345</text>
-<text id="Tracking_ID.gen.max_12.link_https://orders.example.com">TRK123456789</text>
+<text id="Order_Number.gen.max_8.tracking_id.link_https://track.example.com">TRK12345</text>
+<text id="Booking_Ref.gen.max_12.tracking_id.link_https://orders.example.com">TRK123456789</text>
+```
+
+### Tracking Roles (.track_)
+⚠️ **IMPORTANT: `.track_` extensions must ALWAYS be the LAST extension in the ID chain.**
+
+```xml
+<text id="fieldname.text.track_name">Customer Name</text>
+<text id="fieldname.text.editable.track_status">Status</text>
+```
+- Maps fields to specific roles for tracking website display
+- Must be the last extension (after `.gen`, `.max_`, `.link_`, `.editable`, etc.)
+- Common roles: `track_name`, `track_status`, `track_destination`, `track_package`, `track_weight`, `track_error_message`
+
+**Examples:**
+```xml
+<text id="Customer_Name.text.track_name">John Doe</text>
+<text id="Destination.text.track_destination">123 Main St</text>
+<text id="Status.select_Processing">Processing</text>
+<text id="Status.select_Delivered.track_status">Delivered</text>
+<text id="Status.select_Error.editable.track_status">Error</text>
+```
+
+### Editable After Purchase (.editable)
+```xml
+<text id="fieldname.text.editable">Editable text</text>
+```
+- Marks fields as editable even after document purchase
+- By default, all fields become non-editable after purchase
+- Must come BEFORE `.track_` extension if both are used
+
+**Examples:**
+```xml
+<text id="Status.text.editable">Status field stays editable</text>
+<text id="Notes.textarea.editable">Editable notes field</text>
+<text id="Status.select_Processing">Processing</text>
+<text id="Status.select_Delivered.editable.track_status">Delivered</text>
 ```
 
 ## Examples
@@ -114,7 +150,19 @@ When `ANOTHER_ID` changes, this field copies the same value.
 ```xml
 <text id="company_name.text">Enter company name</text>
 <text id="description.textarea.max_300">Company description</text>
-<text id="Tracking_ID.gen.max_8.link_https://track.example.com">TRK12345</text>
+<text id="Order_Number.gen.max_8.tracking_id.link_https://track.example.com">TRK12345</text>
+```
+
+### Tracking Form with Editable Fields
+```xml
+<text id="Tracking_ID.gen.max_12.tracking_id.link_https://parcelfinda.com">TRK123456789</text>
+<text id="Customer_Name.text.track_name">John Doe</text>
+<text id="Destination.text.track_destination">123 Main St</text>
+<text id="Status.select_Processing">Processing</text>
+<text id="Status.select_In_Transit">In Transit</text>
+<text id="Status.select_Delivered.editable.track_status">Delivered</text>
+<text id="Status.select_Error">Error</text>
+<text id="Error_Message.textarea.editable.track_error_message">Error details here</text>
 ```
 
 ### Form with Sync Fields
@@ -143,10 +191,15 @@ When `ANOTHER_ID` changes, this field copies the same value.
 | `.max_N` | Character limit | `id="title.text.max_100"` |
 | `.select_OPTION` | Dropdown option | `id="country.select_usa"` |
 | `.depends_FIELD` | Sync with field | `id="confirm.text.depends_email"` |
-| `Tracking_ID.gen.max_N.link_URL` | Tracking code with link | `id="Tracking_ID.gen.max_8.link_https://..."` |
+| `.tracking_id` | Mark as tracking ID | `id="Order.gen.max_8.tracking_id"` |
+| `.link_URL` | Add external link | `id="Order.tracking_id.link_https://..."` |
+| `.editable` | Editable after purchase | `id="status.text.editable"` |
+| `.track_ROLE` | Tracking role (MUST BE LAST) | `id="name.text.track_name"` |
 
 ## Important Notes
 
-- Use `Tracking_ID` (uppercase) for tracking codes with links
-- All other field names should be lowercase with underscores
+- ⚠️ **`.track_` extensions MUST ALWAYS be the LAST extension**
+- If using both `.editable` and `.track_`, put `.editable` first: `field.text.editable.track_name`
+- Use `.tracking_id` to mark the main tracking field
+- All field names should use underscores for spaces
 - The parser converts SVG text elements into form fields automatically
