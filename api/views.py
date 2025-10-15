@@ -133,20 +133,15 @@ class DownloadDoc(APIView):
 
 class RemoveBackgroundView(APIView):
     """
-    API endpoint to remove background from uploaded images using OpenCV
+    API endpoint to remove background from uploaded images using Remove.bg API
     """
     permission_classes = [IsAuthenticated]
     
     def post(self, request):
-        temp_file_path = None
         try:
-            import cv2
-            import numpy as np
-            from PIL import Image
+            from django.conf import settings
             import base64
-            import io
-            import tempfile
-            import os
+            import requests as req
             
             # Get the uploaded file from request
             uploaded_file = request.FILES.get('image')
@@ -171,96 +166,76 @@ class RemoveBackgroundView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Save uploaded file to temporary directory
-            file_extension = uploaded_file.name.split('.')[-1]
-            with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_extension}') as temp_file:
-                for chunk in uploaded_file.chunks():
-                    temp_file.write(chunk)
-                temp_file_path = temp_file.name
+            # Check wallet balance FIRST before calling API
+            user = request.user
+            charge_amount = 0.20
             
-            print(f"Saved temporary file: {temp_file_path}")
-            
-            # Load image with OpenCV
-            image = cv2.imread(temp_file_path)
-            if image is None:
+            if not hasattr(user, "wallet"):
                 return Response(
-                    {"error": "Invalid image file"}, 
+                    {"error": "User does not have a wallet."}, 
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            print(f"Loaded image: {image.shape}")
+            if user.wallet.balance < charge_amount:
+                return Response(
+                    {"error": "Insufficient wallet balance. You need at least $0.20 for background removal."}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             
-            # Convert to RGB
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            # Check if API key is configured
+            api_key = settings.REMOVEBG_API_KEY
+            if not api_key:
+                return Response(
+                    {"error": "Remove.bg API key not configured. Please add REMOVEBG_API_KEY to your .env file"}, 
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
             
-            # Create a simple background removal using color-based segmentation
-            # This is a basic approach - for better results, you'd need more sophisticated methods
+            # Read the uploaded file
+            image_data = uploaded_file.read()
             
-            # Convert to HSV for better color segmentation
-            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            # Remove background using Remove.bg API directly
+            print("Calling Remove.bg API...")
+            response = req.post(
+                'https://api.remove.bg/v1.0/removebg',
+                files={'image_file': image_data},
+                data={'size': 'auto'},
+                headers={'X-Api-Key': api_key},
+                timeout=30
+            )
             
-            # Create mask for white/light backgrounds (common in document photos)
-            # Adjust these values based on your specific use case
-            lower_white = np.array([0, 0, 200])
-            upper_white = np.array([180, 30, 255])
-            mask_white = cv2.inRange(hsv, lower_white, upper_white)
-            
-            # Create mask for light gray backgrounds
-            lower_gray = np.array([0, 0, 150])
-            upper_gray = np.array([180, 30, 200])
-            mask_gray = cv2.inRange(hsv, lower_gray, upper_gray)
-            
-            # Combine masks
-            mask = cv2.bitwise_or(mask_white, mask_gray)
-            
-            # Apply morphological operations to clean up the mask
-            kernel = np.ones((3,3), np.uint8)
-            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-            
-            # Invert mask (we want to keep the foreground, remove background)
-            mask = cv2.bitwise_not(mask)
-            
-            # Apply mask to create transparent background
-            # Convert to RGBA
-            image_rgba = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2RGBA)
-            
-            # Set alpha channel based on mask
-            image_rgba[:, :, 3] = mask
-            
-            # Convert back to PIL Image
-            pil_image = Image.fromarray(image_rgba, 'RGBA')
-            
-            # Convert to base64
-            buffer = io.BytesIO()
-            pil_image.save(buffer, format='PNG')
-            img_bytes = buffer.getvalue()
-            
-            result_base64 = base64.b64encode(img_bytes).decode('utf-8')
-            result_data_url = f"data:image/png;base64,{result_base64}"
-            
-            # Clean up temporary file
-            os.unlink(temp_file_path)
-            print(f"Cleaned up temporary file: {temp_file_path}")
-            
-            return Response({
-                "success": True,
-                "image": result_data_url,
-                "message": "Background removed successfully using OpenCV"
-            })
+            if response.status_code == 200:
+                # Debit the wallet AFTER successful API call
+                user.wallet.debit(charge_amount, description="Background removal (Remove.bg)")
+                print(f"Charged ${charge_amount} from wallet. New balance: ${user.wallet.balance}")
+                
+                # Send real-time wallet update to user
+                from wallet.views import send_wallet_update
+                send_wallet_update(user, False)
+                
+                # Convert to base64
+                result_base64 = base64.b64encode(response.content).decode('utf-8')
+                result_data_url = f"data:image/png;base64,{result_base64}"
+                
+                print("Background removed successfully")
+                
+                return Response({
+                    "success": True,
+                    "image": result_data_url,
+                    "message": "Background removed successfully"
+                })
+            else:
+                error_msg = response.json().get('errors', [{}])[0].get('title', 'Unknown error')
+                print(f"Remove.bg API error: {error_msg}")
+                raise Exception(f"Remove.bg API error: {error_msg}")
             
         except Exception as e:
             import logging
+            import traceback
             logger = logging.getLogger(__name__)
-            logger.error(f"Background removal failed: {str(e)}", exc_info=True)
-            
-            # Clean up temporary file if it exists
-            try:
-                if temp_file_path and os.path.exists(temp_file_path):
-                    os.unlink(temp_file_path)
-                    print(f"Cleaned up temporary file after error: {temp_file_path}")
-            except:
-                pass
+            error_details = traceback.format_exc()
+            logger.error(f"Background removal failed: {str(e)}\n{error_details}")
+            print(f"ERROR: Background removal failed: {str(e)}")
+            print(f"Traceback: {error_details}")
             
             return Response(
                 {"error": f"Background removal failed: {str(e)}"}, 
