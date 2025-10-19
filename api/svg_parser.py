@@ -1,215 +1,402 @@
 import xml.etree.ElementTree as ET
+import logging
+from typing import Optional, Dict, List, Any
+
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# EXTENSION REGISTRY - Central configuration for all supported extensions
+# ============================================================================
+
+FIELD_TYPES = [
+    "text", "textarea", "checkbox", "date", "upload",
+    "number", "email", "tel", "gen", "password",
+    "range", "color", "file", "status", "sign"
+]
+
+EXTENSION_PREFIXES = {
+    "max_": "max_value",       # Character/number limit
+    "depends_": "dependency",   # Field synchronization with extraction support
+    "track_": "tracking_role",  # Tracking role mapping
+    "select_": "select_option", # Dropdown option
+    "link_": "link_url",        # External link
+    "date_": "date_format",     # Date format specification (MM/DD/YYYY, MMM_DD, etc.)
+    "gen_": "generation_rule",  # Generation rule (rn[12], rc[6], etc.)
+}
+
+FLAG_EXTENSIONS = [
+    "editable",     # Editable after purchase
+    "tracking_id",  # Mark as tracking ID field
+    "hide_checked", # Hide field (visible by default)
+    "hide_unchecked" # Hide field (hidden by default)
+]
 
 
-def parse_svg_to_form_fields(svg_text: str) -> list[dict]:
-    root = ET.fromstring(svg_text)
-    elements = root.findall(".//*[@id]")
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
 
-    fields_list = []  # Use list to maintain order
-    select_options_map = {}  # Track select options for each field
+def extract_link_url(element_id: str) -> tuple[str, Optional[str]]:
+    """
+    Extract link URL from element ID and return cleaned ID.
+    URLs are extracted BEFORE splitting by dots to preserve URL structure.
+    
+    Returns:
+        tuple: (cleaned_element_id, url)
+    """
+    if ".link_" not in element_id:
+        return element_id, None
+    
+    link_start = element_id.index(".link_") + 6  # 6 = len(".link_")
+    url = element_id[link_start:]
+    cleaned_id = element_id[:element_id.index(".link_")]
+    
+    return cleaned_id, url
 
-    for el in elements:
-        el_id = el.attrib.get("id", "")
-        text_content = (el.text or "").strip()
 
-        # Extract link URL before splitting (URLs contain dots that would break splitting)
-        url = None
-        if ".link_" in el_id:
-            # Find the link part and extract everything after "link_"
-            link_start = el_id.index(".link_") + 6  # 6 = len(".link_")
-            # Get everything from link_start to the end
-            url = el_id[link_start:]
-            # Remove the link part from el_id before splitting
-            el_id = el_id[:el_id.index(".link_")]
+def is_element_visible(element: ET.Element) -> bool:
+    """
+    Check if an SVG element is visible based on its attributes.
+    """
+    opacity = element.attrib.get("opacity", "1")
+    visibility = element.attrib.get("visibility", "visible")
+    display = element.attrib.get("display", "")
+    
+    return not (opacity == "0" or visibility == "hidden" or display == "none")
 
-        parts = el_id.split(".")
-        base_id = parts[0]
-        name = base_id.replace("_", " ").title()
-        field_type = base_id  # default fallback
-        max_value = None
-        dependency = None
 
-        # Handle select options
-        select_part = next((p for p in parts if p.startswith("select_")), None)
-        if select_part:
-            print(f"🔍 Processing select option: {el_id}")
-            print(f"   Parts: {parts}")
-            
-            # Preserve original case in the label by replacing underscores with spaces
-            label = select_part[len("select_"):].replace("_", " ")
-            # Get the actual text content from the SVG element for the value
-            # This preserves the original case in the select options
-            option_text = (el.text or "").strip()
-            print(f"   Text content: '{option_text}'")
-            
-            # Check if this select option has a tracking role or editable flag
-            tracking_role = None
-            editable = False
-            track_part = next((p for p in parts if p.startswith("track_")), None)
-            if track_part:
-                tracking_role = track_part[6:]  # 6 is length of "track_"
-            if "editable" in parts:
-                editable = True
-            
-            print(f"   Label: '{label}'")
-            print(f"   Tracking role: {tracking_role}")
-            print(f"   Editable: {editable}")
-            
-            option = {
-                "value": el_id,
-                "label": label,
-                "svgElementId": el_id,
-                "displayText": option_text or label  # Use element text if available, otherwise use label
-            }
-            
-            # If this is the first select option for this field, create the field
-            if base_id not in select_options_map:
-                print(f"   📝 Creating new select field for: {base_id}")
-                select_options_map[base_id] = []
-                # Create the select field in its original position
-                # Note: currentValue is set to empty string - actual value will come from frontend
-                field = {
+def get_extension_value(part: str, prefix: str) -> str:
+    """
+    Extract value from an extension part.
+    Example: get_extension_value("max_50", "max_") -> "50"
+    """
+    return part.replace(prefix, "")
+
+
+def validate_track_position(parts: List[str]) -> bool:
+    """
+    Validate that track_ extension is the last extension (if present).
+    Returns True if valid, False if track_ is not in the last position.
+    """
+    track_index = next((i for i, p in enumerate(parts) if p.startswith("track_")), None)
+    if track_index is not None:
+        return track_index == len(parts) - 1
+    return True
+
+
+def get_field_name(base_id: str) -> str:
+    """
+    Convert base_id to human-readable name.
+    Example: "customer_name" -> "Customer Name"
+    """
+    return base_id.replace("_", " ").title()
+
+
+# ============================================================================
+# SELECT FIELD HANDLING
+# ============================================================================
+
+def create_select_option(element_id: str, element: ET.Element, parts: List[str]) -> Dict[str, Any]:
+    """
+    Create a select option dictionary from element data.
+    """
+    select_part = next(p for p in parts if p.startswith("select_"))
+    label = get_extension_value(select_part, "select_").replace("_", " ")
+    option_text = (element.text or "").strip()
+    
+    return {
+        "value": element_id,
+        "label": label,
+        "svgElementId": element_id,
+        "displayText": option_text or label
+    }
+
+
+def extract_select_modifiers(parts: List[str]) -> Dict[str, Any]:
+    """
+    Extract tracking role and editable flag from select option parts.
+    """
+    tracking_role = None
+    editable = False
+    
+    track_part = next((p for p in parts if p.startswith("track_")), None)
+    if track_part:
+        tracking_role = get_extension_value(track_part, "track_")
+    
+    if "editable" in parts:
+        editable = True
+    
+    return {
+        "tracking_role": tracking_role,
+        "editable": editable
+    }
+
+
+def create_select_field(base_id: str, element_id: str, editable: bool) -> Dict[str, Any]:
+    """
+    Create a new select field dictionary.
+    """
+    return {
                     "id": base_id,
-                    "name": name,
+        "name": get_field_name(base_id),
                     "type": "select",
-                    "svgElementId": el_id,  # Use the first select element's ID
+        "svgElementId": element_id,
                     "options": [],
                     "defaultValue": "",
                     "currentValue": "",
                     "editable": editable,
                 }
-                print(f"   📝 Field created with editable: {editable}")
-                fields_list.append(field)
+
+
+def update_select_field(field: Dict[str, Any], option: Dict[str, Any], 
+                       is_visible: bool, modifiers: Dict[str, Any]):
+    """
+    Update select field with new option and modifiers.
+    """
+    # Set currentValue to visible option (the one shown in SVG)
+    if is_visible:
+        field["currentValue"] = option["value"]
+    
+    # Set defaultValue to first option if not set
+    if not field.get("defaultValue") and field["options"]:
+        field["defaultValue"] = field["options"][0]["value"]
+    
+    # Set tracking role if present
+    if modifiers["tracking_role"]:
+        field["trackingRole"] = modifiers["tracking_role"]
+    
+    # Set editable if any option has it
+    if modifiers["editable"]:
+        field["editable"] = True
+
+
+# ============================================================================
+# REGULAR FIELD HANDLING
+# ============================================================================
+
+def parse_field_extensions(parts: List[str]) -> Dict[str, Any]:
+    """
+    Parse all extensions from parts and return extracted values.
+    """
+    result = {
+        "field_type": parts[0],  # Default to base_id
+        "max_value": None,
+        "dependency": None,
+        "tracking_role": None,
+        "date_format": None,
+        "generation_rule": None,
+        "editable": False,
+        "is_tracking_id": False,
+    }
+    
+    for part in parts[1:]:
+        # Handle prefixed extensions
+        if part.startswith("max_"):
+            # Check if this is a max_ with generation rule like max_(A[10])
+            max_content = get_extension_value(part, "max_")
+            if max_content.startswith("(") and max_content.endswith(")"):
+                # This is a generation rule for padding, e.g., max_(A[10])
+                result["max_generation"] = max_content
             else:
-                print(f"   📝 Adding option to existing field: {base_id}")
+                try:
+                    result["max_value"] = int(max_content)
+                except ValueError:
+                    pass
+        
+        elif part.startswith("depends_"):
+            # Extract dependency with optional extraction pattern
+            # e.g., "field_name[w1]" or "field_name[ch1-4]"
+            result["dependency"] = get_extension_value(part, "depends_")
+        
+        elif part.startswith("track_"):
+            # Only set if it's the last extension
+            if parts.index(part) == len(parts) - 1:
+                result["tracking_role"] = get_extension_value(part, "track_")
+        
+        elif part.startswith("date_"):
+            # Extract date format (e.g., "MM/DD/YYYY" from "date_MM/DD/YYYY")
+            # Replace underscores with slashes to support "date_MM_DD_YYYY" or "date_MM/DD/YYYY"
+            date_format = get_extension_value(part, "date_")
+            result["date_format"] = date_format.replace("_", "/")
+            # If date_FORMAT is specified, field type should be "date"
+            if result["field_type"] == parts[0]:  # Only set if not already set by another extension
+                result["field_type"] = "date"
+        
+        elif part.startswith("gen_"):
+            # Extract generation rule
+            # e.g., "gen_(rn[12])" or "gen_FL(rn[12])(rc[6])"
+            result["generation_rule"] = get_extension_value(part, "gen_")
+            # Set field type to gen if not already set
+            if result["field_type"] == parts[0]:
+                result["field_type"] = "gen"
+        
+        # Handle flag extensions
+        elif part == "tracking_id":
+            result["field_type"] = "gen"
+            result["is_tracking_id"] = True
+        
+        elif part == "editable":
+            result["editable"] = True
+        
+        # Handle field type extensions
+        elif part.startswith("hide") or part in FIELD_TYPES:
+            result["field_type"] = "hide" if part.startswith("hide") else part
+    
+    return result
+
+
+def get_default_value(field_type: str, text_content: str, parts: List[str]) -> Any:
+    """
+    Determine the default value based on field type.
+    """
+    if field_type == "checkbox":
+        return False
+    
+    elif field_type == "hide":
+        hide_part = next((p for p in parts if p.startswith("hide")), "hide")
+        return hide_part == "hide_checked"
+    
+    else:
+        return text_content
+
+
+def create_regular_field(base_id: str, element_id: str, extensions: Dict[str, Any], 
+                        default_value: Any, url: Optional[str], helper_text: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Create a regular (non-select) field dictionary.
+    """
+    field = {
+        "id": base_id,
+        "name": get_field_name(base_id),
+        "type": extensions["field_type"],
+        "svgElementId": element_id,
+        "defaultValue": default_value,
+        "currentValue": default_value,
+        "isTrackingId": extensions["is_tracking_id"],
+        "editable": extensions["editable"],
+    }
+    
+    # Add optional properties
+    if extensions["tracking_role"]:
+        field["trackingRole"] = extensions["tracking_role"]
+    
+    if extensions["max_value"] is not None:
+        field["max"] = extensions["max_value"]
+    
+    if extensions["dependency"]:
+        field["dependsOn"] = extensions["dependency"]
+    
+    if extensions["date_format"]:
+        field["dateFormat"] = extensions["date_format"]
+    
+    if extensions["generation_rule"]:
+        field["generationRule"] = extensions["generation_rule"]
+    
+    if extensions.get("max_generation"):
+        field["maxGeneration"] = extensions["max_generation"]
+    
+    if url:
+        field["link"] = url
+    
+    if helper_text:
+        field["helperText"] = helper_text
+    
+    return field
+
+
+# ============================================================================
+# MAIN PARSER FUNCTION
+# ============================================================================
+
+def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
+    """
+    Parse SVG text and convert elements with IDs into form field definitions.
+    
+    Supports extensions like:
+    - .text, .textarea, .upload, .sign, etc. (field types)
+    - .max_N (character/number limit)
+    - .depends_FIELD (field synchronization)
+    - .select_OPTION (dropdown options)
+    - .track_ROLE (tracking role - must be last)
+    - .editable (editable after purchase)
+    - .tracking_id (mark as tracking ID)
+    - .link_URL (external link)
+    
+    Args:
+        svg_text: SVG content as string
+        
+    Returns:
+        List of field dictionaries
+    """
+    try:
+        root = ET.fromstring(svg_text)
+    except ET.ParseError as e:
+        logger.error(f"Failed to parse SVG: {e}")
+        return []
+    
+    elements = root.findall(".//*[@id]")
+    fields_list = []
+    select_options_map: Dict[str, List[Dict]] = {}
+    
+    for element in elements:
+        element_id = element.attrib.get("id", "")
+        if not element_id:
+            continue
+        
+        text_content = (element.text or "").strip()
+        
+        # Extract link URL before splitting (URLs contain dots)
+        element_id, url = extract_link_url(element_id)
+        
+        # Split ID into parts
+        parts = element_id.split(".")
+        base_id = parts[0]
+        
+        # ====================================================================
+        # HANDLE SELECT FIELDS
+        # ====================================================================
+        if any(p.startswith("select_") for p in parts):
+            option = create_select_option(element_id, element, parts)
+            modifiers = extract_select_modifiers(parts)
             
-            # Check if this option element is visible in the SVG
-            is_visible = True
-            opacity = el.attrib.get("opacity", "1")
-            visibility = el.attrib.get("visibility", "visible")
-            display = el.attrib.get("display", "")
+            # Create select field if first option
+            if base_id not in select_options_map:
+                select_options_map[base_id] = []
+                field = create_select_field(base_id, element_id, modifiers["editable"])
+                fields_list.append(field)
             
-            # An element is hidden if opacity is 0, visibility is hidden, or display is none
-            if opacity == "0" or visibility == "hidden" or display == "none":
-                is_visible = False
-            
+            # Add option to map
             select_options_map[base_id].append(option)
-            print(f"   📝 Added option to map. Total options for {base_id}: {len(select_options_map[base_id])}, visible: {is_visible}")
             
-            # Update the field's options
+            # Update the field with option and modifiers
             for field in fields_list:
                 if field["id"] == base_id:
                     field["options"] = select_options_map[base_id]
-                    
-                    # Set defaultValue to first option if not set
-                    if not field.get("defaultValue") and select_options_map[base_id]:
-                        field["defaultValue"] = select_options_map[base_id][0]["value"]
-                    
-                    # Set currentValue to the visible option (the one that's shown in the SVG)
-                    # If this option is visible, it's the currently selected one
-                    if is_visible:
-                        field["currentValue"] = option["value"]
-                        print(f"   📝 Set currentValue to visible option: {option['value']}")
-                    
-                    # Set tracking role if this select option has one
-                    if tracking_role:
-                        field["trackingRole"] = tracking_role
-                        print(f"   📝 Set tracking role: {tracking_role}")
-                    
-                    # Set editable property if this select option has it
-                    # This ensures that if ANY option has .editable, the entire field becomes editable
-                    if editable:
-                        field["editable"] = True
-                        print(f"   📝 Set field editable to True")
-                    
-                    print(f"   📝 Field final state - editable: {field.get('editable', False)}, options count: {len(field.get('options', []))}")
+                    update_select_field(field, option, is_element_visible(element), modifiers)
                     break
             
-            # Skip processing this element as a regular field since it's a select option
+            continue  # Skip regular field processing
+        
+        # ====================================================================
+        # HANDLE REGULAR FIELDS
+        # ====================================================================
+        
+        # Validate track_ position
+        if not validate_track_position(parts):
+            logger.warning(f"Skipping element {element_id}: track_ extension must be last")
             continue
-
-        # Process field type and other properties for non-select fields
-        tracking_role = None  # Initialize tracking role
-        editable = False  # Initialize editable flag
         
-        # Check if track_ extension is present and validate it's the last extension
-        # Only apply this validation to non-select fields
-        track_part_index = None
-        for i, part in enumerate(parts[1:], 1):
-            if part.startswith("track_"):
-                track_part_index = i
-                break
+        # Parse all extensions
+        extensions = parse_field_extensions(parts)
         
-        # If track_ extension exists, it must be the last extension (only for non-select fields)
-        if track_part_index is not None and track_part_index != len(parts) - 1:
-            # Only skip if this is NOT a select field (select fields are handled above)
-            select_part = next((p for p in parts if p.startswith("select_")), None)
-            if not select_part:
-                # Skip processing this element if track_ is not the last extension
-                continue
+        # Get default value
+        default_value = get_default_value(extensions["field_type"], text_content, parts)
         
-        for part in parts[1:]:
-            if part.startswith("max_"):
-                try:
-                    max_value = int(part.replace("max_", ""))
-                except ValueError:
-                    pass
-            elif part.startswith("depends_"):
-                dependency = part.replace("depends_", "")
-            elif part == "tracking_id":
-                field_type = "gen"  # Tracking IDs are typically generated
-                # We'll mark this field as a tracking ID later
-            elif part.startswith("track_"):
-                # Extract the tracking role (e.g., "name" from "track_name")
-                # Only process if this is the last extension
-                if parts.index(part) == len(parts) - 1:
-                    tracking_role = part[6:]  # 6 is length of "track_"
-            elif part == "editable":
-                # Mark field as editable after purchase
-                editable = True
-            elif part.startswith("hide") or part in [
-                "text", "textarea", "checkbox", "date", "upload",
-                "number", "email", "tel", "gen", "password",
-                "range", "color", "file", "status", "sign"
-            ]:
-                field_type = "hide" if part.startswith("hide") else part
-
-        # Handle default values for different field types
-        if field_type == "checkbox":
-            default_value = False
-        elif field_type == "hide":
-            # For hide fields, determine default state based on part name
-            # hide_checked = visible by default, hide_unchecked = hidden by default
-            hide_part = next((p for p in parts if p.startswith("hide")), "hide")
-            
-            # Default is false (hidden) unless explicitly marked as checked
-            default_value = hide_part == "hide_checked"  # True if checked (visible)
-        else:
-            default_value = text_content
-
+        # Extract helper text from data-helper attribute
+        helper_text = element.attrib.get("data-helper", "")
         
-        field = {
-            "id": base_id,
-            "name": name,
-            "type": field_type,
-            "svgElementId": el_id,
-            "defaultValue": default_value,
-            "currentValue": default_value,
-            "isTrackingId": "tracking_id" in parts,
-            "editable": editable,
-        }
-        
-        # Add tracking role if present
-        if tracking_role:
-            field["trackingRole"] = tracking_role
-
-        if max_value is not None:
-            field["max"] = max_value
-        if dependency:
-            field["dependsOn"] = dependency
-        if url:
-            field["link"] = url
-
+        # Create field
+        field = create_regular_field(base_id, element_id, extensions, default_value, url, helper_text)
         fields_list.append(field)
     
     return fields_list

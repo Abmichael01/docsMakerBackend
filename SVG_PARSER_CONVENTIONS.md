@@ -47,6 +47,17 @@ This SVG parser converts SVG text elements into form fields based on their ID at
 <text id="approval_signature.sign">Approval Signature</text>
 ```
 
+### Date Field
+```xml
+<text id="fieldname.date">2025-01-10</text>
+```
+Basic date picker (YYYY-MM-DD format).
+**Examples:**
+```xml
+<text id="start_date.date">2025-01-10</text>
+<text id="expiry_date.date">2025-12-31</text>
+```
+
 ## Field Extensions
 
 ### Random Code Generation (.gen)
@@ -66,6 +77,44 @@ This SVG parser converts SVG text elements into form fields based on their ID at
 ```xml
 <text id="fieldname.text.max_50">Enter text (max 50 chars)</text>
 <text id="fieldname.textarea.max_200">Enter text (max 200 chars)</text>
+```
+
+### Date Format (.date_FORMAT)
+```xml
+<text id="fieldname.date_MM/DD/YYYY">01/10/2025</text>
+<text id="fieldname.date_MMM_DD">Jan 10</text>
+```
+Automatically formats dates based on specified format string.
+
+**Format Codes:**
+- `YYYY` - Full year (2025)
+- `YY` - Short year (25)
+- `MMMM` - Full month (January)
+- `MMM` - Short month (Jan)
+- `MM` - Month with zero (01)
+- `M` - Month no zero (1)
+- `DD` - Day with zero (01)
+- `D` - Day no zero (1)
+- `dddd` - Full weekday (Monday)
+- `ddd` - Short weekday (Mon)
+- `HH` - 24-hour with zero (01, 23)
+- `H` - 24-hour no zero (1, 23)
+- `hh` - 12-hour with zero (01, 12)
+- `h` - 12-hour no zero (1, 12)
+- `mm` - Minutes with zero (01, 59)
+- `m` - Minutes no zero (1, 59)
+- `ss` - Seconds with zero (01, 59)
+- `s` - Seconds no zero (1, 59)
+- `A` - AM/PM uppercase
+- `a` - am/pm lowercase
+
+**Examples:**
+```xml
+<text id="Date_of_Birth.date_MM/DD/YYYY">01/10/2025</text>
+<text id="Event_Date.date_MMMM_D">January 10</text>
+<text id="Created_At.date_MMM_DD,_YYYY">Jan 10, 2025</text>
+<text id="Timestamp.date_MM/DD/YYYY_HH:mm">01/10/2025 14:30</text>
+<text id="Delivery_Date.date_MMM_DD.editable.track_date">Jan 10</text>
 ```
 
 ### Dropdown Options (.select)
@@ -191,6 +240,7 @@ When `ANOTHER_ID` changes, this field copies the same value.
 | `.sign` | Signature field | `id="signature.sign"` |
 | `.gen.max_N` | Random code (N chars) | `id="code.gen.max_8"` |
 | `.max_N` | Character limit | `id="title.text.max_100"` |
+| `.date_FORMAT` | Date with format | `id="dob.date_MM/DD/YYYY"` |
 | `.select_OPTION` | Dropdown option | `id="country.select_usa"` |
 | `.depends_FIELD` | Sync with field | `id="confirm.text.depends_email"` |
 | `.tracking_id` | Mark as tracking ID | `id="Order.gen.max_8.tracking_id"` |
