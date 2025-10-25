@@ -15,11 +15,15 @@ class Tool(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True, help_text="Whether this tool is visible to users")
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
         verbose_name_plural = "Tools"
         ordering = ['name']
+        indexes = [
+            models.Index(fields=['is_active']),
+        ]
     
     def __str__(self):
         return self.name
@@ -40,6 +44,7 @@ class Template(models.Model):
     tool = models.ForeignKey(Tool, on_delete=models.SET_NULL, null=True, blank=True, related_name='templates')
     created_at = models.DateTimeField(auto_now_add=True)
     hot = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True, help_text="Whether this template is visible to users")
     
 
     def save(self, *args, **kwargs):
@@ -53,6 +58,7 @@ class Template(models.Model):
             models.Index(fields=['hot']),
             models.Index(fields=['created_at']),
             models.Index(fields=['tool']),
+            models.Index(fields=['is_active']),
         ]
 
     def get_purchased_count(self):

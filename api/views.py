@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.http import HttpResponse
+from django.db import models
 import cairosvg
 
 
@@ -38,6 +39,14 @@ class TemplateViewSet(viewsets.ModelViewSet):
         if tool_param:
             queryset = queryset.filter(tool__id=tool_param)
         
+        # Filter out inactive templates and templates from inactive tools for non-admin users
+        if self.request.method in SAFE_METHODS and not (self.request.user.is_authenticated and self.request.user.is_staff):
+            # Only show templates that are active and (either have no tool or belong to active tools)
+            queryset = queryset.filter(
+                models.Q(is_active=True) &
+                (models.Q(tool__is_active=True) | models.Q(tool__isnull=True))
+            )
+        
         return queryset
     
     
@@ -63,6 +72,14 @@ class ToolViewSet(viewsets.ModelViewSet):
     queryset = Tool.objects.all().order_by('name')
     serializer_class = ToolSerializer
     permission_classes = [IsAdminOrReadOnly]
+    
+    def get_queryset(self):
+        queryset = Tool.objects.all().order_by('name')
+        # Filter by is_active for non-admin users (read-only requests)
+        # Admins can see all tools
+        if self.request.method in SAFE_METHODS and not (self.request.user.is_authenticated and self.request.user.is_staff):
+            queryset = queryset.filter(is_active=True)
+        return queryset
     
     def get_authenticators(self):
         if self.request.method in SAFE_METHODS:
