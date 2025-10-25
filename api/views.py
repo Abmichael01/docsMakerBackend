@@ -22,6 +22,7 @@ class TemplateViewSet(viewsets.ModelViewSet):
         queryset = Template.objects.all().order_by('-created_at')
         hot_param = self.request.query_params.get("hot")
         tool_param = self.request.query_params.get("tool")
+        show_all = self.request.query_params.get("all", "false").lower() == "true"
 
         if hot_param is not None:
             # Convert string to boolean
@@ -33,13 +34,9 @@ class TemplateViewSet(viewsets.ModelViewSet):
         if tool_param:
             queryset = queryset.filter(tool__id=tool_param)
         
-        # Admins see all templates regardless of is_active status
-        # Non-admin users only see active templates from active tools
-        user = getattr(self.request, 'user', None)
-        is_admin = user and hasattr(user, 'is_authenticated') and user.is_authenticated and hasattr(user, 'is_staff') and user.is_staff
-        
-        if not is_admin:
-            # Filter out inactive templates and templates from inactive tools for non-admin users
+        # If show_all=true, return all templates (used by admin dashboard)
+        # Otherwise, only return active templates (used by normal user dashboard)
+        if not show_all:
             queryset = queryset.filter(is_active=True)
         
         return queryset
@@ -70,12 +67,11 @@ class ToolViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         queryset = Tool.objects.all().order_by('name')
-        # Admins see all tools regardless of is_active status
-        # Non-admin users only see active tools
-        user = getattr(self.request, 'user', None)
-        is_admin = user and hasattr(user, 'is_authenticated') and user.is_authenticated and hasattr(user, 'is_staff') and user.is_staff
+        show_all = self.request.query_params.get("all", "false").lower() == "true"
         
-        if not is_admin:
+        # If show_all=true, return all tools (used by admin dashboard)
+        # Otherwise, only return active tools (used by normal user dashboard)
+        if not show_all:
             queryset = queryset.filter(is_active=True)
         
         return queryset
