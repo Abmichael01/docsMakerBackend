@@ -17,12 +17,6 @@ class TemplateViewSet(viewsets.ModelViewSet):
     queryset = Template.objects.all().order_by('-created_at')
     serializer_class = TemplateSerializer
     permission_classes = [IsAdminOrReadOnly]
-    # authentication_classes = []
-    
-    def get_authenticators(self):
-        if self.request.method in SAFE_METHODS:
-            return []  # No authentication for GET/HEAD/OPTIONS
-        return super().get_authenticators()
     
     def get_queryset(self):
         queryset = Template.objects.all().order_by('-created_at')
@@ -39,13 +33,14 @@ class TemplateViewSet(viewsets.ModelViewSet):
         if tool_param:
             queryset = queryset.filter(tool__id=tool_param)
         
-        # Filter out inactive templates and templates from inactive tools for non-admin users
-        if self.request.method in SAFE_METHODS and not (self.request.user.is_authenticated and self.request.user.is_staff):
-            # Only show templates that are active and (either have no tool or belong to active tools)
-            queryset = queryset.filter(
-                models.Q(is_active=True) &
-                (models.Q(tool__is_active=True) | models.Q(tool__isnull=True))
-            )
+        # Admins see all templates regardless of is_active status
+        # Non-admin users only see active templates from active tools
+        user = getattr(self.request, 'user', None)
+        is_admin = user and hasattr(user, 'is_authenticated') and user.is_authenticated and hasattr(user, 'is_staff') and user.is_staff
+        
+        if not is_admin:
+            # Filter out inactive templates and templates from inactive tools for non-admin users
+            queryset = queryset.filter(is_active=True)
         
         return queryset
     
@@ -75,16 +70,15 @@ class ToolViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         queryset = Tool.objects.all().order_by('name')
-        # Filter by is_active for non-admin users (read-only requests)
-        # Admins can see all tools
-        if self.request.method in SAFE_METHODS and not (self.request.user.is_authenticated and self.request.user.is_staff):
+        # Admins see all tools regardless of is_active status
+        # Non-admin users only see active tools
+        user = getattr(self.request, 'user', None)
+        is_admin = user and hasattr(user, 'is_authenticated') and user.is_authenticated and hasattr(user, 'is_staff') and user.is_staff
+        
+        if not is_admin:
             queryset = queryset.filter(is_active=True)
+        
         return queryset
-    
-    def get_authenticators(self):
-        if self.request.method in SAFE_METHODS:
-            return []  # No authentication for GET/HEAD/OPTIONS
-        return super().get_authenticators()
 
 
 class PurchasedTemplateViewSet(viewsets.ModelViewSet):
