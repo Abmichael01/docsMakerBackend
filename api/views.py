@@ -3,7 +3,7 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .models import Template, PurchasedTemplate, Tool, Tutorial
 from .serializers import *
-from .permissions import *
+from .permissions import IsAdminOrReadOnly, IsOwnerOrAdmin, IsAdminOnly
 from rest_framework.permissions import SAFE_METHODS
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -253,4 +253,28 @@ class TutorialViewSet(viewsets.ModelViewSet):
         template_id = self.request.query_params.get('template')
         if template_id:
             queryset = queryset.filter(template_id=template_id)
+        return queryset
+
+
+class AdminTemplateViewSet(viewsets.ModelViewSet):
+    """Admin-only viewset for templates without watermarks"""
+    queryset = Template.objects.all().order_by('-created_at')
+    serializer_class = AdminTemplateSerializer
+    permission_classes = [IsAdminOnly]  # Only admin users can access
+    
+    def get_queryset(self):
+        queryset = Template.objects.all().order_by('-created_at')
+        hot_param = self.request.query_params.get("hot")
+        tool_param = self.request.query_params.get("tool")
+
+        if hot_param is not None:
+            # Convert string to boolean
+            if hot_param.lower() == "true":
+                queryset = queryset.filter(hot=True)
+            elif hot_param.lower() == "false":
+                queryset = queryset.filter(hot=False)
+        
+        if tool_param:
+            queryset = queryset.filter(tool__id=tool_param)
+        
         return queryset

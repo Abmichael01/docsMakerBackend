@@ -218,14 +218,48 @@ class TemplateSerializer(serializers.ModelSerializer):
             representation.pop('form_fields', None)
             # Banner will be included automatically since it's in fields
         else:
-            # For detail view: add watermark to SVG, keep banner (skip for admin users)
+            # For detail view: add watermark to SVG, keep banner
             if 'svg' in representation and representation['svg']:
-                # Check if user is admin
-                user = request.user if request else None
-                is_admin = user and user.is_authenticated and user.is_staff
-                
-                if not is_admin:
-                    representation['svg'] = WaterMark().add_watermark(representation['svg'])
+                representation['svg'] = WaterMark().add_watermark(representation['svg'])
+        
+        return representation
+
+
+class AdminTemplateSerializer(serializers.ModelSerializer):
+    """Admin-only serializer that never adds watermarks to templates"""
+    class Meta:
+        model = Template
+        fields = '__all__'
+        read_only_fields = ('id', 'created_at', 'updated_at')
+    
+    def to_representation(self, instance):
+        # Get the base representation
+        representation = super().to_representation(instance)
+        request = self.context.get('request')
+        view = self.context.get('view')
+        
+        
+        # Handle banner URL for production
+        if 'banner' in representation and representation['banner']:
+            if request and hasattr(request, 'build_absolute_uri'):
+                # Use request to build absolute URL
+                representation['banner'] = request.build_absolute_uri(representation['banner'])
+            else:
+                # Fallback: check if we're in production
+                from django.conf import settings
+                if getattr(settings, 'ENV', 'development') == 'production':
+                    # Use production domain
+                    representation['banner'] = f"https://api.sharptoolz.com{representation['banner']}"
+        
+        # For list view: remove SVG and form_fields, keep banner
+        if view and view.action == 'list':
+            representation.pop('svg', None)
+            representation.pop('form_fields', None)
+            # Banner will be included automatically since it's in fields
+        else:
+            # For detail view: keep SVG and form_fields WITHOUT watermarks
+            # No watermark processing - admin gets clean templates
+            pass
         
         return representation
 
@@ -280,9 +314,14 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
         if view and view.action == 'list':
             representation.pop('form_fields', None)
         
-        # Add watermark to SVG if it's a test template
+        # Add watermark to SVG if it's a test template (skip for admin users)
         if instance.test and 'svg' in representation:
-            representation['svg'] = WaterMark().add_watermark(representation['svg'])
+            # Check if user is admin
+            user = request.user if request else None
+            is_admin = user and user.is_authenticated and user.is_staff
+            
+            if not is_admin:
+                representation['svg'] = WaterMark().add_watermark(representation['svg'])
         
         return representation
     

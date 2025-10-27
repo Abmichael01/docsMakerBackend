@@ -43,9 +43,17 @@ class Template(models.Model):
     
 
     def save(self, *args, **kwargs):
+        print("🔍 TEMPLATE MODEL DEBUG - Template.save() called")
+        print(f"   Template ID: {self.id}")
+        print(f"   Template Name: {self.name}")
+        print(f"   Has SVG: {bool(self.svg)}")
         if self.svg:
+            print(f"   SVG length: {len(self.svg)}")
+            print("   🚀 Calling parse_svg_to_form_fields...")
             self.form_fields = parse_svg_to_form_fields(self.svg)
+            print(f"   ✅ Parsed {len(self.form_fields)} form fields")
         super().save(*args, **kwargs)
+        print("   ✅ Template saved successfully")
 
     class Meta:
         indexes = [
@@ -96,9 +104,16 @@ class PurchasedTemplate(models.Model):
                 self.name = f"Orphaned Template #{count}"
 
         if self.svg:
+            print("🔍 PURCHASED TEMPLATE MODEL DEBUG - PurchasedTemplate.save() called")
+            print(f"   PurchasedTemplate ID: {self.id}")
+            print(f"   Template Name: {self.name}")
+            print(f"   SVG length: {len(self.svg)}")
+            print("   🚀 Calling parse_svg_to_form_fields...")
             self.form_fields = parse_svg_to_form_fields(self.svg)
+            print(f"   ✅ Parsed {len(self.form_fields)} form fields")
 
         super().save(*args, **kwargs)
+        print("   ✅ PurchasedTemplate saved successfully")
 
     class Meta:
         indexes = [
