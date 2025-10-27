@@ -318,7 +318,7 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
         if instance.test and 'svg' in representation:
             # Check if user is admin
             user = request.user if request else None
-            is_admin = user and user.is_authenticated and user.is_staff
+            is_admin = user and user.is_authenticated and user.is_staff 
             
             if not is_admin:
                 representation['svg'] = WaterMark().add_watermark(representation['svg'])
