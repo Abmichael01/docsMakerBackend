@@ -287,12 +287,11 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Insufficient funds to remove watermark.")
 
             user.wallet.debit(charge_amount, description="Document purchase")
-            print("Charging ₦5 for watermark removal...")
 
-            # Remove watermark from SVG
-        svg = validated_data.get("svg")
-        if svg:
-            validated_data["svg"] = WaterMark().remove_watermark(svg)
+            # Remove watermark from SVG only when test changes from True to False
+            svg = validated_data.get("svg")
+            if svg:
+                validated_data["svg"] = WaterMark().remove_watermark(svg)
 
     def update(self, instance, validated_data):
         self.charge_if_test_false(instance, validated_data, is_update=True)
@@ -314,14 +313,9 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
         if view and view.action == 'list':
             representation.pop('form_fields', None)
         
-        # Add watermark to SVG if it's a test template (skip for admin users)
+        # Add watermark to SVG if it's a test template (always add for purchased templates)
         if instance.test and 'svg' in representation:
-            # Check if user is admin
-            user = request.user if request else None
-            is_admin = user and user.is_authenticated and user.is_staff 
-            
-            if not is_admin:
-                representation['svg'] = WaterMark().add_watermark(representation['svg'])
+            representation['svg'] = WaterMark().add_watermark(representation['svg'])
         
         return representation
     

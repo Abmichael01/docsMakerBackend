@@ -328,82 +328,44 @@ def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
     Returns:
         List of field dictionaries
     """
-    print("=" * 80)
-    print("🔍 SVG PARSER DEBUG - Starting parse_svg_to_form_fields")
-    print("=" * 80)
-    print(f"📏 SVG text length: {len(svg_text)}")
-    print(f"📄 SVG text preview: {svg_text[:200]}...")
-    print(f"📄 SVG text ends with: ...{svg_text[-100:]}")
-    
     try:
         root = ET.fromstring(svg_text)
-        print("✅ Successfully parsed SVG XML")
     except ET.ParseError as e:
-        print(f"❌ XML parsing error: {e}")
         logger.error(f"Failed to parse SVG: {e}")
         return []
     
     elements = root.findall(".//*[@id]")
-    print(f"🔍 Found {len(elements)} elements with IDs")
-    for i, elem in enumerate(elements):
-        print(f"  {i+1}. Tag: {elem.tag}, ID: {elem.get('id')}, Text: {elem.text or 'None'}")
-    
-    # Let's also check for elements without IDs to see what's in the SVG
-    all_elements = root.findall(".//*")
-    print(f"🔍 Total elements in SVG: {len(all_elements)}")
-    print("🔍 First 10 elements (with or without IDs):")
-    for i, elem in enumerate(all_elements[:10]):
-        elem_id = elem.get('id', 'NO_ID')
-        print(f"  {i+1}. Tag: {elem.tag}, ID: '{elem_id}', Text: '{elem.text or 'None'}'")
-    
-    # Check if there are any text elements that might need IDs
-    text_elements = root.findall(".//text")
-    print(f"🔍 Text elements found: {len(text_elements)}")
-    for i, elem in enumerate(text_elements[:5]):
-        print(f"  {i+1}. Text element: '{elem.text or 'None'}', ID: '{elem.get('id', 'NO_ID')}'")
     
     fields_list = []
     select_options_map: Dict[str, List[Dict]] = {}
     
     for i, element in enumerate(elements):
-        element_id = element.attrib.get("id", "")
-        print(f"\n🔍 Processing element {i+1}/{len(elements)}")
-        print(f"   ID: '{element_id}'")
-        print(f"   Tag: {element.tag}")
-        print(f"   Text: '{element.text or 'None'}'")
-        print(f"   Attributes: {dict(element.attrib)}")
+        original_element_id = element.attrib.get("id", "")
         
-        if not element_id:
-            print("   ⏭️  Skipping - no ID")
+        if not original_element_id:
             continue
         
         text_content = (element.text or "").strip()
         
         # Extract link URL before splitting (URLs contain dots)
-        element_id, url = extract_link_url(element_id)
-        print(f"   🔗 After link extraction - ID: '{element_id}', URL: '{url}'")
+        element_id, url = extract_link_url(original_element_id)
         
         # Split ID into parts
         parts = element_id.split(".")
         base_id = parts[0]
-        print(f"   📝 Parts: {parts}, Base ID: '{base_id}'")
         
         # ====================================================================
         # HANDLE SELECT FIELDS
         # ====================================================================
         if any(p.startswith("select_") for p in parts):
-            print("   📋 Processing SELECT field")
-            option = create_select_option(element_id, element, parts)
+            option = create_select_option(original_element_id, element, parts)
             modifiers = extract_select_modifiers(parts)
-            print(f"   📋 Option: {option}")
-            print(f"   📋 Modifiers: {modifiers}")
             
             # Create select field if first option
             if base_id not in select_options_map:
                 select_options_map[base_id] = []
-                field = create_select_field(base_id, element_id, modifiers["editable"])
+                field = create_select_field(base_id, original_element_id, modifiers["editable"])
                 fields_list.append(field)
-                print(f"   ✅ Created new select field: {field}")
             
             # Add option to map
             select_options_map[base_id].append(option)
@@ -413,7 +375,6 @@ def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
                 if field["id"] == base_id:
                     field["options"] = select_options_map[base_id]
                     update_select_field(field, option, is_element_visible(element), modifiers)
-                    print(f"   ✅ Updated select field: {field}")
                     break
             
             continue  # Skip regular field processing
@@ -424,33 +385,20 @@ def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
         
         # Validate track_ position
         if not validate_track_position(parts):
-            print(f"   ⚠️  Skipping - track_ extension must be last")
             logger.warning(f"Skipping element {element_id}: track_ extension must be last")
             continue
         
         # Parse all extensions
         extensions = parse_field_extensions(parts)
-        print(f"   🔧 Extensions: {extensions}")
         
         # Get default value
         default_value = get_default_value(extensions["field_type"], text_content, parts)
-        print(f"   💾 Default value: '{default_value}'")
         
         # Extract helper text from data-helper attribute
         helper_text = element.attrib.get("data-helper", "")
-        print(f"   💡 Helper text: '{helper_text}'")
         
         # Create field
-        field = create_regular_field(base_id, element_id, extensions, default_value, url, helper_text)
-        print(f"   ✅ Created regular field: {field}")
+        field = create_regular_field(base_id, original_element_id, extensions, default_value, url, helper_text)
         fields_list.append(field)
-    
-    print("\n" + "=" * 80)
-    print("📊 SVG PARSER DEBUG - Final Results")
-    print("=" * 80)
-    print(f"📈 Total fields created: {len(fields_list)}")
-    for i, field in enumerate(fields_list):
-        print(f"  {i+1}. {field}")
-    print("=" * 80)
     
     return fields_list
