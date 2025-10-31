@@ -214,10 +214,10 @@ def parse_field_extensions(parts: List[str]) -> Dict[str, Any]:
                 result["tracking_role"] = get_extension_value(part, "track_")
         
         elif part.startswith("date_"):
-            # Extract date format (e.g., "MM/DD/YYYY" from "date_MM/DD/YYYY")
-            # Replace underscores with slashes to support "date_MM_DD_YYYY" or "date_MM/DD/YYYY"
+            # Extract date format (e.g., "MM/DD/YYYY" from "date_MM/DD/YYYY" or "MMM_DD" from "date_MMM_DD")
+            # Keep underscores as-is; frontend will convert them to spaces
             date_format = get_extension_value(part, "date_")
-            result["date_format"] = date_format.replace("_", "/")
+            result["date_format"] = date_format
             # If date_FORMAT is specified, field type should be "date"
             if result["field_type"] == parts[0]:  # Only set if not already set by another extension
                 result["field_type"] = "date"
