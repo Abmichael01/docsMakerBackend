@@ -34,6 +34,41 @@ BASIC FIELD TYPES
    ID: City.depends_Country
    Meaning: This field copies the same content as the "Country" field - when Country changes, this field shows the same content
 
+6. DATE FIELD
+   ID: Start_Date.date
+   Meaning: Creates a basic date picker field (YYYY-MM-DD format)
+   
+   ID: Event_Date.date_MM/DD/YYYY
+   Meaning: Creates a date picker with custom format
+   
+   ID: Schedule.date_MM/DD/YYYY_hh:mm_A
+   Meaning: Creates a date/time picker with 12-hour format and AM/PM
+   
+   Date format codes:
+   - YYYY = Full year (2025)
+   - YY = Short year (25)
+   - MMMM = Full month (January)
+   - MMM = Short month (Jan)
+   - MM = Month with zero (01)
+   - M = Month no zero (1)
+   - DD = Day with zero (01)
+   - D = Day no zero (1)
+   - dddd = Full weekday (Monday)
+   - ddd = Short weekday (Mon)
+   - HH = 24-hour with zero (01, 23)
+   - H = 24-hour no zero (1, 23)
+   - hh = 12-hour with zero (01, 12)
+   - h = 12-hour no zero (1, 12)
+   - mm = Minutes with zero (01, 59)
+   - m = Minutes no zero (1, 59)
+   - ss = Seconds with zero (01, 59)
+   - s = Seconds no zero (1, 59)
+   - A = AM/PM uppercase
+   - a = am/pm lowercase
+   
+   IMPORTANT: Use underscores (_) to represent spaces in format string
+   Example: date_MMM_DD displays as "Jan 10" (underscore becomes space)
+
 SPECIAL TRACKING FIELDS
 =======================
 
@@ -114,6 +149,21 @@ Order_Number.gen.max_12.tracking_id.link_https://track.example.com
 
 City.depends_Country
 - Creates: City field that copies the same content as Country field
+
+Start_Date.date
+- Creates: Basic date picker field (YYYY-MM-DD format)
+
+Event_Date.date_MM/DD/YYYY
+- Creates: Date picker displaying dates in US format (01/10/2025)
+
+Due_Date.date_MMM_DD
+- Creates: Date picker displaying dates in short format (Jan 10)
+
+Timestamp.date_MM/DD/YYYY_HH:mm:ss
+- Creates: Date/time picker with 24-hour format (01/10/2025 14:30:45)
+
+Schedule.date_MM/DD/YYYY_hh:mm_A
+- Creates: Date/time picker with 12-hour format and AM/PM (01/10/2025 02:30 PM)
 
 Customer_Name.text.track_name
 - Creates: Text field for customer name, mapped to "name" role for tracking sites

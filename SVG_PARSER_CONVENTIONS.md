@@ -84,7 +84,9 @@ Basic date picker (YYYY-MM-DD format).
 <text id="fieldname.date_MM/DD/YYYY">01/10/2025</text>
 <text id="fieldname.date_MMM_DD">Jan 10</text>
 ```
-Automatically formats dates based on specified format string.
+Automatically formats dates based on specified format string. Provides dropdown selectors for all components (year, month, day, hour, minute, second, AM/PM).
+
+**Important:** Use underscores `_` to represent spaces in your format string. They will be automatically converted to spaces in the final output.
 
 **Format Codes:**
 - `YYYY` - Full year (2025)
