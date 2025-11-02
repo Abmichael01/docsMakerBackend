@@ -7,6 +7,7 @@ from django.contrib.postgres.fields import JSONField  # Use `models.JSONField` i
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
 from .svg_parser import parse_svg_to_form_fields
+from .svg_optimizer import minify_svg
 
 User = get_user_model()
 
@@ -44,6 +45,9 @@ class Template(models.Model):
 
     def save(self, *args, **kwargs):
         if self.svg:
+            # Minify SVG to reduce storage size
+            self.svg = minify_svg(self.svg)
+            # Parse SVG to generate form fields
             self.form_fields = parse_svg_to_form_fields(self.svg)
         super().save(*args, **kwargs)
 
@@ -96,6 +100,9 @@ class PurchasedTemplate(models.Model):
                 self.name = f"Orphaned Template #{count}"
 
         if self.svg:
+            # Minify SVG to reduce storage size
+            self.svg = minify_svg(self.svg)
+            # Parse SVG to generate form fields
             self.form_fields = parse_svg_to_form_fields(self.svg)
 
         super().save(*args, **kwargs)

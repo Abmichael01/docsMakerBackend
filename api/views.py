@@ -1,6 +1,7 @@
 # templates/views.py
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.pagination import PageNumberPagination
 from .models import Template, PurchasedTemplate, Tool, Tutorial
 from .serializers import *
 from .permissions import IsAdminOrReadOnly, IsOwnerOrAdmin, IsAdminOnly
@@ -9,13 +10,23 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.http import HttpResponse
+from .response_optimizer import add_list_response_headers
 import cairosvg
+
+
+class TemplatePagination(PageNumberPagination):
+    """Pagination for Template list views"""
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 
 class TemplateViewSet(viewsets.ModelViewSet):
     queryset = Template.objects.all().order_by('-created_at')
     serializer_class = TemplateSerializer
     permission_classes = [IsAdminOrReadOnly]
+    # No pagination for user-facing template listings
+    pagination_class = None
     # authentication_classes = []
     
     def get_authenticators(self):
@@ -24,7 +35,7 @@ class TemplateViewSet(viewsets.ModelViewSet):
         return super().get_authenticators()
     
     def get_queryset(self):
-        queryset = Template.objects.all().order_by('-created_at')
+        queryset = Template.objects.select_related('tool', 'tutorial')
         hot_param = self.request.query_params.get("hot")
         tool_param = self.request.query_params.get("tool")
 
@@ -38,8 +49,19 @@ class TemplateViewSet(viewsets.ModelViewSet):
         if tool_param:
             queryset = queryset.filter(tool__id=tool_param)
         
+        # For list views, defer large text fields to improve performance
+        if self.action == 'list':
+            queryset = queryset.defer('svg', 'form_fields')
+        
+        queryset = queryset.order_by('-created_at')
         return queryset
     
+    def list(self, request, *args, **kwargs):
+        """Override list to add cache headers"""
+        response = super().list(request, *args, **kwargs)
+        # Add cache headers for list responses
+        add_list_response_headers(response, request, max_age=60)
+        return response
     
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -70,15 +92,41 @@ class ToolViewSet(viewsets.ModelViewSet):
         return super().get_authenticators()
 
 
+class PurchasedTemplatePagination(PageNumberPagination):
+    """Pagination for PurchasedTemplate list views"""
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class PurchasedTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = PurchasedTemplateSerializer
     permission_classes = [IsOwnerOrAdmin]
+    # No pagination for user-facing purchased template listings
+    pagination_class = None
 
     def get_queryset(self): # type: ignore
         user = self.request.user
+        queryset = PurchasedTemplate.objects.select_related('buyer', 'template')
+        
         if user.is_staff:
-            return PurchasedTemplate.objects.all().order_by('-created_at')
-        return PurchasedTemplate.objects.filter(buyer=user).order_by('-created_at')
+            queryset = queryset.all()
+        else:
+            queryset = queryset.filter(buyer=user)
+        
+        # For list views, defer large text fields to improve performance
+        if self.action == 'list':
+            queryset = queryset.defer('svg', 'form_fields')
+        
+        queryset = queryset.order_by('-created_at')
+        return queryset
+    
+    def list(self, request, *args, **kwargs):
+        """Override list to add cache headers"""
+        response = super().list(request, *args, **kwargs)
+        # Add cache headers for list responses
+        add_list_response_headers(response, request, max_age=60)
+        return response
 
     def perform_create(self, serializer):
         serializer.save(buyer=self.request.user)
@@ -261,9 +309,11 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
     queryset = Template.objects.all().order_by('-created_at')
     serializer_class = AdminTemplateSerializer
     permission_classes = [IsAdminOnly]  # Only admin users can access
+    # No pagination for admin template listings (matching user-facing views)
+    pagination_class = None
     
     def get_queryset(self):
-        queryset = Template.objects.all().order_by('-created_at')
+        queryset = Template.objects.select_related('tool', 'tutorial')
         hot_param = self.request.query_params.get("hot")
         tool_param = self.request.query_params.get("tool")
 
@@ -277,4 +327,9 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
         if tool_param:
             queryset = queryset.filter(tool__id=tool_param)
         
+        # For list views, defer large text fields to improve performance
+        if self.action == 'list':
+            queryset = queryset.defer('svg', 'form_fields')
+        
+        queryset = queryset.order_by('-created_at')
         return queryset
