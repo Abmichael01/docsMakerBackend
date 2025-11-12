@@ -41,6 +41,7 @@ class Template(models.Model):
     tool = models.ForeignKey(Tool, on_delete=models.SET_NULL, null=True, blank=True, related_name='templates')
     created_at = models.DateTimeField(auto_now_add=True)
     hot = models.BooleanField(default=False)
+    keywords = models.JSONField(default=list, blank=True)
     
 
     def save(self, *args, **kwargs):
@@ -48,6 +49,13 @@ class Template(models.Model):
             # Parse SVG to generate form fields
             # SVG is kept as-is (no minification) to preserve Photoshop-exported designs
             self.form_fields = parse_svg_to_form_fields(self.svg)
+
+        # Ensure keywords is always a list
+        if not isinstance(self.keywords, list):
+            if self.keywords in (None, '', []):
+                self.keywords = []
+            else:
+                self.keywords = [str(self.keywords)]
         super().save(*args, **kwargs)
 
     class Meta:
@@ -86,6 +94,7 @@ class PurchasedTemplate(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    keywords = models.JSONField(default=list, blank=True)
 
     def save(self, *args, **kwargs):
         # Auto-generate name if not provided
@@ -102,6 +111,15 @@ class PurchasedTemplate(models.Model):
             # Parse SVG to generate form fields
             # SVG is kept as-is (no minification) to preserve Photoshop-exported designs
             self.form_fields = parse_svg_to_form_fields(self.svg)
+
+        # Inherit keywords from template if not provided
+        if not self.keywords and self.template and self.template.keywords:
+            self.keywords = list(self.template.keywords)
+        elif not isinstance(self.keywords, list):
+            if self.keywords in (None, '', []):
+                self.keywords = []
+            else:
+                self.keywords = [str(self.keywords)]
 
         super().save(*args, **kwargs)
 

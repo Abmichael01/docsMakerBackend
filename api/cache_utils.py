@@ -52,3 +52,4 @@ def invalidate_template_cache():
     # For Django cache, we need to track keys manually or use cache versioning
     pass
 
+

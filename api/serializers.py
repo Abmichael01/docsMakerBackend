@@ -301,6 +301,12 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
         # Create a temporary instance to simulate access to `buyer` and `test`
         temp_instance = self.Meta.model(**validated_data)
         self.charge_if_test_false(temp_instance, validated_data, is_update=False)
+        
+        # Copy keywords from template if not provided
+        template = validated_data.get('template')
+        if template and 'keywords' not in validated_data:
+            validated_data['keywords'] = list(template.keywords) if template.keywords else []
+        
         return super().create(validated_data)
 
     def to_representation(self, instance):

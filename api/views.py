@@ -150,6 +150,8 @@ class DownloadDoc(APIView):
     def post(self, request):
         svg_content = request.data.get("svg")
         output_type = request.data.get("type", "pdf").lower()
+        purchased_template_id = request.data.get("purchased_template_id")
+        template_name = request.data.get("template_name", "")
 
         if not svg_content or "</svg>" not in svg_content:
             return Response({"error": "Invalid or missing SVG content"}, status=status.HTTP_400_BAD_REQUEST)
@@ -158,15 +160,39 @@ class DownloadDoc(APIView):
             return Response({"error": "Unsupported type. Only 'pdf' and 'png' are allowed."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
+            # Sanitize template name for filename
+            import re
+            safe_name = re.sub(r'[^\w\s-]', '', template_name).strip() if template_name else ""
+            safe_name = re.sub(r'[-\s]+', '-', safe_name) if safe_name else ""
+            
+            # Check if split-download is enabled
+            should_split = False
+            if purchased_template_id:
+                try:
+                    purchased_template = PurchasedTemplate.objects.get(id=purchased_template_id, buyer=request.user)
+                    if purchased_template.keywords and "split-download" in purchased_template.keywords:
+                        should_split = True
+                    # Use template name from purchased template if not provided
+                    if not safe_name and purchased_template.name:
+                        safe_name = re.sub(r'[^\w\s-]', '', purchased_template.name).strip()
+                        safe_name = re.sub(r'[-\s]+', '-', safe_name) if safe_name else ""
+                except PurchasedTemplate.DoesNotExist:
+                    pass  # Continue with normal download if template not found
+
             if output_type == "pdf":
                 output = cairosvg.svg2pdf(bytestring=svg_content.encode("utf-8"))
                 content_type = "application/pdf"
-                filename = "output.pdf"
+                filename = f"{safe_name}.pdf" if safe_name else "output.pdf"
             else:  # PNG
                 output = cairosvg.svg2png(bytestring=svg_content.encode("utf-8"))
                 content_type = "image/png"
-                filename = "output.png"
+                filename = f"{safe_name}.png" if safe_name else "output.png"
 
+            # Handle split download
+            if should_split:
+                return self._handle_split_download(output, output_type, request.user, safe_name)
+            
+            # Normal download
             user = request.user
             user.downloads += 1
             user.save()
@@ -177,6 +203,90 @@ class DownloadDoc(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _handle_split_download(self, output, output_type, user, safe_name=""):
+        """Split the output into two equal halves and return as zip"""
+        import io
+        import zipfile
+        from PIL import Image
+        
+        try:
+            zip_filename = f"{safe_name}_split.zip" if safe_name else "document_split.zip"
+            
+            if output_type == "png":
+                # Split PNG image
+                image = Image.open(io.BytesIO(output))
+                width, height = image.size
+                
+                # Split horizontally (left and right halves)
+                left_half = image.crop((0, 0, width // 2, height))
+                right_half = image.crop((width // 2, 0, width, height))
+                
+                # Create zip with both halves
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    # Save left half (front)
+                    left_buffer = io.BytesIO()
+                    left_half.save(left_buffer, format='PNG')
+                    zip_file.writestr('front.png', left_buffer.getvalue())
+                    
+                    # Save right half (back)
+                    right_buffer = io.BytesIO()
+                    right_half.save(right_buffer, format='PNG')
+                    zip_file.writestr('back.png', right_buffer.getvalue())
+                
+                user.downloads += 1
+                user.save()
+                
+                response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
+                response["Content-Disposition"] = f'attachment; filename="{zip_filename}"'
+                return response
+                
+            else:  # PDF
+                # Convert PDF to image first, then split
+                try:
+                    from pdf2image import convert_from_bytes
+                except ImportError:
+                    return Response(
+                        {"error": "PDF splitting requires pdf2image. Install with: pip install pdf2image"},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+                
+                # Convert PDF to image
+                images = convert_from_bytes(output)
+                if not images:
+                    return Response({"error": "Failed to convert PDF to image"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+                # Take first page (assuming single page PDF)
+                image = images[0]
+                width, height = image.size
+                
+                # Split horizontally
+                left_half = image.crop((0, 0, width // 2, height))
+                right_half = image.crop((width // 2, 0, width, height))
+                
+                # Create zip with both halves as PNG
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    # Save left half (front)
+                    left_buffer = io.BytesIO()
+                    left_half.save(left_buffer, format='PNG')
+                    zip_file.writestr('front.png', left_buffer.getvalue())
+                    
+                    # Save right half (back)
+                    right_buffer = io.BytesIO()
+                    right_half.save(right_buffer, format='PNG')
+                    zip_file.writestr('back.png', right_buffer.getvalue())
+                
+                user.downloads += 1
+                user.save()
+                
+                response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
+                response["Content-Disposition"] = f'attachment; filename="{zip_filename}"'
+                return response
+                
+        except Exception as e:
+            return Response({"error": f"Failed to split document: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class RemoveBackgroundView(APIView):
