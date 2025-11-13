@@ -187,6 +187,8 @@ def parse_field_extensions(parts: List[str]) -> Dict[str, Any]:
         "generation_rule": None,
         "editable": False,
         "is_tracking_id": False,
+        "requires_grayscale": False,
+        "grayscale_intensity": None,
     }
     
     for part in parts[1:]:
@@ -237,11 +239,32 @@ def parse_field_extensions(parts: List[str]) -> Dict[str, Any]:
         
         elif part == "editable":
             result["editable"] = True
-        
+
+        elif part == "grayscale":
+            result["requires_grayscale"] = True
+            result["grayscale_intensity"] = 100
+
+        elif part.startswith("grayscale_"):
+            result["requires_grayscale"] = True
+            intensity_raw = get_extension_value(part, "grayscale_")
+            try:
+                intensity_value = int(float(intensity_raw))
+                result["grayscale_intensity"] = max(0, min(100, intensity_value))
+            except ValueError:
+                logger.warning(
+                    "Invalid grayscale intensity '%s' on element '%s'; defaulting to 100",
+                    intensity_raw,
+                    parts[0],
+                )
+                result["grayscale_intensity"] = 100
+
         # Handle field type extensions
         elif part.startswith("hide") or part in FIELD_TYPES:
             result["field_type"] = "hide" if part.startswith("hide") else part
     
+    if result["requires_grayscale"] and result["grayscale_intensity"] is None:
+        result["grayscale_intensity"] = 100
+
     return result
 
 
@@ -300,6 +323,10 @@ def create_regular_field(base_id: str, element_id: str, extensions: Dict[str, An
     
     if helper_text:
         field["helperText"] = helper_text
+
+    if extensions.get("requires_grayscale"):
+        field["requiresGrayscale"] = True
+        field["grayscaleIntensity"] = extensions.get("grayscale_intensity", 100)
     
     return field
 
@@ -321,6 +348,7 @@ def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
     - .editable (editable after purchase)
     - .tracking_id (mark as tracking ID)
     - .link_URL (external link)
+    - .grayscale or .grayscale_80 (force grayscale rendering with optional intensity)
     
     Args:
         svg_text: SVG content as string
@@ -390,6 +418,13 @@ def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
         
         # Parse all extensions
         extensions = parse_field_extensions(parts)
+
+        if extensions.get("requires_grayscale") and extensions["field_type"] not in {"upload", "file"}:
+            logger.warning(
+                "Grayscale extension on non-upload field '%s' (element ID: %s)",
+                base_id,
+                original_element_id,
+            )
         
         # Get default value
         default_value = get_default_value(extensions["field_type"], text_content, parts)
