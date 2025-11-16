@@ -73,11 +73,11 @@ SPECIAL TRACKING FIELDS
 =======================
 
 TRACKING ID FIELD
-ID: Order_Number.gen.max_12.tracking_id.link_https://example.com/track
+ID: Order_Number.gen.max_12.tracking_id.link_https://example.com
 Meaning: Creates a tracking field that:
 - Generates random 12-character tracking codes
 - Marks it as the main tracking ID with .tracking_id
-- Includes a link to https://example.com/track for tracking
+- Includes a link to https://example.com for tracking
 
 TRACKING ROLE FIELDS (.track_)
 ⚠️ IMPORTANT: .track_ extensions MUST ALWAYS be the LAST extension in the ID chain
@@ -120,7 +120,7 @@ IMPORTANT RULES
    Example: Reference_Code.gen.max_8
 
 5. For links, use .link_URL where URL is the full website address
-   Example: Order_Number.gen.max_12.tracking_id.link_https://example.com/track
+   Example: Order_Number.gen.max_12.tracking_id.link_https://example.com
 
 6. ⚠️ .track_ extensions MUST ALWAYS be the LAST extension
    Example: Customer_Name.text.track_name
