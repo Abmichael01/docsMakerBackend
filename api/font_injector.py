@@ -63,7 +63,7 @@ def _extract_font_aliases(svg_content: str) -> dict:
         for match in font_family_css_pattern.findall(style_attr):
             add_alias(match)
     
-    # Extract from font-family XML attributes
+    # Extract from font-family XML attributes 
     for match in font_family_attr_pattern.findall(svg_content):
         add_alias(match)
     
