@@ -209,24 +209,58 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
             # Extract existing font-families from @font-face declarations ONLY (not from regular CSS)
             # This prevents skipping fonts that are used in CSS but don't have @font-face yet
             existing_families = set()
+            url_based_families = set()  # Track which fonts use URLs (need replacement when embed_base64=True)
+            
             # Match @font-face blocks first, then extract font-family from within them
             # Use balanced brace matching to handle nested braces in url() values
             font_face_block_pattern = re.compile(r'@font-face\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', re.IGNORECASE | re.DOTALL)
             font_family_in_fontface_pattern = re.compile(r'font-family\s*:\s*["\']([^"\']+)["\']', re.IGNORECASE)
+            url_src_pattern = re.compile(r'src\s*:\s*url\s*\(\s*["\']?(https?://[^)"\'\s]+)', re.IGNORECASE)
             
             for font_face_block in font_face_block_pattern.findall(existing_style):
                 for match in font_family_in_fontface_pattern.findall(font_face_block):
-                    existing_families.add(_normalize_font_key(match))
+                    family_key = _normalize_font_key(match)
+                    existing_families.add(family_key)
+                    
+                    # Check if this @font-face uses a URL (not base64)
+                    if url_src_pattern.search(font_face_block):
+                        url_based_families.add(family_key)
             
-            # Only add font-faces that don't already exist (by normalized name)
-            missing_font_faces = []
-            for family_key, (css_family, font_face) in unique_font_map.items():
-                # Check if this font-family already has a @font-face declaration (not just CSS usage)
-                if family_key not in existing_families:
-                    missing_font_faces.append(font_face)
+            # When embed_base64=True, replace URL-based @font-face declarations
+            # Otherwise, only add font-faces that don't already exist
+            if embed_base64 and url_based_families:
+                # Remove all @font-face blocks that use URLs and need to be replaced
+                modified_style = existing_style
+                for font_face_block in font_face_block_pattern.findall(existing_style):
+                    family_matches = font_family_in_fontface_pattern.findall(font_face_block)
+                    if family_matches:
+                        family_key = _normalize_font_key(family_matches[0])
+                        if family_key in url_based_families and family_key in unique_font_map:
+                            # This URL-based font will be replaced with base64
+                            modified_style = modified_style.replace(font_face_block, '', 1)
+                
+                # Now add all our fonts (new ones + replacements for removed URL-based ones)
+                missing_font_faces = []
+                for family_key, (css_family, font_face) in unique_font_map.items():
+                    if family_key not in existing_families or family_key in url_based_families:
+                        missing_font_faces.append(font_face)
+                
+                if missing_font_faces:
+                    new_style_content = modified_style + '\n' + '\n'.join(missing_font_faces)
+                else:
+                    new_style_content = modified_style
+            else:
+                # Original behavior: only add font-faces that don't already exist
+                missing_font_faces = []
+                for family_key, (css_family, font_face) in unique_font_map.items():
+                    # Check if this font-family already has a @font-face declaration (not just CSS usage)
+                    if family_key not in existing_families:
+                        missing_font_faces.append(font_face)
+                
+                new_style_content = existing_style + ('\n' + '\n'.join(missing_font_faces) if missing_font_faces else '')
             
-            if missing_font_faces:
-                new_style_content = existing_style + '\n' + '\n'.join(missing_font_faces)
+            # Update the style block if content changed
+            if new_style_content != existing_style:
                 cdata_open = cdata_open or ''
                 cdata_close = cdata_close or ''
                 new_style_block = f'{style_open}{cdata_open}{new_style_content}{cdata_close}{style_close}'
