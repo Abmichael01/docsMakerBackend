@@ -3,7 +3,7 @@ from rest_framework import serializers
 from django.db.models import Sum, Count
 from django.contrib.auth import get_user_model
 from api.watermark import WaterMark
-from .models import Template, PurchasedTemplate, Tool, Tutorial
+from .models import Template, PurchasedTemplate, Tool, Tutorial, Font
 from wallet.models import Wallet
 from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
@@ -17,6 +17,22 @@ class ToolSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tool
         fields = '__all__'
+
+
+class FontSerializer(serializers.ModelSerializer):
+    font_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Font
+        fields = ['id', 'name', 'font_file', 'font_url', 'created_at']
+        read_only_fields = ['id', 'created_at']
+    
+    def get_font_url(self, obj):
+        """Return absolute URL for font file"""
+        request = self.context.get('request')
+        if obj.font_file and request:
+            return request.build_absolute_uri(obj.font_file.url)
+        return obj.font_file.url if obj.font_file else None
 
 
 class AdminOverviewSerializer(serializers.Serializer):
@@ -148,6 +164,14 @@ class TutorialSerializer(serializers.ModelSerializer):
 
 class TemplateSerializer(serializers.ModelSerializer):
     tutorial = TutorialSerializer(read_only=True)
+    fonts = FontSerializer(many=True, read_only=True)
+    font_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Font.objects.all(),
+        source='fonts',
+        write_only=True,
+        required=False
+    )
     
     class Meta:
         model = Template
@@ -158,9 +182,13 @@ class TemplateSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         tutorial_url = request.data.get('tutorial_url') if request else None
         tutorial_title = request.data.get('tutorial_title') if request else None
+        fonts_data = validated_data.pop('fonts', None)
         
         # Create the template
         template = Template.objects.create(**validated_data)
+        
+        if fonts_data:
+            template.fonts.set(fonts_data)
         
         # Create tutorial if URL is provided
         if tutorial_url:
@@ -177,9 +205,13 @@ class TemplateSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         tutorial_url = request.data.get('tutorial_url') if request else None
         tutorial_title = request.data.get('tutorial_title') if request else None
+        fonts_data = validated_data.pop('fonts', None)
         
         # Update the template
         instance = super().update(instance, validated_data)
+        
+        if fonts_data is not None:
+            instance.fonts.set(fonts_data)
         
         # Update or create tutorial
         if tutorial_url is not None:  # Allow clearing tutorial by sending empty string
@@ -227,10 +259,33 @@ class TemplateSerializer(serializers.ModelSerializer):
 
 class AdminTemplateSerializer(serializers.ModelSerializer):
     """Admin-only serializer that never adds watermarks to templates"""
+    fonts = FontSerializer(many=True, read_only=True)
+    font_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Font.objects.all(),
+        source='fonts',
+        write_only=True,
+        required=False
+    )
+    
     class Meta:
         model = Template
         fields = '__all__'
         read_only_fields = ('id', 'created_at', 'updated_at')
+    
+    def create(self, validated_data):
+        fonts_data = validated_data.pop('fonts', None)
+        template = Template.objects.create(**validated_data)
+        if fonts_data:
+            template.fonts.set(fonts_data)
+        return template
+    
+    def update(self, instance, validated_data):
+        fonts_data = validated_data.pop('fonts', None)
+        instance = super().update(instance, validated_data)
+        if fonts_data is not None:
+            instance.fonts.set(fonts_data)
+        return instance
     
     def to_representation(self, instance):
         # Get the base representation
@@ -266,6 +321,9 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
 
 
 class PurchasedTemplateSerializer(serializers.ModelSerializer):
+    fonts = FontSerializer(source='template.fonts', many=True, read_only=True)
+    banner = serializers.SerializerMethodField()
+    
     class Meta:
         model = PurchasedTemplate
         fields = '__all__'
@@ -315,15 +373,26 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         view = self.context.get('view')
         
-        # Remove form_fields on list view
+        # Remove heavy fields on list view and provide banner preview
         if view and view.action == 'list':
             representation.pop('form_fields', None)
-        
-        # Add watermark to SVG if it's a test template (always add for purchased templates)
-        if instance.test and 'svg' in representation:
-            representation['svg'] = WaterMark().add_watermark(representation['svg'])
+            representation.pop('svg', None)
+        else:
+            # Add watermark to SVG if it's a test template (always add for purchased templates)
+            if instance.test and 'svg' in representation:
+                representation['svg'] = WaterMark().add_watermark(representation['svg'])
         
         return representation
+    
+    def get_banner(self, obj):
+        template = obj.template
+        if not template or not template.banner:
+            return None
+        request = self.context.get('request')
+        banner_url = template.banner.url
+        if request and hasattr(request, 'build_absolute_uri'):
+            return request.build_absolute_uri(banner_url)
+        return banner_url
     
 
     

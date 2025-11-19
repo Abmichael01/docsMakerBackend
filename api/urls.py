@@ -9,6 +9,7 @@ router.register(r'templates', TemplateViewSet, basename='template')
 router.register(r'admin/templates', AdminTemplateViewSet, basename='admin-template')
 router.register(r'purchased-templates', PurchasedTemplateViewSet, basename='purchased-template')
 router.register(r'tutorials', TutorialViewSet, basename='tutorial')
+router.register(r'fonts', FontViewSet, basename='font')
 
 urlpatterns = [
     path("track/<str:tracking_id>/", PublicTemplateTrackingView.as_view(), name="track-template"),

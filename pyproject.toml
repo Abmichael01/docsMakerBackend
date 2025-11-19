@@ -31,6 +31,8 @@ dependencies = [
     "removebg (>=0.4,<0.5)",
     "opencv-python (>=4.12.0.88,<5.0.0.0)",
     "pdf2image (>=1.17.0,<2.0.0)",
+    "playwright (>=1.56.0,<2.0.0)",
+    "weasyprint (>=66.0,<67.0)",
 ]
 
 

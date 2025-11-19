@@ -2,7 +2,7 @@
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.pagination import PageNumberPagination
-from .models import Template, PurchasedTemplate, Tool, Tutorial
+from .models import Template, PurchasedTemplate, Tool, Tutorial, Font
 from .serializers import *
 from .permissions import IsAdminOrReadOnly, IsOwnerOrAdmin, IsAdminOnly
 from rest_framework.permissions import SAFE_METHODS
@@ -11,7 +11,24 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.http import HttpResponse
 from .response_optimizer import add_list_response_headers
+from .font_injector import inject_fonts_into_svg
 import cairosvg
+
+# Try to import Playwright renderer (optional - falls back to CairoSVG if not available)
+try:
+    from .playwright_renderer import render_svg_with_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+    render_svg_with_playwright = None
+
+# Try to import WeasyPrint renderer (faster alternative for PDF with fonts)
+try:
+    from .weasyprint_renderer import render_svg_with_weasyprint
+    WEASYPRINT_AVAILABLE = True
+except ImportError:
+    WEASYPRINT_AVAILABLE = False
+    render_svg_with_weasyprint = None
 
 
 class TemplatePagination(PageNumberPagination):
@@ -92,6 +109,17 @@ class ToolViewSet(viewsets.ModelViewSet):
         return super().get_authenticators()
 
 
+class FontViewSet(viewsets.ModelViewSet):
+    queryset = Font.objects.all().order_by('name')
+    serializer_class = FontSerializer
+    permission_classes = [IsAdminOrReadOnly]
+    
+    def get_authenticators(self):
+        if self.request.method in SAFE_METHODS:
+            return []  # No authentication for GET/HEAD/OPTIONS
+        return super().get_authenticators()
+
+
 class PurchasedTemplatePagination(PageNumberPagination):
     """Pagination for PurchasedTemplate list views"""
     page_size = 20
@@ -148,18 +176,30 @@ class PublicTemplateTrackingView(APIView):
 
 class DownloadDoc(APIView):
     def post(self, request):
+        print("=" * 60)
+        print("=== DownloadDoc POST request started ===")
+        print(f"User: {request.user.username if request.user.is_authenticated else 'Anonymous'}")
+        
         svg_content = request.data.get("svg")
         output_type = request.data.get("type", "pdf").lower()
         purchased_template_id = request.data.get("purchased_template_id")
         template_name = request.data.get("template_name", "")
+        
+        print(f"Output type: {output_type}")
+        print(f"Purchased template ID: {purchased_template_id}")
+        print(f"Template name: {template_name}")
+        print(f"SVG content length: {len(svg_content) if svg_content else 0}")
 
         if not svg_content or "</svg>" not in svg_content:
+            print("ERROR: Invalid or missing SVG content")
             return Response({"error": "Invalid or missing SVG content"}, status=status.HTTP_400_BAD_REQUEST)
 
         if output_type not in ("pdf", "png"):
+            print(f"ERROR: Unsupported output type: {output_type}")
             return Response({"error": "Unsupported type. Only 'pdf' and 'png' are allowed."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
+            print("Starting download processing...")
             # Sanitize template name for filename
             import re
             safe_name = re.sub(r'[^\w\s-]', '', template_name).strip() if template_name else ""
@@ -182,9 +222,9 @@ class DownloadDoc(APIView):
                     keywords_to_check = [str(k).lower().strip() for k in keywords_to_check if k]
                     
                     if "horizontal-split-download" in keywords_to_check:
-                        split_direction = "horizontal"  # Horizontal keyword = split left/right (horizontal split)
+                        split_direction = "horizontal"  # Horizontal keyword = cut left to right (top/bottom halves)
                     elif "vertical-split-download" in keywords_to_check:
-                        split_direction = "vertical"  # Vertical keyword = split top/bottom (vertical split)
+                        split_direction = "vertical"  # Vertical keyword = cut top to bottom (left/right halves)
                     # Legacy support for old "split-download" keyword (defaults to horizontal split = left/right)
                     elif "split-download" in keywords_to_check:
                         split_direction = "horizontal"
@@ -195,31 +235,133 @@ class DownloadDoc(APIView):
                         safe_name = re.sub(r'[-\s]+', '-', safe_name) if safe_name else ""
                 except PurchasedTemplate.DoesNotExist:
                     pass  # Continue with normal download if template not found
-
+            
+            # Inject fonts into SVG before conversion
+            print("Checking for fonts to inject...")
+            fonts_to_inject = []
+            if purchased_template_id:
+                try:
+                    print(f"Fetching purchased template: {purchased_template_id}")
+                    purchased_template = PurchasedTemplate.objects.get(id=purchased_template_id, buyer=request.user)
+                    if purchased_template.template:
+                        fonts_to_inject = list(purchased_template.template.fonts.all())
+                        print(f"Found {len(fonts_to_inject)} font(s) to inject")
+                        for font in fonts_to_inject:
+                            print(f"  - Font: {font.name} (ID: {font.id})")
+                except PurchasedTemplate.DoesNotExist:
+                    print(f"WARNING: Purchased template {purchased_template_id} not found")
+                    pass
+            
+            # Choose renderer based on output type and font requirements
+            has_fonts = bool(fonts_to_inject)
+            print(f"Has fonts: {has_fonts}")
+            print(f"Playwright available: {PLAYWRIGHT_AVAILABLE}")
+            
+            if has_fonts:
+                print("Injecting fonts into SVG...")
+                try:
+                    # Inject fonts with base64 embedding for Playwright
+                    svg_with_fonts = inject_fonts_into_svg(svg_content, fonts_to_inject, embed_base64=True)
+                    print(f"Font injection complete. SVG length after injection: {len(svg_with_fonts)}")
+                except Exception as e:
+                    print(f"ERROR: Font injection failed: {str(e)}")
+                    import traceback
+                    print(traceback.format_exc())
+                    raise
+                
+                if output_type == "pdf":
+                    print("Rendering PDF with fonts...")
+                    # Use Playwright for PDF with fonts
+                    if PLAYWRIGHT_AVAILABLE:
+                        try:
+                            print("Using Playwright for PDF rendering...")
+                            output = render_svg_with_playwright(svg_with_fonts, "pdf")
+                            print(f"SUCCESS: Playwright PDF rendering successful. Output size: {len(output)} bytes")
+                        except Exception as e:
+                            print(f"ERROR: Playwright PDF rendering failed: {str(e)}")
+                            import traceback
+                            print(traceback.format_exc())
+                            print("Falling back to CairoSVG...")
+                            # Fallback to CairoSVG (may not render fonts correctly)
+                            output = cairosvg.svg2pdf(bytestring=svg_content.encode("utf-8"))
+                            print(f"CairoSVG PDF rendering complete. Output size: {len(output)} bytes")
+                    else:
+                        print("WARNING: Playwright not available, using CairoSVG...")
+                        # Fallback to CairoSVG if Playwright not available
+                        output = cairosvg.svg2pdf(bytestring=svg_content.encode("utf-8"))
+                        print(f"CairoSVG PDF rendering complete. Output size: {len(output)} bytes")
+                else:  # PNG
+                    print("Rendering PNG with fonts...")
+                    # Use Playwright for PNG with fonts
+                    if PLAYWRIGHT_AVAILABLE:
+                        try:
+                            print("Using Playwright for PNG rendering...")
+                            output = render_svg_with_playwright(svg_with_fonts, "png")
+                            print(f"SUCCESS: Playwright PNG rendering successful. Output size: {len(output)} bytes")
+                        except Exception as e:
+                            print(f"ERROR: Playwright PNG rendering failed: {str(e)}")
+                            import traceback
+                            print(traceback.format_exc())
+                            print("Falling back to CairoSVG...")
+                            # Fallback to CairoSVG (may not render fonts correctly)
+                            output = cairosvg.svg2png(bytestring=svg_content.encode("utf-8"))
+                            print(f"CairoSVG PNG rendering complete. Output size: {len(output)} bytes")
+                    else:
+                        print("WARNING: Playwright not available, using CairoSVG...")
+                        # Fallback to CairoSVG if Playwright not available
+                        output = cairosvg.svg2png(bytestring=svg_content.encode("utf-8"))
+                        print(f"CairoSVG PNG rendering complete. Output size: {len(output)} bytes")
+            else:
+                print("No fonts detected, using CairoSVG...")
+                # No fonts - use CairoSVG (fastest option)
+                if output_type == "pdf":
+                    print("Rendering PDF with CairoSVG...")
+                    output = cairosvg.svg2pdf(bytestring=svg_content.encode("utf-8"))
+                    print(f"CairoSVG PDF rendering complete. Output size: {len(output)} bytes")
+                else:  # PNG
+                    print("Rendering PNG with CairoSVG...")
+                    output = cairosvg.svg2png(bytestring=svg_content.encode("utf-8"))
+                    print(f"CairoSVG PNG rendering complete. Output size: {len(output)} bytes")
+            
+            # Set content type and filename
             if output_type == "pdf":
-                output = cairosvg.svg2pdf(bytestring=svg_content.encode("utf-8"))
                 content_type = "application/pdf"
                 filename = f"{safe_name}.pdf" if safe_name else "output.pdf"
             else:  # PNG
-                output = cairosvg.svg2png(bytestring=svg_content.encode("utf-8"))
                 content_type = "image/png"
                 filename = f"{safe_name}.png" if safe_name else "output.png"
 
-            # Handle split download
-            if split_direction:
-                return self._handle_split_download(output, output_type, request.user, safe_name, split_direction)
-            
-            # Normal download
+            # Update user download count before handling response
+            print("Updating user download count...")
             user = request.user
             user.downloads += 1
             user.save()
             
+            # Handle split download
+            if split_direction:
+                print(f"Handling split download: {split_direction}")
+                return self._handle_split_download(output, output_type, user, safe_name, split_direction)
+            
+            # Normal download
+            print("Preparing response...")
+            
             response = HttpResponse(output, content_type=content_type)
             response["Content-Disposition"] = f'attachment; filename="{filename}"'
+            print(f"SUCCESS: Download complete. Filename: {filename}, Size: {len(output)} bytes")
+            print("=" * 60)
             return response
 
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            import traceback
+            error_traceback = traceback.format_exc()
+            print("=" * 60)
+            print("ERROR: DOWNLOAD ERROR OCCURRED")
+            print(f"Error message: {str(e)}")
+            print(f"Error type: {type(e).__name__}")
+            print("Full traceback:")
+            print(error_traceback)
+            print("=" * 60)
+            return Response({"error": str(e), "traceback": error_traceback}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def _handle_split_download(self, output, output_type, user, safe_name="", split_direction="horizontal"):
         """Split the output into two equal halves and return as zip
@@ -235,95 +377,123 @@ class DownloadDoc(APIView):
         import zipfile
         from PIL import Image
         
+        print(f"[Split Download] Starting split download...")
+        print(f"[Split Download] Output type: {output_type}")
+        print(f"[Split Download] Split direction: {split_direction}")
+        print(f"[Split Download] Output size: {len(output)} bytes")
+        
         try:
             direction_label = "horizontal" if split_direction == "horizontal" else "vertical"
             zip_filename = f"{safe_name}_{direction_label}_split.zip" if safe_name else f"document_{direction_label}_split.zip"
+            print(f"[Split Download] Zip filename: {zip_filename}")
             
             if output_type == "png":
+                print("[Split Download] Processing PNG...")
                 # Split PNG image
+                print("[Split Download] Opening image from bytes...")
                 image = Image.open(io.BytesIO(output))
                 width, height = image.size
+                print(f"[Split Download] Image dimensions: {width}x{height}")
                 
                 if split_direction == "vertical":
-                    # Split vertically (top and bottom halves)
-                    top_half = image.crop((0, 0, width, height // 2))
-                    bottom_half = image.crop((0, height // 2, width, height))
-                    
-                    # Create zip with both halves
-                    zip_buffer = io.BytesIO()
-                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                        # Save top half (front)
-                        top_buffer = io.BytesIO()
-                        top_half.save(top_buffer, format='PNG')
-                        zip_file.writestr('front.png', top_buffer.getvalue())
-                        
-                        # Save bottom half (back)
-                        bottom_buffer = io.BytesIO()
-                        bottom_half.save(bottom_buffer, format='PNG')
-                        zip_file.writestr('back.png', bottom_buffer.getvalue())
-                else:
-                    # Split horizontally (left and right halves)
+                    print("[Split Download] Splitting vertically (left/right)...")
+                    # Vertical keyword = cut from top to bottom => left/right halves
+                    print(f"[Split Download] Cropping left half: (0, 0, {width // 2}, {height})")
                     left_half = image.crop((0, 0, width // 2, height))
+                    print(f"[Split Download] Cropping right half: ({width // 2}, 0, {width}, {height})")
                     right_half = image.crop((width // 2, 0, width, height))
                     
                     # Create zip with both halves
+                    print("[Split Download] Creating ZIP file...")
                     zip_buffer = io.BytesIO()
                     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
                         # Save left half (front)
+                        print("[Split Download] Saving left half to ZIP...")
                         left_buffer = io.BytesIO()
                         left_half.save(left_buffer, format='PNG')
                         zip_file.writestr('front.png', left_buffer.getvalue())
                         
                         # Save right half (back)
+                        print("[Split Download] Saving right half to ZIP...")
                         right_buffer = io.BytesIO()
                         right_half.save(right_buffer, format='PNG')
                         zip_file.writestr('back.png', right_buffer.getvalue())
+                    print(f"[Split Download] ZIP created. Size: {len(zip_buffer.getvalue())} bytes")
+                else:
+                    print("[Split Download] Splitting horizontally (top/bottom)...")
+                    # Horizontal keyword = cut from left to right => top/bottom halves
+                    print(f"[Split Download] Cropping top half: (0, 0, {width}, {height // 2})")
+                    top_half = image.crop((0, 0, width, height // 2))
+                    print(f"[Split Download] Cropping bottom half: (0, {height // 2}, {width}, {height})")
+                    bottom_half = image.crop((0, height // 2, width, height))
+                    
+                    # Create zip with both halves
+                    print("[Split Download] Creating ZIP file...")
+                    zip_buffer = io.BytesIO()
+                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                        # Save top half (front)
+                        print("[Split Download] Saving top half to ZIP...")
+                        top_buffer = io.BytesIO()
+                        top_half.save(top_buffer, format='PNG')
+                        zip_file.writestr('front.png', top_buffer.getvalue())
+                        
+                        # Save bottom half (back)
+                        print("[Split Download] Saving bottom half to ZIP...")
+                        bottom_buffer = io.BytesIO()
+                        bottom_half.save(bottom_buffer, format='PNG')
+                        zip_file.writestr('back.png', bottom_buffer.getvalue())
+                    print(f"[Split Download] ZIP created. Size: {len(zip_buffer.getvalue())} bytes")
                 
-                user.downloads += 1
-                user.save()
+                # Note: User download count is updated in the main method before calling this
                 
-                response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
+                print("[Split Download] Getting ZIP bytes...")
+                zip_bytes = zip_buffer.getvalue()
+                print(f"[Split Download] ZIP bytes retrieved. Size: {len(zip_bytes)} bytes")
+                
+                print("[Split Download] Creating HTTP response...")
+                response = HttpResponse(zip_bytes, content_type='application/zip')
                 response["Content-Disposition"] = f'attachment; filename="{zip_filename}"'
+                print(f"[Split Download] SUCCESS: Split download complete. Filename: {zip_filename}")
                 return response
                 
             else:  # PDF
+                print("[Split Download] Processing PDF...")
                 # Convert PDF to image first, then split
                 try:
                     from pdf2image import convert_from_bytes
                 except ImportError:
+                    print("[Split Download] ERROR: pdf2image not installed")
                     return Response(
                         {"error": "PDF splitting requires pdf2image. Install with: pip install pdf2image"},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR
                     )
                 
                 # Convert PDF to image
-                images = convert_from_bytes(output)
-                if not images:
-                    return Response({"error": "Failed to convert PDF to image"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                print("[Split Download] Converting PDF to image...")
+                try:
+                    images = convert_from_bytes(output)
+                    if not images:
+                        print("[Split Download] ERROR: PDF conversion returned no images")
+                        return Response({"error": "Failed to convert PDF to image"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    print(f"[Split Download] PDF converted to {len(images)} image(s)")
+                except Exception as e:
+                    print(f"[Split Download] ERROR: PDF conversion failed: {str(e)}")
+                    import traceback
+                    print(traceback.format_exc())
+                    # Check if it's a poppler error
+                    if "poppler" in str(e).lower() or "pdfinfo" in str(e).lower():
+                        return Response(
+                            {"error": "PDF splitting requires poppler-utils. Install with: sudo apt-get install poppler-utils (Linux) or brew install poppler (Mac)"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                        )
+                    raise
                 
                 # Take first page (assuming single page PDF)
                 image = images[0]
                 width, height = image.size
                 
                 if split_direction == "vertical":
-                    # Split vertically (top and bottom halves)
-                    top_half = image.crop((0, 0, width, height // 2))
-                    bottom_half = image.crop((0, height // 2, width, height))
-                    
-                    # Create zip with both halves as PNG
-                    zip_buffer = io.BytesIO()
-                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                        # Save top half (front)
-                        top_buffer = io.BytesIO()
-                        top_half.save(top_buffer, format='PNG')
-                        zip_file.writestr('front.png', top_buffer.getvalue())
-                        
-                        # Save bottom half (back)
-                        bottom_buffer = io.BytesIO()
-                        bottom_half.save(bottom_buffer, format='PNG')
-                        zip_file.writestr('back.png', bottom_buffer.getvalue())
-                else:
-                    # Split horizontally (left and right halves)
+                    # Vertical keyword = cut from top to bottom => left/right halves
                     left_half = image.crop((0, 0, width // 2, height))
                     right_half = image.crop((width // 2, 0, width, height))
                     
@@ -339,16 +509,41 @@ class DownloadDoc(APIView):
                         right_buffer = io.BytesIO()
                         right_half.save(right_buffer, format='PNG')
                         zip_file.writestr('back.png', right_buffer.getvalue())
+                else:
+                    # Horizontal keyword = cut from left to right => top/bottom halves
+                    top_half = image.crop((0, 0, width, height // 2))
+                    bottom_half = image.crop((0, height // 2, width, height))
+                    
+                    # Create zip with both halves as PNG
+                    zip_buffer = io.BytesIO()
+                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                        # Save top half (front)
+                        top_buffer = io.BytesIO()
+                        top_half.save(top_buffer, format='PNG')
+                        zip_file.writestr('front.png', top_buffer.getvalue())
+                        
+                        # Save bottom half (back)
+                        bottom_buffer = io.BytesIO()
+                        bottom_half.save(bottom_buffer, format='PNG')
+                        zip_file.writestr('back.png', bottom_buffer.getvalue())
                 
-                user.downloads += 1
-                user.save()
+                # Note: User download count is updated in the main method before calling this
                 
                 response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
                 response["Content-Disposition"] = f'attachment; filename="{zip_filename}"'
                 return response
                 
         except Exception as e:
-            return Response({"error": f"Failed to split document: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            import traceback
+            error_traceback = traceback.format_exc()
+            print("=" * 60)
+            print("[Split Download] ERROR: Split download failed")
+            print(f"[Split Download] Error message: {str(e)}")
+            print(f"[Split Download] Error type: {type(e).__name__}")
+            print("[Split Download] Full traceback:")
+            print(error_traceback)
+            print("=" * 60)
+            return Response({"error": f"Failed to split document: {str(e)}", "traceback": error_traceback}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class RemoveBackgroundView(APIView):

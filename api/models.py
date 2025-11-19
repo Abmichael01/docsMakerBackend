@@ -42,6 +42,7 @@ class Template(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     hot = models.BooleanField(default=False)
     keywords = models.JSONField(default=list, blank=True)
+    fonts = models.ManyToManyField('Font', blank=True, related_name='templates', help_text="Font files used in this template")
     
 
     def save(self, *args, **kwargs):
@@ -145,3 +146,31 @@ class Tutorial(models.Model):
 
     def __str__(self):
         return f"{self.template.name} - Tutorial"
+
+
+class Font(models.Model):
+    """Font files for SVG templates"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255, help_text="Font family name (e.g., 'OCR B', 'Arial')")
+    font_file = models.FileField(upload_to='fonts/', help_text="Font file (TTF, OTF, WOFF, WOFF2)")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['name']),
+        ]
+    
+    def __str__(self):
+        return self.name
+    
+    def get_font_format(self):
+        """Detect font format from file extension"""
+        ext = self.font_file.name.split('.')[-1].lower()
+        format_map = {
+            'ttf': 'truetype',
+            'otf': 'opentype',
+            'woff': 'woff',
+            'woff2': 'woff2',
+        }
+        return format_map.get(ext, 'truetype')
