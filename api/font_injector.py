@@ -98,9 +98,9 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
     if not fonts:
         return svg_content
     
-    # Find or create <defs> section
-    defs_pattern = r'(<defs[^>]*>)(.*?)(</defs>)'
-    defs_match = re.search(defs_pattern, svg_content, re.DOTALL)
+    # Find or create <defs> section (case insensitive)
+    defs_pattern = re.compile(r'(<defs[^>]*>)(.*?)(</defs>)', re.IGNORECASE | re.DOTALL)
+    defs_match = defs_pattern.search(svg_content)
     
     alias_map = _extract_font_aliases(svg_content)
     
@@ -199,8 +199,8 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
         defs_start, defs_content, defs_end = defs_match.groups()
         defs_full = defs_match.group(0)
         
-        style_pattern = r'(<style[^>]*>)(<!\[CDATA\[)?(.*?)(\]\]>)?(</style>)'
-        style_match = re.search(style_pattern, defs_content, re.DOTALL)
+        style_pattern = re.compile(r'(<style[^>]*>)(<!\[CDATA\[)?(.*?)(\]\]>)?(</style>)', re.IGNORECASE | re.DOTALL)
+        style_match = style_pattern.search(defs_content)
         
         if style_match:
             style_full = style_match.group(0)
@@ -234,9 +234,9 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
             svg_content = svg_content.replace(defs_full, new_defs_full, 1)
     else:
         # Create new <defs> section
-        # Find the opening <svg> tag
-        svg_pattern = r'(<svg[^>]*>)'
-        svg_match = re.search(svg_pattern, svg_content)
+        # Find the opening <svg> tag (case insensitive)
+        svg_pattern = re.compile(r'(<svg[^>]*>)', re.IGNORECASE)
+        svg_match = svg_pattern.search(svg_content)
         if svg_match:
             svg_content = svg_content.replace(svg_match.group(0), svg_match.group(0) + f'\n<defs>\n{style_block}\n</defs>')
     
