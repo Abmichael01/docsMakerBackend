@@ -184,10 +184,12 @@ class DownloadDoc(APIView):
         output_type = request.data.get("type", "pdf").lower()
         purchased_template_id = request.data.get("purchased_template_id")
         template_name = request.data.get("template_name", "")
+        side = request.data.get("side", "front")  # "front" or "back" for split downloads
         
         print(f"Output type: {output_type}")
         print(f"Purchased template ID: {purchased_template_id}")
         print(f"Template name: {template_name}")
+        print(f"Side: {side}")
         print(f"SVG content length: {len(svg_content) if svg_content else 0}")
 
         if not svg_content or "</svg>" not in svg_content:
@@ -339,8 +341,8 @@ class DownloadDoc(APIView):
             
             # Handle split download
             if split_direction:
-                print(f"Handling split download: {split_direction}")
-                return self._handle_split_download(output, output_type, user, safe_name, split_direction)
+                print(f"Handling split download: {split_direction}, side: {side}")
+                return self._handle_split_download(output, output_type, user, safe_name, split_direction, side)
             
             # Normal download
             print("Preparing response...")
@@ -363,8 +365,8 @@ class DownloadDoc(APIView):
             print("=" * 60)
             return Response({"error": str(e), "traceback": error_traceback}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    def _handle_split_download(self, output, output_type, user, safe_name="", split_direction="horizontal"):
-        """Split the output into two equal halves and return as zip
+    def _handle_split_download(self, output, output_type, user, safe_name="", split_direction="horizontal", side="front"):
+        """Split the output into two equal halves and return only the requested side
         
         Args:
             output: The image/PDF bytes
@@ -372,21 +374,18 @@ class DownloadDoc(APIView):
             user: User object
             safe_name: Sanitized template name for filename
             split_direction: "horizontal" (left/right) or "vertical" (top/bottom)
+            side: "front" (first half) or "back" (second half)
         """
         import io
-        import zipfile
         from PIL import Image
         
         print(f"[Split Download] Starting split download...")
         print(f"[Split Download] Output type: {output_type}")
         print(f"[Split Download] Split direction: {split_direction}")
+        print(f"[Split Download] Side: {side}")
         print(f"[Split Download] Output size: {len(output)} bytes")
         
         try:
-            direction_label = "horizontal" if split_direction == "horizontal" else "vertical"
-            zip_filename = f"{safe_name}_{direction_label}_split.zip" if safe_name else f"document_{direction_label}_split.zip"
-            print(f"[Split Download] Zip filename: {zip_filename}")
-            
             if output_type == "png":
                 print("[Split Download] Processing PNG...")
                 # Split PNG image
@@ -395,65 +394,46 @@ class DownloadDoc(APIView):
                 width, height = image.size
                 print(f"[Split Download] Image dimensions: {width}x{height}")
                 
+                selected_half = None
+                
                 if split_direction == "vertical":
                     print("[Split Download] Splitting vertically (left/right)...")
                     # Vertical keyword = cut from top to bottom => left/right halves
-                    print(f"[Split Download] Cropping left half: (0, 0, {width // 2}, {height})")
-                    left_half = image.crop((0, 0, width // 2, height))
-                    print(f"[Split Download] Cropping right half: ({width // 2}, 0, {width}, {height})")
-                    right_half = image.crop((width // 2, 0, width, height))
+                    left_half = image.crop((0, 0, width // 2, height))  # Front (first half)
+                    right_half = image.crop((width // 2, 0, width, height))  # Back (second half)
                     
-                    # Create zip with both halves
-                    print("[Split Download] Creating ZIP file...")
-                    zip_buffer = io.BytesIO()
-                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                        # Save left half (front)
-                        print("[Split Download] Saving left half to ZIP...")
-                        left_buffer = io.BytesIO()
-                        left_half.save(left_buffer, format='PNG')
-                        zip_file.writestr('front.png', left_buffer.getvalue())
-                        
-                        # Save right half (back)
-                        print("[Split Download] Saving right half to ZIP...")
-                        right_buffer = io.BytesIO()
-                        right_half.save(right_buffer, format='PNG')
-                        zip_file.writestr('back.png', right_buffer.getvalue())
-                    print(f"[Split Download] ZIP created. Size: {len(zip_buffer.getvalue())} bytes")
+                    if side == "front":
+                        print("[Split Download] Returning left half (front)...")
+                        selected_half = left_half
+                    else:
+                        print("[Split Download] Returning right half (back)...")
+                        selected_half = right_half
                 else:
                     print("[Split Download] Splitting horizontally (top/bottom)...")
                     # Horizontal keyword = cut from left to right => top/bottom halves
-                    print(f"[Split Download] Cropping top half: (0, 0, {width}, {height // 2})")
-                    top_half = image.crop((0, 0, width, height // 2))
-                    print(f"[Split Download] Cropping bottom half: (0, {height // 2}, {width}, {height})")
-                    bottom_half = image.crop((0, height // 2, width, height))
+                    top_half = image.crop((0, 0, width, height // 2))  # Front (first half)
+                    bottom_half = image.crop((0, height // 2, width, height))  # Back (second half)
                     
-                    # Create zip with both halves
-                    print("[Split Download] Creating ZIP file...")
-                    zip_buffer = io.BytesIO()
-                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                        # Save top half (front)
-                        print("[Split Download] Saving top half to ZIP...")
-                        top_buffer = io.BytesIO()
-                        top_half.save(top_buffer, format='PNG')
-                        zip_file.writestr('front.png', top_buffer.getvalue())
-                        
-                        # Save bottom half (back)
-                        print("[Split Download] Saving bottom half to ZIP...")
-                        bottom_buffer = io.BytesIO()
-                        bottom_half.save(bottom_buffer, format='PNG')
-                        zip_file.writestr('back.png', bottom_buffer.getvalue())
-                    print(f"[Split Download] ZIP created. Size: {len(zip_buffer.getvalue())} bytes")
+                    if side == "front":
+                        print("[Split Download] Returning top half (front)...")
+                        selected_half = top_half
+                    else:
+                        print("[Split Download] Returning bottom half (back)...")
+                        selected_half = bottom_half
                 
-                # Note: User download count is updated in the main method before calling this
+                # Save selected half to bytes
+                print("[Split Download] Saving selected half...")
+                half_buffer = io.BytesIO()
+                selected_half.save(half_buffer, format='PNG')
+                half_bytes = half_buffer.getvalue()
+                print(f"[Split Download] Half saved. Size: {len(half_bytes)} bytes")
                 
-                print("[Split Download] Getting ZIP bytes...")
-                zip_bytes = zip_buffer.getvalue()
-                print(f"[Split Download] ZIP bytes retrieved. Size: {len(zip_bytes)} bytes")
-                
+                # Create response with single file
+                filename = f"{safe_name}_{side}.png" if safe_name else f"document_{side}.png"
                 print("[Split Download] Creating HTTP response...")
-                response = HttpResponse(zip_bytes, content_type='application/zip')
-                response["Content-Disposition"] = f'attachment; filename="{zip_filename}"'
-                print(f"[Split Download] SUCCESS: Split download complete. Filename: {zip_filename}")
+                response = HttpResponse(half_bytes, content_type='image/png')
+                response["Content-Disposition"] = f'attachment; filename="{filename}"'
+                print(f"[Split Download] SUCCESS: Split download complete. Filename: {filename}")
                 return response
                 
             else:  # PDF
@@ -491,46 +471,48 @@ class DownloadDoc(APIView):
                 # Take first page (assuming single page PDF)
                 image = images[0]
                 width, height = image.size
+                print(f"[Split Download] Image dimensions: {width}x{height}")
+                
+                selected_half = None
                 
                 if split_direction == "vertical":
+                    print("[Split Download] Splitting vertically (left/right)...")
                     # Vertical keyword = cut from top to bottom => left/right halves
-                    left_half = image.crop((0, 0, width // 2, height))
-                    right_half = image.crop((width // 2, 0, width, height))
+                    left_half = image.crop((0, 0, width // 2, height))  # Front (first half)
+                    right_half = image.crop((width // 2, 0, width, height))  # Back (second half)
                     
-                    # Create zip with both halves as PNG
-                    zip_buffer = io.BytesIO()
-                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                        # Save left half (front)
-                        left_buffer = io.BytesIO()
-                        left_half.save(left_buffer, format='PNG')
-                        zip_file.writestr('front.png', left_buffer.getvalue())
-                        
-                        # Save right half (back)
-                        right_buffer = io.BytesIO()
-                        right_half.save(right_buffer, format='PNG')
-                        zip_file.writestr('back.png', right_buffer.getvalue())
+                    if side == "front":
+                        print("[Split Download] Returning left half (front)...")
+                        selected_half = left_half
+                    else:
+                        print("[Split Download] Returning right half (back)...")
+                        selected_half = right_half
                 else:
+                    print("[Split Download] Splitting horizontally (top/bottom)...")
                     # Horizontal keyword = cut from left to right => top/bottom halves
-                    top_half = image.crop((0, 0, width, height // 2))
-                    bottom_half = image.crop((0, height // 2, width, height))
+                    top_half = image.crop((0, 0, width, height // 2))  # Front (first half)
+                    bottom_half = image.crop((0, height // 2, width, height))  # Back (second half)
                     
-                    # Create zip with both halves as PNG
-                    zip_buffer = io.BytesIO()
-                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                        # Save top half (front)
-                        top_buffer = io.BytesIO()
-                        top_half.save(top_buffer, format='PNG')
-                        zip_file.writestr('front.png', top_buffer.getvalue())
-                        
-                        # Save bottom half (back)
-                        bottom_buffer = io.BytesIO()
-                        bottom_half.save(bottom_buffer, format='PNG')
-                        zip_file.writestr('back.png', bottom_buffer.getvalue())
+                    if side == "front":
+                        print("[Split Download] Returning top half (front)...")
+                        selected_half = top_half
+                    else:
+                        print("[Split Download] Returning bottom half (back)...")
+                        selected_half = bottom_half
                 
-                # Note: User download count is updated in the main method before calling this
+                # Save selected half to bytes as PNG (PDF splitting returns PNG)
+                print("[Split Download] Saving selected half...")
+                half_buffer = io.BytesIO()
+                selected_half.save(half_buffer, format='PNG')
+                half_bytes = half_buffer.getvalue()
+                print(f"[Split Download] Half saved. Size: {len(half_bytes)} bytes")
                 
-                response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
-                response["Content-Disposition"] = f'attachment; filename="{zip_filename}"'
+                # Create response with single file
+                filename = f"{safe_name}_{side}.png" if safe_name else f"document_{side}.png"
+                print("[Split Download] Creating HTTP response...")
+                response = HttpResponse(half_bytes, content_type='image/png')
+                response["Content-Disposition"] = f'attachment; filename="{filename}"'
+                print(f"[Split Download] SUCCESS: Split download complete. Filename: {filename}")
                 return response
                 
         except Exception as e:
