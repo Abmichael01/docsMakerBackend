@@ -69,7 +69,7 @@ def _extract_font_aliases(svg_content: str) -> dict:
     
     return alias_map
 
-
+ 
 def _get_font_candidates(font: Font) -> List[str]:
     candidates = []
     if getattr(font, "name", None):
