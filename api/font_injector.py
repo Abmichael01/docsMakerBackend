@@ -206,16 +206,22 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
             style_full = style_match.group(0)
             style_open, cdata_open, existing_style, cdata_close, style_close = style_match.groups()
             
-            # Extract existing font-families from @font-face declarations (normalized)
+            # Extract existing font-families from @font-face declarations ONLY (not from regular CSS)
+            # This prevents skipping fonts that are used in CSS but don't have @font-face yet
             existing_families = set()
-            existing_font_face_pattern = re.compile(r'font-family\s*:\s*["\']([^"\']+)["\']', re.IGNORECASE)
-            for match in existing_font_face_pattern.findall(existing_style):
-                existing_families.add(_normalize_font_key(match))
+            # Match @font-face blocks first, then extract font-family from within them
+            # Use balanced brace matching to handle nested braces in url() values
+            font_face_block_pattern = re.compile(r'@font-face\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', re.IGNORECASE | re.DOTALL)
+            font_family_in_fontface_pattern = re.compile(r'font-family\s*:\s*["\']([^"\']+)["\']', re.IGNORECASE)
+            
+            for font_face_block in font_face_block_pattern.findall(existing_style):
+                for match in font_family_in_fontface_pattern.findall(font_face_block):
+                    existing_families.add(_normalize_font_key(match))
             
             # Only add font-faces that don't already exist (by normalized name)
             missing_font_faces = []
             for family_key, (css_family, font_face) in unique_font_map.items():
-                # Check if this font-family is not already in the existing style
+                # Check if this font-family already has a @font-face declaration (not just CSS usage)
                 if family_key not in existing_families:
                     missing_font_faces.append(font_face)
             
