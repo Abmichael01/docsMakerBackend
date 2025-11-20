@@ -9,8 +9,14 @@ from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
 from datetime import timedelta
 from accounts.serializers import CustomUserDetailsSerializer
+from .svg_updater import update_svg_from_field_updates
 
 User = get_user_model()
+
+
+class FieldUpdateSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    value = serializers.JSONField(required=False, allow_null=True)
 
 
 class ToolSerializer(serializers.ModelSerializer):
@@ -321,6 +327,7 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
 
 
 class PurchasedTemplateSerializer(serializers.ModelSerializer):
+    field_updates = FieldUpdateSerializer(many=True, write_only=True, required=False)
     fonts = FontSerializer(source='template.fonts', many=True, read_only=True)
     banner = serializers.SerializerMethodField()
     
@@ -328,6 +335,9 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
         model = PurchasedTemplate
         fields = '__all__'
         read_only_fields = ('buyer',)
+        extra_kwargs = {
+            'svg': {'required': False},
+        }
         
     def charge_if_test_false(self, instance, validated_data, is_update=False):
         old_test = instance.test if is_update else True  # Assume default True for new records
@@ -352,10 +362,31 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
                 validated_data["svg"] = WaterMark().remove_watermark(svg)
 
     def update(self, instance, validated_data):
+        field_updates = validated_data.pop("field_updates", None)
+        if field_updates:
+            base_svg = validated_data.get("svg", instance.svg)
+            form_fields = instance.form_fields or []
+            updated_svg, _ = update_svg_from_field_updates(base_svg, form_fields, field_updates)
+            validated_data["svg"] = updated_svg
         self.charge_if_test_false(instance, validated_data, is_update=True)
         return super().update(instance, validated_data)
 
     def create(self, validated_data):
+        field_updates = validated_data.pop("field_updates", None)
+        template = validated_data.get("template")
+        if field_updates:
+            if not template:
+                raise serializers.ValidationError(
+                    {"field_updates": "Template is required when submitting field updates."}
+                )
+            base_svg = template.svg
+            form_fields = template.form_fields or []
+            updated_svg, _ = update_svg_from_field_updates(base_svg, form_fields, field_updates)
+            validated_data["svg"] = updated_svg
+        elif template and "svg" not in validated_data:
+            # No field updates, just copy base template SVG
+            validated_data["svg"] = template.svg
+        
         # Create a temporary instance to simulate access to `buyer` and `test`
         temp_instance = self.Meta.model(**validated_data)
         self.charge_if_test_false(temp_instance, validated_data, is_update=False)

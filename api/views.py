@@ -192,6 +192,16 @@ class DownloadDoc(APIView):
         print(f"Side: {side}")
         print(f"SVG content length: {len(svg_content) if svg_content else 0}")
 
+        purchased_template = None
+        if purchased_template_id:
+            try:
+                purchased_template = PurchasedTemplate.objects.get(id=purchased_template_id, buyer=request.user)
+                svg_content = purchased_template.svg
+                if not template_name:
+                    template_name = purchased_template.name or ""
+            except PurchasedTemplate.DoesNotExist:
+                pass
+
         if not svg_content or "</svg>" not in svg_content:
             print("ERROR: Invalid or missing SVG content")
             return Response({"error": "Invalid or missing SVG content"}, status=status.HTTP_400_BAD_REQUEST)
@@ -209,10 +219,7 @@ class DownloadDoc(APIView):
             
             # Check if split-download is enabled
             split_direction = None
-            if purchased_template_id:
-                try:
-                    purchased_template = PurchasedTemplate.objects.get(id=purchased_template_id, buyer=request.user)
-                    
+            if purchased_template:
                     # Check keywords from both purchased template and original template
                     keywords_to_check = []
                     if purchased_template.keywords:
@@ -235,24 +242,15 @@ class DownloadDoc(APIView):
                     if not safe_name and purchased_template.name:
                         safe_name = re.sub(r'[^\w\s-]', '', purchased_template.name).strip()
                         safe_name = re.sub(r'[-\s]+', '-', safe_name) if safe_name else ""
-                except PurchasedTemplate.DoesNotExist:
-                    pass  # Continue with normal download if template not found
             
             # Inject fonts into SVG before conversion
             print("Checking for fonts to inject...")
             fonts_to_inject = []
-            if purchased_template_id:
-                try:
-                    print(f"Fetching purchased template: {purchased_template_id}")
-                    purchased_template = PurchasedTemplate.objects.get(id=purchased_template_id, buyer=request.user)
-                    if purchased_template.template:
-                        fonts_to_inject = list(purchased_template.template.fonts.all())
-                        print(f"Found {len(fonts_to_inject)} font(s) to inject")
-                        for font in fonts_to_inject:
-                            print(f"  - Font: {font.name} (ID: {font.id})")
-                except PurchasedTemplate.DoesNotExist:
-                    print(f"WARNING: Purchased template {purchased_template_id} not found")
-                    pass
+            if purchased_template and purchased_template.template:
+                fonts_to_inject = list(purchased_template.template.fonts.all())
+                print(f"Found {len(fonts_to_inject)} font(s) to inject")
+                for font in fonts_to_inject:
+                    print(f"  - Font: {font.name} (ID: {font.id})")
             
             # Choose renderer based on output type and font requirements
             has_fonts = bool(fonts_to_inject)
