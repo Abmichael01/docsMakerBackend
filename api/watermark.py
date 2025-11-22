@@ -9,28 +9,45 @@ class WaterMark():
         # Get SVG dimensions
         width, height = self.get_svg_size(svg_content)
         
-        # Calculate number of watermarks based on area with better scaling
+        # Calculate number of watermarks based on SVG dimensions (width and height)
+        # Use pixel-based calculation to ensure multiple rows even for small images
         area = width * height
         
-        # Very aggressive scaling based on SVG size - ensure plenty of watermarks
-        # Calculate based on pixel density: aim for watermarks every ~150-200 pixels
-        if area < 30000:  # ID card size SVGs (< ~173x173)
-            watermark_count = max(12, int(area / 2500))  # Very dense: 1 per 2.5k units, minimum 12
-        elif area < 80000:  # Very small SVGs (< ~283x283)
-            watermark_count = max(18, int(area / 2000))  # Very dense: 1 per 2k units, minimum 18
-        elif area < 200000:  # Small SVGs (< ~447x447)
-            watermark_count = max(30, int(area / 2500))  # Very dense: 1 per 2.5k units, minimum 30
-        elif area < 500000:  # Medium SVGs (< ~707x707)
-            watermark_count = max(60, int(area / 3000))  # Very dense: 1 per 3k units, minimum 60
-        elif area < 1000000:  # Large SVGs (< ~1000x1000)
-            watermark_count = max(100, int(area / 4000))  # Very dense: 1 per 4k units, minimum 100
-        elif area < 2000000:  # Very large SVGs (< ~1414x1414)
-            watermark_count = max(150, int(area / 5000))  # Very dense: 1 per 5k units, minimum 150
-        else:  # Extra large SVGs
-            watermark_count = max(200, int(area / 6000))  # Very dense: 1 per 6k units, minimum 200
+        # Calculate watermark density based on SVG size
+        # For small SVGs: aim for watermarks every 80-120 pixels
+        # For medium SVGs: aim for watermarks every 120-180 pixels  
+        # For large SVGs: aim for watermarks every 180-250 pixels
         
-        # Increase cap significantly to allow many watermarks for very large documents
-        watermark_count = min(watermark_count, 400)  # Maximum 400 watermarks
+        # Base calculation on both width and height - many more watermarks
+        # Use much tighter spacing to fit many more rows and columns
+        if width < 200 or height < 200:  # Very small SVGs (ID cards, small docs)
+            # Many more: calculate based on dimensions
+            cols_target = max(10, int(width / 20))  # More rows: 1 per 20px width
+            rows_target = max(10, int(height / 20))  # More rows: 1 per 20px height
+            watermark_count = cols_target * rows_target
+        elif width < 400 or height < 400:  # Small SVGs
+            cols_target = max(15, int(width / 25))  # More rows: 1 per 25px
+            rows_target = max(15, int(height / 25))  # More rows: 1 per 25px
+            watermark_count = cols_target * rows_target
+        elif width < 700 or height < 700:  # Medium SVGs
+            cols_target = max(22, int(width / 30))  # More rows: 1 per 30px
+            rows_target = max(22, int(height / 30))  # More rows: 1 per 30px
+            watermark_count = cols_target * rows_target
+        elif width < 1000 or height < 1000:  # Large SVGs (A4 size ~800x1100)
+            cols_target = max(30, int(width / 35))  # More rows: 1 per 35px
+            rows_target = max(30, int(height / 35))  # More rows: 1 per 35px
+            watermark_count = cols_target * rows_target
+        else:  # Very large SVGs
+            cols_target = max(40, int(width / 40))  # More rows: 1 per 40px
+            rows_target = max(40, int(height / 40))  # More rows: 1 per 40px
+            watermark_count = cols_target * rows_target
+        
+        # Ensure minimum watermark count based on area as fallback
+        area_based_count = max(80, int(area / 600))  # Many more: 1 per 600 area units
+        watermark_count = max(watermark_count, area_based_count)
+        
+        # Cap maximum watermarks
+        watermark_count = min(watermark_count, 1500)  # Maximum 1500 watermarks
         
         # Calculate appropriate font size based on SVG dimensions
         # Scale font size to be proportional to SVG size
@@ -58,16 +75,32 @@ class WaterMark():
         watermark_bbox_width = (text_width * cos_angle) + (text_height * sin_angle)
         watermark_bbox_height = (text_width * sin_angle) + (text_height * cos_angle)
         
-        # Add minimal padding to ensure no overlap (very tight spacing at pixel level)
-        # Calculate exact pixel spacing needed
-        padding_factor = 1.1  # Only 10% spacing (very tight, pixel-level calculation)
+        # Calculate spacing based on SVG size - adaptive spacing
+        # Use much tighter spacing to allow 2x more rows and columns
+        avg_dimension = (width + height) / 2
+        
+        # Adaptive padding factor based on SVG size - reduced for 2x more watermarks
+        if avg_dimension < 200:  # Very small SVGs
+            padding_factor = 1.02  # Very tight: 2% spacing (reduced from 5%)
+            pixel_buffer = max(2, font_size * 0.05)  # Smaller buffer
+        elif avg_dimension < 400:  # Small SVGs
+            padding_factor = 1.03  # Very tight: 3% spacing (reduced from 8%)
+            pixel_buffer = max(2, font_size * 0.06)  # Smaller buffer
+        elif avg_dimension < 700:  # Medium SVGs
+            padding_factor = 1.04  # Tight: 4% spacing (reduced from 10%)
+            pixel_buffer = max(3, font_size * 0.07)  # Smaller buffer
+        elif avg_dimension < 1000:  # Large SVGs
+            padding_factor = 1.05  # Tight: 5% spacing (reduced from 12%)
+            pixel_buffer = max(3, font_size * 0.08)  # Smaller buffer
+        else:  # Very large SVGs
+            padding_factor = 1.06  # Moderate: 6% spacing (reduced from 15%)
+            pixel_buffer = max(4, font_size * 0.09)  # Smaller buffer
+        
+        # Calculate minimum spacing based on size-adaptive factors
         min_spacing_x = watermark_bbox_width * padding_factor
         min_spacing_y = watermark_bbox_height * padding_factor
         
-        # At pixel level: ensure we can fit watermarks efficiently
-        # If spacing is too tight, we might overlap, so use a minimum safe spacing
-        # Minimum safe spacing = bounding box + small buffer (5-10 pixels)
-        pixel_buffer = max(5, font_size * 0.1)  # Small buffer in pixels
+        # Ensure minimum safe spacing with pixel buffer (but keep it minimal)
         min_spacing_x = max(min_spacing_x, watermark_bbox_width + pixel_buffer)
         min_spacing_y = max(min_spacing_y, watermark_bbox_height + pixel_buffer)
         
@@ -81,146 +114,58 @@ class WaterMark():
         available_width = width * (1 - left_margin_percent - right_margin_percent)
         available_height = height * (1 - top_margin_percent - bottom_margin_percent)
         
-        # Step 3: Calculate optimal grid dimensions based on minimum spacing (pixel-level math)
-        # Calculate how many columns and rows can fit without overlap
-        # Use floor division to get maximum possible positions
-        max_cols = max(1, int(available_width / min_spacing_x))
-        max_rows = max(1, int(available_height / min_spacing_y))
+        # Step 3: Calculate watermarks using square area approach
+        # One watermark per square area - simpler and more predictable
+        # Use a square area size of 320x320 pixels per watermark
+        square_area_size = 320  # pixels - size of each square area
         
-        # Calculate optimal cols and rows to fit watermark_count
-        # Use pixel-level calculation: maximize watermark placement
-        aspect_ratio = width / height if height > 0 else 1
+        # Calculate how many squares fit horizontally and vertically
+        squares_horizontal = max(1, int(available_width / square_area_size))
+        squares_vertical = max(1, int(available_height / square_area_size))
         
-        # Calculate ideal grid dimensions based on watermark count and available space
-        # Try to maximize the number of watermarks we can place
-        if aspect_ratio >= 1:
-            # Wide or square: prefer more columns
-            # Calculate based on available space, not just watermark count
-            ideal_cols = min(max_cols, max(1, int((watermark_count * aspect_ratio) ** 0.5)))
-            ideal_rows = max(1, (watermark_count + ideal_cols - 1) // ideal_cols)
-            
-            # If we can fit more, increase columns
-            while ideal_cols < max_cols and ideal_cols * ideal_rows < watermark_count:
-                ideal_cols += 1
-                ideal_rows = max(1, (watermark_count + ideal_cols - 1) // ideal_cols)
-            
-            cols = min(ideal_cols, max_cols)
-            rows = min(ideal_rows, max_rows)
-        else:
-            # Tall: prefer more rows
-            ideal_rows = min(max_rows, max(1, int((watermark_count / aspect_ratio) ** 0.5)))
-            ideal_cols = max(1, (watermark_count + ideal_rows - 1) // ideal_rows)
-            
-            # If we can fit more, increase rows
-            while ideal_rows < max_rows and ideal_cols * ideal_rows < watermark_count:
-                ideal_rows += 1
-                ideal_cols = max(1, (watermark_count + ideal_rows - 1) // ideal_rows)
-            
-            rows = min(ideal_rows, max_rows)
-            cols = min(ideal_cols, max_cols)
+        # Calculate spacing between square centers
+        spacing_x = available_width / squares_horizontal if squares_horizontal > 0 else 0
+        spacing_y = available_height / squares_vertical if squares_vertical > 0 else 0
         
-        # Final adjustment: ensure we use all available space efficiently
-        # Recalculate watermark_count based on actual grid size
-        actual_watermark_count = min(watermark_count, cols * rows)
+        # Calculate total number of watermarks
+        actual_watermark_count = squares_horizontal * squares_vertical
         
-        # Step 4: Calculate actual spacing based on available space and grid size
-        # Calculate spacing to evenly distribute watermarks without overlap
-        if cols > 1:
-            # Space needed for cols watermarks: (cols - 1) * min_spacing_x
-            total_needed_width = (cols - 1) * min_spacing_x
-            if total_needed_width <= available_width:
-                # Use minimum spacing
-                actual_spacing_x = min_spacing_x
-            else:
-                # Scale down spacing to fit
-                actual_spacing_x = available_width / (cols - 1)
-        else:
-            actual_spacing_x = 0
-        
-        if rows > 1:
-            # Space needed for rows watermarks: (rows - 1) * min_spacing_y
-            total_needed_height = (rows - 1) * min_spacing_y
-            if total_needed_height <= available_height:
-                # Use minimum spacing
-                actual_spacing_y = min_spacing_y
-            else:
-                # Scale down spacing to fit
-                actual_spacing_y = available_height / (rows - 1)
-        else:
-            actual_spacing_y = 0
-        
-        # Step 5: Calculate x positions for each column (same x for all items in a column)
-        # Start closer to left border
-        x_positions = []
-        if cols == 1:
-            x_positions = [width * left_margin_percent + watermark_bbox_width / 2]  # Start near left
-        else:
-            # Calculate total width used by grid
-            total_grid_width = (cols - 1) * actual_spacing_x
-            # Start from left margin instead of centering
-            start_x = width * left_margin_percent + watermark_bbox_width / 2
-            for col in range(cols):
-                x_pos = start_x + (col * actual_spacing_x)
-                x_positions.append(x_pos)
-        
-        # Step 6: Calculate y positions for each row (same y for all items in a row)
-        # Center the grid in available space
-        y_positions = []
-        if rows == 1:
-            y_positions = [height / 2]  # Center single row
-        else:
-            # Calculate total height used by grid
-            total_grid_height = (rows - 1) * actual_spacing_y
-            start_y = (height - total_grid_height) / 2  # Center the grid
-            for row in range(rows):
-                y_pos = start_y + (row * actual_spacing_y)
-                y_positions.append(y_pos)
-        
-        # Step 7: Assign watermarks to grid positions one by one
-        # Use the actual watermark count based on grid capacity
-        final_watermark_count = min(watermark_count, cols * rows)
+        # Step 4: Generate watermarks at the center of each square area
         watermarks = []
         watermark_index = 0
         
-        for row in range(rows):
-            for col in range(cols):
-                if watermark_index >= final_watermark_count:
+        # Start position (center of first square)
+        start_x = (width - available_width) / 2 + (spacing_x / 2)
+        start_y = (height - available_height) / 2 + (spacing_y / 2)
+        
+        for row in range(squares_vertical):
+            for col in range(squares_horizontal):
+                if watermark_index >= actual_watermark_count:
                     break
                 
-                # Get base x and y from calculated positions
-                base_x = x_positions[col]  # Same x for all items in this column
-                base_y = y_positions[row]  # Same y for all items in this row
+                # Calculate position at the center of this square area
+                x = start_x + (col * spacing_x)
+                y = start_y + (row * spacing_y)
                 
-                # Step 7: Apply diagonal offset to create slanted pattern
-                # Shift each row horizontally to create diagonal effect
-                # But ensure we don't cause overlap
-                if cols > 1 and rows > 1:
-                    # Calculate safe diagonal shift (don't exceed half the spacing)
-                    # This ensures rotated watermarks don't overlap
-                    safe_shift = actual_spacing_x * 0.3  # 30% shift is safe
-                    # Apply shift proportional to row position
-                    x = base_x + (safe_shift * row / max(1, rows - 1))
-                else:
-                    x = base_x
+                # Apply diagonal offset for slanted pattern
+                if squares_horizontal > 1 and squares_vertical > 1:
+                    diagonal_shift = spacing_x * 0.25  # 25% shift for diagonal effect
+                    x = x + (diagonal_shift * row / max(1, squares_vertical - 1))
                 
-                y = base_y
-                
-                # Ensure watermarks stay within bounds (account for rotated bounding box)
+                # Ensure watermarks stay within bounds
                 margin_x = watermark_bbox_width / 2
                 margin_y = watermark_bbox_height / 2
-                if x < margin_x or x > width - margin_x or y < margin_y or y > height - margin_y:
-                    continue
                 
-                # Wrap in transform group with rotation
-                watermark = (
-                    f'<g transform="rotate({angle_degrees}, {x}, {y})">'
-                    f'<text x="{x}" y="{y}" fill="black" font-size="{font_size}" pointer-events="none">'
-                    f'TEST DOCUMENT</text></g>'
-                )
-                watermarks.append(watermark)
-                watermark_index += 1
+                if x >= margin_x and x <= width - margin_x and y >= margin_y and y <= height - margin_y:
+                    watermark = (
+                        f'<g transform="rotate({angle_degrees}, {x}, {y})">'
+                        f'<text x="{x}" y="{y}" fill="black" font-size="{font_size}" pointer-events="none">'
+                        f'TEST DOCUMENT</text></g>'
+                    )
+                    watermarks.append(watermark)
+                    watermark_index += 1
             
-            if watermark_index >= final_watermark_count:
+            if watermark_index >= actual_watermark_count:
                 break
         
         # Insert before </svg>
