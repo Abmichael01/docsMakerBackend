@@ -387,12 +387,15 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"field_updates": "Template is required when submitting field updates."}
                 )
+            # Optimize: Only fetch SVG and form_fields from template
+            template = Template.objects.only('svg', 'form_fields').get(pk=template.pk)
             base_svg = template.svg
             form_fields = template.form_fields or []
             updated_svg, _ = update_svg_from_field_updates(base_svg, form_fields, field_updates)
             validated_data["svg"] = updated_svg
         elif template and "svg" not in validated_data:
-            # No field updates, just copy base template SVG
+            # Optimize: Only fetch SVG from template
+            template = Template.objects.only('svg').get(pk=template.pk)
             validated_data["svg"] = template.svg
         
         # Create a temporary instance to simulate access to `buyer` and `test`

@@ -180,8 +180,8 @@ class PurchasedTemplatePagination(PageNumberPagination):
 class PurchasedTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = PurchasedTemplateSerializer
     permission_classes = [IsOwnerOrAdmin]
-    # Enable pagination for purchased template listings
-    pagination_class = PurchasedTemplatePagination
+    # No pagination for user-facing purchased template listings
+    pagination_class = None
 
     def get_queryset(self): # type: ignore
         user = self.request.user
@@ -202,7 +202,6 @@ class PurchasedTemplateViewSet(viewsets.ModelViewSet):
         queryset = queryset.order_by('-created_at')
         return queryset
     
-    @cache_template_svg(timeout=1800)  # Cache for 30 minutes
     @action(detail=True, methods=['get'], url_path='svg')
     def get_svg(self, request, pk=None):
         """Separate endpoint to load SVG content for purchased templates"""
@@ -225,13 +224,6 @@ class PurchasedTemplateViewSet(viewsets.ModelViewSet):
             return Response({"svg": watermarked_svg}, status=status.HTTP_200_OK)
         
         return Response({"svg": svg_content}, status=status.HTTP_200_OK)
-    
-    def list(self, request, *args, **kwargs):
-        """Override list to add cache headers"""
-        response = super().list(request, *args, **kwargs)
-        # Add cache headers for list responses
-        add_list_response_headers(response, request, max_age=60)
-        return response
 
     def perform_create(self, serializer):
         serializer.save(buyer=self.request.user)
@@ -257,7 +249,6 @@ class DownloadDoc(APIView):
         print("=== DownloadDoc POST request started ===")
         print(f"User: {request.user.username if request.user.is_authenticated else 'Anonymous'}")
         
-        svg_content = request.data.get("svg")
         output_type = request.data.get("type", "pdf").lower()
         purchased_template_id = request.data.get("purchased_template_id")
         template_name = request.data.get("template_name", "")
@@ -267,17 +258,24 @@ class DownloadDoc(APIView):
         print(f"Purchased template ID: {purchased_template_id}")
         print(f"Template name: {template_name}")
         print(f"Side: {side}")
-        print(f"SVG content length: {len(svg_content) if svg_content else 0}")
 
-        purchased_template = None
-        if purchased_template_id:
-            try:
-                purchased_template = PurchasedTemplate.objects.get(id=purchased_template_id, buyer=request.user)
-                svg_content = purchased_template.svg
-                if not template_name:
-                    template_name = purchased_template.name or ""
-            except PurchasedTemplate.DoesNotExist:
-                pass
+        # Optimize: Always fetch SVG from database instead of receiving it in request
+        # This reduces request payload size significantly
+        if not purchased_template_id:
+            print("ERROR: purchased_template_id is required")
+            return Response({"error": "purchased_template_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Optimize: Only fetch SVG and related fields needed for download
+            purchased_template = PurchasedTemplate.objects.select_related('template').only(
+                'svg', 'test', 'name', 'keywords', 'template__keywords', 'template__id'
+            ).get(id=purchased_template_id, buyer=request.user)
+            svg_content = purchased_template.svg
+            if not template_name:
+                template_name = purchased_template.name or ""
+        except PurchasedTemplate.DoesNotExist:
+            print("ERROR: Purchased template not found")
+            return Response({"error": "Purchased template not found"}, status=status.HTTP_404_NOT_FOUND)
 
         if not svg_content or "</svg>" not in svg_content:
             print("ERROR: Invalid or missing SVG content")
@@ -324,7 +322,8 @@ class DownloadDoc(APIView):
             print("Checking for fonts to inject...")
             fonts_to_inject = []
             if purchased_template and purchased_template.template:
-                fonts_to_inject = list(purchased_template.template.fonts.all())
+                # Optimize: Only fetch font IDs, names, and file fields needed for injection
+                fonts_to_inject = list(purchased_template.template.fonts.only('id', 'name', 'font_file').all())
                 print(f"Found {len(fonts_to_inject)} font(s) to inject")
                 for font in fonts_to_inject:
                     print(f"  - Font: {font.name} (ID: {font.id})")

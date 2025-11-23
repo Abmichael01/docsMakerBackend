@@ -221,7 +221,7 @@ try:
     import django_redis
     CACHES = {
         'default': {
-            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'BACKEND': 'django_redis.cache.RedisCache',
             'LOCATION': REDIS_URL,
             'OPTIONS': {
                 'CLIENT_CLASS': 'django_redis.client.DefaultClient',
@@ -230,8 +230,9 @@ try:
             'TIMEOUT': 300,  # Default timeout: 5 minutes
         }
     }
-except ImportError:
-    # Fallback to local memory cache if django-redis is not installed
+except (ImportError, Exception) as e:
+    # Fallback to local memory cache if django-redis is not installed or Redis is unavailable
+    print(f"Warning: Redis cache not available, using local memory cache. Error: {e}")
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
