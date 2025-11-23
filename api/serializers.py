@@ -255,8 +255,12 @@ class TemplateSerializer(serializers.ModelSerializer):
             representation.pop('svg', None)
             representation.pop('form_fields', None)
             # Banner will be included automatically since it's in fields
+        elif view and view.action == 'retrieve':
+            # For detail view: exclude SVG (will be loaded separately for better UX)
+            # Keep form_fields so forms can load immediately
+            representation.pop('svg', None)
         else:
-            # For detail view: add watermark to SVG, keep banner
+            # For other actions (create, update): include SVG if present
             if 'svg' in representation and representation['svg']:
                 representation['svg'] = WaterMark().add_watermark(representation['svg'])
         
@@ -317,8 +321,12 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
             representation.pop('svg', None)
             representation.pop('form_fields', None)
             # Banner will be included automatically since it's in fields
+        elif view and view.action == 'retrieve':
+            # For detail view: exclude SVG (will be loaded separately for better UX)
+            # Keep form_fields so forms can load immediately
+            representation.pop('svg', None)
         else:
-            # For detail view: keep SVG and form_fields WITHOUT watermarks
+            # For other actions (create, update): include SVG if present
             # No watermark processing - admin gets clean templates
             pass
         
@@ -408,9 +416,13 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
         if view and view.action == 'list':
             representation.pop('form_fields', None)
             representation.pop('svg', None)
+        elif view and view.action == 'retrieve':
+            # For detail view: exclude SVG (will be loaded separately for better UX)
+            # Keep form_fields so forms can load immediately
+            representation.pop('svg', None)
         else:
-            # Add watermark to SVG if it's a test template (always add for purchased templates)
-            if instance.test and 'svg' in representation:
+            # For other actions (create, update): add watermark to SVG if it's a test template
+            if instance.test and 'svg' in representation and representation['svg']:
                 representation['svg'] = WaterMark().add_watermark(representation['svg'])
         
         return representation

@@ -213,12 +213,31 @@ FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
 REQUEST_BODY_SIZE_LIMIT = 100 * 1024 * 1024  # 100MB
 
 # Cache Configuration for better performance
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'unique-snowflake',
+# Use Redis for caching if available, fallback to local memory cache
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/1")
+
+# Try to use Redis cache, fallback to local memory cache
+try:
+    import django_redis
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            },
+            'KEY_PREFIX': 'sharptoolz',
+            'TIMEOUT': 300,  # Default timeout: 5 minutes
+        }
     }
-}
+except ImportError:
+    # Fallback to local memory cache if django-redis is not installed
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'unique-snowflake',
+        }
+    }
 
 
 # Default primary key field type

@@ -1,5 +1,6 @@
 # templates/views.py
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.pagination import PageNumberPagination
 from .models import Template, PurchasedTemplate, Tool, Tutorial, Font
@@ -12,6 +13,13 @@ from rest_framework import status
 from django.http import HttpResponse
 from .response_optimizer import add_list_response_headers
 from .font_injector import inject_fonts_into_svg
+from .watermark import WaterMark
+from .cache_utils import (
+    cache_template_list,
+    cache_template_detail,
+    cache_template_svg,
+    invalidate_template_cache
+)
 import cairosvg
 
 # Try to import Playwright renderer (optional - falls back to CairoSVG if not available)
@@ -52,7 +60,7 @@ class TemplateViewSet(viewsets.ModelViewSet):
         return super().get_authenticators()
     
     def get_queryset(self):
-        queryset = Template.objects.select_related('tool', 'tutorial')
+        queryset = Template.objects.select_related('tool', 'tutorial').prefetch_related('fonts')
         hot_param = self.request.query_params.get("hot")
         tool_param = self.request.query_params.get("tool")
 
@@ -69,6 +77,9 @@ class TemplateViewSet(viewsets.ModelViewSet):
         # For list views, defer large text fields to improve performance
         if self.action == 'list':
             queryset = queryset.defer('svg', 'form_fields')
+        # For detail views, defer SVG to load it separately for better UX
+        elif self.action == 'retrieve':
+            queryset = queryset.defer('svg')
         
         queryset = queryset.order_by('-created_at')
         return queryset
@@ -80,11 +91,30 @@ class TemplateViewSet(viewsets.ModelViewSet):
         add_list_response_headers(response, request, max_age=60)
         return response
     
+    def create(self, request, *args, **kwargs):
+        """Override create to invalidate cache"""
+        response = super().create(request, *args, **kwargs)
+        # Invalidate template list cache when new template is created
+        invalidate_template_cache()
+        return response
+    
+    def update(self, request, *args, **kwargs):
+        """Override update to invalidate cache"""
+        instance = self.get_object()
+        response = super().update(request, *args, **kwargs)
+        # Invalidate cache for this specific template and list
+        invalidate_template_cache(template_id=instance.id)
+        return response
+    
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         purchased_count = instance.purchases.count()
+        template_id = instance.id
         
         response = super().destroy(request, *args, **kwargs)
+        
+        # Invalidate cache for this template and list
+        invalidate_template_cache(template_id=template_id)
         
         if purchased_count > 0:
             return Response(
@@ -96,6 +126,26 @@ class TemplateViewSet(viewsets.ModelViewSet):
             )
         
         return response
+    
+    @cache_template_svg(timeout=1800)  # Cache for 30 minutes
+    @action(detail=True, methods=['get'], url_path='svg')
+    def get_svg(self, request, pk=None):
+        """Separate endpoint to load SVG content for better UX"""
+        # Create a minimal queryset without select_related/prefetch_related for SVG-only fetch
+        template = Template.objects.only('svg').get(pk=pk)
+        svg_content = template.svg
+        
+        if not svg_content:
+            return Response({"svg": None}, status=status.HTTP_200_OK)
+        
+        # Add watermark for non-admin users
+        is_admin = request.user.is_authenticated and request.user.is_staff
+        if not is_admin:
+            watermarked_svg = WaterMark().add_watermark(svg_content)
+        else:
+            watermarked_svg = svg_content
+        
+        return Response({"svg": watermarked_svg}, status=status.HTTP_200_OK)
 
 
 class ToolViewSet(viewsets.ModelViewSet):
@@ -135,7 +185,7 @@ class PurchasedTemplateViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self): # type: ignore
         user = self.request.user
-        queryset = PurchasedTemplate.objects.select_related('buyer', 'template')
+        queryset = PurchasedTemplate.objects.select_related('buyer', 'template').prefetch_related('template__fonts')
         
         if user.is_staff:
             queryset = queryset.all()
@@ -145,9 +195,36 @@ class PurchasedTemplateViewSet(viewsets.ModelViewSet):
         # For list views, defer large text fields to improve performance
         if self.action == 'list':
             queryset = queryset.defer('svg', 'form_fields')
+        # For detail views, defer SVG to load it separately for better UX
+        elif self.action == 'retrieve':
+            queryset = queryset.defer('svg')
         
         queryset = queryset.order_by('-created_at')
         return queryset
+    
+    @cache_template_svg(timeout=1800)  # Cache for 30 minutes
+    @action(detail=True, methods=['get'], url_path='svg')
+    def get_svg(self, request, pk=None):
+        """Separate endpoint to load SVG content for purchased templates"""
+        # Create a minimal queryset without select_related/prefetch_related for SVG-only fetch
+        user = request.user
+        queryset = PurchasedTemplate.objects.only('svg', 'test')
+        
+        if not user.is_staff:
+            queryset = queryset.filter(buyer=user)
+        
+        purchased_template = queryset.get(pk=pk)
+        svg_content = purchased_template.svg
+        
+        if not svg_content:
+            return Response({"svg": None}, status=status.HTTP_200_OK)
+        
+        # Add watermark if it's a test template
+        if purchased_template.test:
+            watermarked_svg = WaterMark().add_watermark(svg_content)
+            return Response({"svg": watermarked_svg}, status=status.HTTP_200_OK)
+        
+        return Response({"svg": svg_content}, status=status.HTTP_200_OK)
     
     def list(self, request, *args, **kwargs):
         """Override list to add cache headers"""
@@ -660,7 +737,7 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
     pagination_class = None
     
     def get_queryset(self):
-        queryset = Template.objects.select_related('tool', 'tutorial')
+        queryset = Template.objects.select_related('tool', 'tutorial').prefetch_related('fonts')
         hot_param = self.request.query_params.get("hot")
         tool_param = self.request.query_params.get("tool")
 
@@ -677,6 +754,54 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
         # For list views, defer large text fields to improve performance
         if self.action == 'list':
             queryset = queryset.defer('svg', 'form_fields')
+        # For detail views, defer SVG to load it separately for better UX
+        elif self.action == 'retrieve':
+            queryset = queryset.defer('svg')
         
         queryset = queryset.order_by('-created_at')
         return queryset
+    
+    @cache_template_list(timeout=300)  # Cache for 5 minutes
+    def list(self, request, *args, **kwargs):
+        """Override list to add caching"""
+        return super().list(request, *args, **kwargs)
+    
+    @cache_template_detail(timeout=600)  # Cache for 10 minutes
+    def retrieve(self, request, *args, **kwargs):
+        """Override retrieve to add caching"""
+        return super().retrieve(request, *args, **kwargs)
+    
+    @cache_template_svg(timeout=1800)  # Cache for 30 minutes
+    @action(detail=True, methods=['get'], url_path='svg')
+    def get_svg(self, request, pk=None):
+        """Separate endpoint to load SVG content for admin (no watermark)"""
+        # Create a minimal queryset without select_related/prefetch_related for SVG-only fetch
+        template = Template.objects.only('svg').get(pk=pk)
+        svg_content = template.svg
+        
+        if not svg_content:
+            return Response({"svg": None}, status=status.HTTP_200_OK)
+        
+        # Admin gets SVG without watermark
+        return Response({"svg": svg_content}, status=status.HTTP_200_OK)
+    
+    def create(self, request, *args, **kwargs):
+        """Override create to invalidate cache"""
+        response = super().create(request, *args, **kwargs)
+        invalidate_template_cache()
+        return response
+    
+    def update(self, request, *args, **kwargs):
+        """Override update to invalidate cache"""
+        instance = self.get_object()
+        response = super().update(request, *args, **kwargs)
+        invalidate_template_cache(template_id=instance.id)
+        return response
+    
+    def destroy(self, request, *args, **kwargs):
+        """Override destroy to invalidate cache"""
+        instance = self.get_object()
+        template_id = instance.id
+        response = super().destroy(request, *args, **kwargs)
+        invalidate_template_cache(template_id=template_id)
+        return response
