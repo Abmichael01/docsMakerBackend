@@ -180,8 +180,8 @@ class PurchasedTemplatePagination(PageNumberPagination):
 class PurchasedTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = PurchasedTemplateSerializer
     permission_classes = [IsOwnerOrAdmin]
-    # No pagination for user-facing purchased template listings
-    pagination_class = None
+    # Enable pagination for purchased template listings
+    pagination_class = PurchasedTemplatePagination
 
     def get_queryset(self): # type: ignore
         user = self.request.user
