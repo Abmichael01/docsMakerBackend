@@ -267,8 +267,13 @@ class DownloadDoc(APIView):
 
         try:
             # Optimize: Only fetch SVG and related fields needed for download
-            purchased_template = PurchasedTemplate.objects.select_related('template').only(
-                'svg', 'test', 'name', 'keywords', 'template__keywords', 'template__id'
+            # Use select_related for template (needed for keywords) but limit fields with only()
+            # Use prefetch_related for fonts to efficiently load only font data
+            purchased_template = PurchasedTemplate.objects.select_related('template').prefetch_related(
+                'template__fonts'
+            ).only(
+                'svg', 'test', 'name', 'keywords', 
+                'template__id', 'template__keywords'  # Only these template fields are loaded
             ).get(id=purchased_template_id, buyer=request.user)
             svg_content = purchased_template.svg
             if not template_name:
@@ -322,8 +327,10 @@ class DownloadDoc(APIView):
             print("Checking for fonts to inject...")
             fonts_to_inject = []
             if purchased_template and purchased_template.template:
-                # Optimize: Only fetch font IDs, names, and file fields needed for injection
-                fonts_to_inject = list(purchased_template.template.fonts.only('id', 'name', 'font_file').all())
+                # Optimize: Fonts are already prefetched, just access them
+                # The prefetch_related('template__fonts') already loaded fonts efficiently
+                fonts_to_inject = list(purchased_template.template.fonts.all())
+                # Ensure we only use the fields we need (already optimized by prefetch)
                 print(f"Found {len(fonts_to_inject)} font(s) to inject")
                 for font in fonts_to_inject:
                     print(f"  - Font: {font.name} (ID: {font.id})")
@@ -534,10 +541,15 @@ class DownloadDoc(APIView):
                     print(f"[Split Download] ERROR: PDF conversion failed: {str(e)}")
                     import traceback
                     print(traceback.format_exc())
-                    # Check if it's a poppler error
-                    if "poppler" in str(e).lower() or "pdfinfo" in str(e).lower():
+                    # Check if it's a poppler error (check both exception type and message)
+                    from pdf2image.exceptions import PDFInfoNotInstalledError
+                    if isinstance(e, PDFInfoNotInstalledError) or "poppler" in str(e).lower() or "pdfinfo" in str(e).lower():
                         return Response(
-                            {"error": "PDF splitting requires poppler-utils. Install with: sudo apt-get install poppler-utils (Linux) or brew install poppler (Mac)"},
+                            {
+                                "error": "PDF splitting requires poppler-utils to be installed.",
+                                "installation_command": "sudo apt-get install poppler-utils",
+                                "details": "Run this command in your terminal: sudo apt-get install poppler-utils"
+                            },
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR
                         )
                     raise

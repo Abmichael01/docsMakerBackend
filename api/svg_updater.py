@@ -1,7 +1,10 @@
 import re
+import hashlib
+import json
 from typing import Any, Dict, List, Tuple
 
-from bs4 import BeautifulSoup
+from lxml import etree
+from django.core.cache import cache
 
 
 def _extract_from_dependency(depends_on: str, field_values: Dict[str, Any]) -> str:
@@ -80,13 +83,36 @@ def update_svg_from_field_updates(
 ) -> Tuple[str, List[Dict[str, Any]]]:
     """
     Apply field updates to SVG content by mirroring frontend updateSvgFromFormData logic.
+    Uses caching to avoid reprocessing the same SVG with the same field updates.
 
     Returns tuple of (updated_svg, updated_field_values)
     """
     if not svg_content or not form_fields:
         return svg_content, form_fields
 
-    soup = BeautifulSoup(svg_content, "xml")
+    # Create cache key from SVG hash and field updates
+    # This allows us to cache processed results for identical inputs
+    svg_hash = hashlib.md5(svg_content.encode('utf-8')).hexdigest()
+    field_updates_str = json.dumps(field_updates or [], sort_keys=True)
+    cache_key = f"svg_update_{svg_hash}_{hashlib.md5(field_updates_str.encode('utf-8')).hexdigest()}"
+    
+    # Try to get from cache (cache for 1 hour)
+    cached_result = cache.get(cache_key)
+    if cached_result:
+        return cached_result[0], cached_result[1]
+
+    # Use lxml for much faster parsing of large SVGs (10-100x faster than BeautifulSoup)
+    try:
+        # Parse SVG with lxml (much faster for large files)
+        parser = etree.XMLParser(recover=True, huge_tree=True)
+        root = etree.fromstring(svg_content.encode('utf-8'), parser=parser)
+    except Exception:
+        # Fallback to original content if parsing fails
+        return svg_content, form_fields
+
+    # Build namespace map for xlink
+    nsmap = {'xlink': 'http://www.w3.org/1999/xlink'}
+    
     field_map = {field.get("id"): field for field in form_fields}
     field_values: Dict[str, Any] = {}
 
@@ -110,6 +136,13 @@ def update_svg_from_field_updates(
         else:
             computed_values[field_id] = field_values.get(field_id, "")
 
+    # Build a lookup map for faster element finding (O(1) instead of O(n))
+    element_map = {}
+    for elem in root.iter():
+        elem_id = elem.get("id")
+        if elem_id:
+            element_map[elem_id] = elem
+
     # Update SVG elements based on computed values
     for field in form_fields:
         field_id = field.get("id")
@@ -122,24 +155,24 @@ def update_svg_from_field_updates(
                 svg_element_id = option.get("svgElementId")
                 if not svg_element_id:
                     continue
-                el = soup.find(id=svg_element_id)
+                el = element_map.get(svg_element_id)
                 if not el:
                     continue
                 option_value = str(option.get("value"))
                 if option_value == str(value):
-                    el.attrs.pop("display", None)
-                    el["opacity"] = "1"
-                    el["visibility"] = "visible"
+                    el.attrib.pop("display", None)
+                    el.set("opacity", "1")
+                    el.set("visibility", "visible")
                 else:
-                    el["opacity"] = "0"
-                    el["visibility"] = "hidden"
-                    el["display"] = "none"
+                    el.set("opacity", "0")
+                    el.set("visibility", "hidden")
+                    el.set("display", "none")
             continue
 
         svg_element_id = field.get("svgElementId")
         if not svg_element_id:
             continue
-        el = soup.find(id=svg_element_id)
+        el = element_map.get(svg_element_id)
         if not el:
             continue
 
@@ -147,20 +180,24 @@ def update_svg_from_field_updates(
 
         if field_type in {"upload", "file", "sign"}:
             if value and isinstance(value, str) and value.strip():
-                el["xlink:href"] = value
+                el.set("{http://www.w3.org/1999/xlink}href", value)
         elif field_type == "hide":
             visible = _bool_from_value(value)
             if visible:
-                el["opacity"] = "1"
-                el["visibility"] = "visible"
-                el.attrs.pop("display", None)
+                el.set("opacity", "1")
+                el.set("visibility", "visible")
+                el.attrib.pop("display", None)
             else:
-                el["opacity"] = "0"
-                el["visibility"] = "hidden"
-                el["display"] = "none"
+                el.set("opacity", "0")
+                el.set("visibility", "hidden")
+                el.set("display", "none")
         else:
             string_value = "" if value is None else str(value)
-            el.string = string_value
+            # For lxml, set text content (this replaces existing text)
+            # Remove all children first to ensure clean text replacement
+            for child in list(el):
+                el.remove(child)
+            el.text = string_value
 
     # Update stored values to reflect latest state
     for field in form_fields:
@@ -168,5 +205,13 @@ def update_svg_from_field_updates(
         if field_id in computed_values:
             field["currentValue"] = computed_values[field_id]
 
-    return str(soup), form_fields
+    # Convert back to string (lxml is faster at serialization too)
+    result = (etree.tostring(root, encoding='unicode', pretty_print=False), form_fields)
+    
+    # Cache the result for 1 hour (3600 seconds)
+    # Only cache if SVG is reasonably sized (< 5MB) to avoid memory issues
+    if len(svg_content) < 5 * 1024 * 1024:  # 5MB limit
+        cache.set(cache_key, result, 3600)
+    
+    return result
 

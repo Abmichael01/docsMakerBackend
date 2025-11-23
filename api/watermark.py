@@ -1,10 +1,33 @@
 import re
+import hashlib
+from django.core.cache import cache
+
+# Pre-compile regex patterns for better performance
+VIEWBOX_PATTERN = re.compile(r'viewBox=["\']([^"\']+)["\']')
+WIDTH_PATTERN = re.compile(r'width=["\']([^"\'px]+)')
+HEIGHT_PATTERN = re.compile(r'height=["\']([^"\'px]+)')
+WATERMARK_PATTERN = re.compile(
+    r'<g\s+transform="rotate\([^)]+\)">\s*'
+    r'<text\s+[^>]*pointer-events="none"[^>]*>'
+    r'TEST DOCUMENT</text>\s*</g>',
+    re.IGNORECASE | re.DOTALL
+)
 
 class WaterMark():
     def add_watermark(self, svg_content):
-        """Add simple random watermarks to SVG"""
+        """Add simple random watermarks to SVG with caching for performance"""
         if not svg_content or '</svg>' not in svg_content:
             return svg_content
+        
+        # Create cache key from SVG content hash
+        # This allows us to cache watermarked SVGs to avoid reprocessing
+        svg_hash = hashlib.md5(svg_content.encode('utf-8')).hexdigest()
+        cache_key = f"svg_watermark_{svg_hash}"
+        
+        # Try to get from cache (cache for 24 hours since watermarks are deterministic)
+        cached_result = cache.get(cache_key)
+        if cached_result:
+            return cached_result
         
         # Get SVG dimensions
         width, height = self.get_svg_size(svg_content)
@@ -168,9 +191,26 @@ class WaterMark():
             if watermark_index >= actual_watermark_count:
                 break
         
-        # Insert before </svg>
+        # Optimize watermark insertion for large SVGs
+        # Use string building instead of replace() for better performance
+        if not watermarks:
+            return svg_content
+        
         watermark_text = '\n'.join(watermarks)
-        return svg_content.replace('</svg>', f'{watermark_text}\n</svg>')
+        # Find the position of </svg> tag
+        svg_end_pos = svg_content.rfind('</svg>')
+        if svg_end_pos == -1:
+            return svg_content
+        
+        # Build new SVG string efficiently
+        result = svg_content[:svg_end_pos] + f'\n{watermark_text}\n' + svg_content[svg_end_pos:]
+        
+        # Cache the result for 24 hours (86400 seconds)
+        # Only cache if SVG is reasonably sized (< 10MB) to avoid memory issues
+        if len(svg_content) < 10 * 1024 * 1024:  # 10MB limit
+            cache.set(cache_key, result, 86400)
+        
+        return result
 
     def remove_watermark(self, svg_content):
         """
@@ -180,16 +220,8 @@ class WaterMark():
         if not svg_content or '</svg>' not in svg_content:
             return svg_content
 
-        # Regex to match the watermark text elements
-        # This matches <text ...>TEST DOCUMENT</text> with pointer-events="none"
-        # Supports both old rotated format and new organized slanted format
-        watermark_pattern = re.compile(
-            r'<g\s+transform="rotate\([^)]+\)">\s*'
-            r'<text\s+[^>]*pointer-events="none"[^>]*>'
-            r'TEST DOCUMENT</text>\s*</g>',
-            re.IGNORECASE | re.DOTALL
-        )
-        cleaned_svg = re.sub(watermark_pattern, '', svg_content)
+        # Use pre-compiled regex pattern for better performance
+        cleaned_svg = WATERMARK_PATTERN.sub('', svg_content)
         return cleaned_svg
 
     def get_svg_size(self, svg_content):
@@ -197,8 +229,8 @@ class WaterMark():
         # Default size 
         width, height = 400, 300
 
-        # Try viewBox first
-        viewbox = re.search(r'viewBox=["\']([^"\']+)["\']', svg_content)
+        # Try viewBox first (using pre-compiled pattern)
+        viewbox = VIEWBOX_PATTERN.search(svg_content)
         if viewbox:
             values = viewbox.group(1).split()
             if len(values) >= 4:
@@ -206,9 +238,9 @@ class WaterMark():
                 height = float(values[3])
                 return width, height
         
-        # Try width/height attributes
-        width_match = re.search(r'width=["\']([^"\'px]+)', svg_content)
-        height_match = re.search(r'height=["\']([^"\'px]+)', svg_content)
+        # Try width/height attributes (using pre-compiled patterns)
+        width_match = WIDTH_PATTERN.search(svg_content)
+        height_match = HEIGHT_PATTERN.search(svg_content)
         
         if width_match:
             width = float(width_match.group(1))

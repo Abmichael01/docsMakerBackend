@@ -2,6 +2,7 @@
 from rest_framework import serializers
 from django.db.models import Sum, Count
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from api.watermark import WaterMark
 from .models import Template, PurchasedTemplate, Tool, Tutorial, Font
 from wallet.models import Wallet
@@ -10,6 +11,8 @@ from django.utils import timezone
 from datetime import timedelta
 from accounts.serializers import CustomUserDetailsSerializer
 from .svg_updater import update_svg_from_field_updates
+import hashlib
+import json
 
 User = get_user_model()
 

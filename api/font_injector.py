@@ -5,9 +5,23 @@ import base64
 import os
 import re
 import tempfile
+import hashlib
 from typing import List, Optional, Tuple
 from django.conf import settings
+from django.core.cache import cache
 from .models import Font
+
+# Pre-compile regex patterns for better performance
+DEFS_PATTERN = re.compile(r'(<defs[^>]*>)(.*?)(</defs>)', re.IGNORECASE | re.DOTALL)
+FONT_FAMILY_CSS_PATTERN = re.compile(r'font-family\s*:\s*([^;,\n]+)', re.IGNORECASE)
+STYLE_ATTR_PATTERN = re.compile(r'style\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE)
+FONT_FAMILY_ATTR_PATTERN = re.compile(r'font-family\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE)
+STYLE_BLOCK_PATTERN = re.compile(r'<style[^>]*>(.*?)</style>', re.DOTALL | re.IGNORECASE)
+SVG_PATTERN = re.compile(r'(<svg[^>]*>)', re.IGNORECASE)
+FONT_FACE_BLOCK_PATTERN = re.compile(r'@font-face\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', re.IGNORECASE | re.DOTALL)
+FONT_FAMILY_IN_FONTFACE_PATTERN = re.compile(r'font-family\s*:\s*["\']([^"\']+)["\']', re.IGNORECASE)
+URL_SRC_PATTERN = re.compile(r'src\s*:\s*url\s*\(\s*["\']?(https?://[^)"\'\s]+)', re.IGNORECASE)
+STYLE_PATTERN_IN_DEFS = re.compile(r'(<style[^>]*>)(<!\[CDATA\[)?(.*?)(\]\]>)?(</style>)', re.IGNORECASE | re.DOTALL)
 
 
 def _build_font_face(font_family: str, font_url: str, font_format: str) -> str:
@@ -30,15 +44,6 @@ def _extract_font_aliases(svg_content: str) -> dict:
     """
     alias_map = {}
     
-    # Pattern to find font-family in CSS (inside <style> blocks)
-    font_family_css_pattern = re.compile(r'font-family\s*:\s*([^;,\n]+)', re.IGNORECASE)
-    
-    # Pattern to find font-family in style attributes
-    style_attr_pattern = re.compile(r'style\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE)
-    
-    # Pattern to find font-family as XML attribute
-    font_family_attr_pattern = re.compile(r'font-family\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE)
-    
     def add_alias(value: str):
         """Add font family to alias map with exact name preservation"""
         # Take first font-family (before comma, which indicates fallbacks)
@@ -52,19 +57,18 @@ def _extract_font_aliases(svg_content: str) -> dict:
             # Store the exact name as it appears in SVG (preserves quotes, spacing, case)
             alias_map[key] = first_family
     
-    # Extract from <style> blocks
-    style_pattern = r'<style[^>]*>(.*?)</style>'
-    for style_block in re.findall(style_pattern, svg_content, re.DOTALL | re.IGNORECASE):
-        for match in font_family_css_pattern.findall(style_block):
+    # Extract from <style> blocks (using pre-compiled pattern)
+    for style_block in STYLE_BLOCK_PATTERN.findall(svg_content):
+        for match in FONT_FAMILY_CSS_PATTERN.findall(style_block):
             add_alias(match)
     
-    # Extract from style attributes (inline styles)
-    for style_attr in style_attr_pattern.findall(svg_content):
-        for match in font_family_css_pattern.findall(style_attr):
+    # Extract from style attributes (inline styles) - using pre-compiled pattern
+    for style_attr in STYLE_ATTR_PATTERN.findall(svg_content):
+        for match in FONT_FAMILY_CSS_PATTERN.findall(style_attr):
             add_alias(match)
     
-    # Extract from font-family XML attributes 
-    for match in font_family_attr_pattern.findall(svg_content):
+    # Extract from font-family XML attributes - using pre-compiled pattern
+    for match in FONT_FAMILY_ATTR_PATTERN.findall(svg_content):
         add_alias(match)
     
     return alias_map
@@ -84,7 +88,7 @@ def _get_font_candidates(font: Font) -> List[str]:
 
 def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optional[str] = None, embed_base64: bool = False) -> str:
     """
-    Inject @font-face declarations into SVG content
+    Inject @font-face declarations into SVG content with caching for performance
     
     Args:
         svg_content: The SVG content as a string
@@ -98,9 +102,20 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
     if not fonts:
         return svg_content
     
-    # Find or create <defs> section (case insensitive)
-    defs_pattern = re.compile(r'(<defs[^>]*>)(.*?)(</defs>)', re.IGNORECASE | re.DOTALL)
-    defs_match = defs_pattern.search(svg_content)
+    # Create cache key from SVG content hash and font IDs
+    # This allows us to cache font-injected SVGs to avoid reprocessing
+    svg_hash = hashlib.md5(svg_content.encode('utf-8')).hexdigest()
+    font_ids = sorted([str(font.id) for font in fonts])
+    font_ids_str = '_'.join(font_ids)
+    cache_key = f"svg_fonts_{svg_hash}_{hashlib.md5(font_ids_str.encode('utf-8')).hexdigest()}_{embed_base64}"
+    
+    # Try to get from cache (cache for 1 hour)
+    cached_result = cache.get(cache_key)
+    if cached_result:
+        return cached_result
+    
+    # Find or create <defs> section (using pre-compiled pattern)
+    defs_match = DEFS_PATTERN.search(svg_content)
     
     alias_map = _extract_font_aliases(svg_content)
     
@@ -199,8 +214,8 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
         defs_start, defs_content, defs_end = defs_match.groups()
         defs_full = defs_match.group(0)
         
-        style_pattern = re.compile(r'(<style[^>]*>)(<!\[CDATA\[)?(.*?)(\]\]>)?(</style>)', re.IGNORECASE | re.DOTALL)
-        style_match = style_pattern.search(defs_content)
+        # Use pre-compiled pattern for style matching
+        style_match = STYLE_PATTERN_IN_DEFS.search(defs_content)
         
         if style_match:
             style_full = style_match.group(0)
@@ -212,18 +227,14 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
             url_based_families = set()  # Track which fonts use URLs (need replacement when embed_base64=True)
             
             # Match @font-face blocks first, then extract font-family from within them
-            # Use balanced brace matching to handle nested braces in url() values
-            font_face_block_pattern = re.compile(r'@font-face\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', re.IGNORECASE | re.DOTALL)
-            font_family_in_fontface_pattern = re.compile(r'font-family\s*:\s*["\']([^"\']+)["\']', re.IGNORECASE)
-            url_src_pattern = re.compile(r'src\s*:\s*url\s*\(\s*["\']?(https?://[^)"\'\s]+)', re.IGNORECASE)
-            
-            for font_face_block in font_face_block_pattern.findall(existing_style):
-                for match in font_family_in_fontface_pattern.findall(font_face_block):
+            # Use pre-compiled patterns for better performance
+            for font_face_block in FONT_FACE_BLOCK_PATTERN.findall(existing_style):
+                for match in FONT_FAMILY_IN_FONTFACE_PATTERN.findall(font_face_block):
                     family_key = _normalize_font_key(match)
                     existing_families.add(family_key)
                     
                     # Check if this @font-face uses a URL (not base64)
-                    if url_src_pattern.search(font_face_block):
+                    if URL_SRC_PATTERN.search(font_face_block):
                         url_based_families.add(family_key)
             
             # When embed_base64=True, replace URL-based @font-face declarations
@@ -231,8 +242,8 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
             if embed_base64 and url_based_families:
                 # Remove all @font-face blocks that use URLs and need to be replaced
                 modified_style = existing_style
-                for font_face_block in font_face_block_pattern.findall(existing_style):
-                    family_matches = font_family_in_fontface_pattern.findall(font_face_block)
+                for font_face_block in FONT_FACE_BLOCK_PATTERN.findall(existing_style):
+                    family_matches = FONT_FAMILY_IN_FONTFACE_PATTERN.findall(font_face_block)
                     if family_matches:
                         family_key = _normalize_font_key(family_matches[0])
                         if family_key in url_based_families and family_key in unique_font_map:
@@ -274,11 +285,15 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
             svg_content = svg_content.replace(defs_full, new_defs_full, 1)
     else:
         # Create new <defs> section
-        # Find the opening <svg> tag (case insensitive)
-        svg_pattern = re.compile(r'(<svg[^>]*>)', re.IGNORECASE)
-        svg_match = svg_pattern.search(svg_content)
+        # Find the opening <svg> tag (using pre-compiled pattern)
+        svg_match = SVG_PATTERN.search(svg_content)
         if svg_match:
             svg_content = svg_content.replace(svg_match.group(0), svg_match.group(0) + f'\n<defs>\n{style_block}\n</defs>')
+    
+    # Cache the result for 1 hour (3600 seconds)
+    # Only cache if SVG is reasonably sized (< 10MB) to avoid memory issues
+    if len(svg_content) < 10 * 1024 * 1024:  # 10MB limit
+        cache.set(cache_key, svg_content, 3600)
     
     return svg_content
 
