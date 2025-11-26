@@ -11,7 +11,6 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.http import HttpResponse
-from .response_optimizer import add_list_response_headers
 from .font_injector import inject_fonts_into_svg
 from .watermark import WaterMark
 from .cache_utils import (
@@ -85,11 +84,8 @@ class TemplateViewSet(viewsets.ModelViewSet):
         return queryset
     
     def list(self, request, *args, **kwargs):
-        """Override list to add cache headers"""
-        response = super().list(request, *args, **kwargs)
-        # Add cache headers for list responses
-        add_list_response_headers(response, request, max_age=60)
-        return response
+        """Override list method"""
+        return super().list(request, *args, **kwargs)
     
     def create(self, request, *args, **kwargs):
         """Override create to invalidate cache"""
@@ -772,9 +768,8 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
         queryset = queryset.order_by('-created_at')
         return queryset
     
-    @cache_template_list(timeout=300)  # Cache for 5 minutes
     def list(self, request, *args, **kwargs):
-        """Override list to add caching"""
+        """Override list method"""
         return super().list(request, *args, **kwargs)
     
     @cache_template_detail(timeout=600)  # Cache for 10 minutes

@@ -148,32 +148,53 @@ def update_svg_from_field_updates(
         field_id = field.get("id")
         value = computed_values.get(field_id, "")
 
-        # Select fields
+        # Select fields - match frontend logic: hide all first, then show selected
         options = field.get("options")
         if options:
+            # First, hide ALL options (matching frontend behavior exactly)
             for option in options:
                 svg_element_id = option.get("svgElementId")
                 if not svg_element_id:
                     continue
                 el = element_map.get(svg_element_id)
-                if not el:
+                if el is None:
                     continue
+                # Hide all options first - match frontend exactly
+                # Remove any existing style attribute first (frontend line 43)
+                el.attrib.pop("style", None)
+                # Set attributes that will be preserved in serialization
+                el.set("opacity", "0")
+                el.set("visibility", "hidden")
+                el.set("display", "none")
+            
+            # Then, show only the selected option
+            # Frontend uses field.currentValue directly for select comparison (line 51)
+            # Use the value from field_values (which has the updated value from field_updates)
+            field_value = str(field_values.get(field_id, ""))
+            
+            selected_option = None
+            for option in options:
                 option_value = str(option.get("value"))
-                if option_value == str(value):
-                    el.attrib.pop("display", None)
-                    el.set("opacity", "1")
-                    el.set("visibility", "visible")
-                else:
-                    el.set("opacity", "0")
-                    el.set("visibility", "hidden")
-                    el.set("display", "none")
+                if option_value == field_value:
+                    selected_option = option
+                    break
+            
+            # Show the selected option - match frontend exactly
+            if selected_option and selected_option.get("svgElementId"):
+                selected_el = element_map.get(selected_option.get("svgElementId"))
+                if selected_el is not None:
+                    # Use SVG attributes that will be preserved in serialization
+                    selected_el.set("opacity", "1")
+                    selected_el.set("visibility", "visible")
+                    # Remove display attribute to show the element (frontend line 60)
+                    selected_el.attrib.pop("display", None)
             continue
 
         svg_element_id = field.get("svgElementId")
         if not svg_element_id:
             continue
         el = element_map.get(svg_element_id)
-        if not el:
+        if el is None:
             continue
 
         field_type = (field.get("type") or "text").lower()

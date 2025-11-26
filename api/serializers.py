@@ -377,8 +377,11 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
         if field_updates:
             base_svg = validated_data.get("svg", instance.svg)
             form_fields = instance.form_fields or []
-            updated_svg, _ = update_svg_from_field_updates(base_svg, form_fields, field_updates)
+            updated_svg, updated_fields = update_svg_from_field_updates(base_svg, form_fields, field_updates)
+            # Only save the updated SVG - let model.save() parse it to regenerate form_fields
             validated_data["svg"] = updated_svg
+            # Remove form_fields from validated_data so save() will parse from the updated SVG
+            validated_data.pop("form_fields", None)
         self.charge_if_test_false(instance, validated_data, is_update=True)
         return super().update(instance, validated_data)
 
@@ -394,8 +397,11 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
             template = Template.objects.only('svg', 'form_fields').get(pk=template.pk)
             base_svg = template.svg
             form_fields = template.form_fields or []
-            updated_svg, _ = update_svg_from_field_updates(base_svg, form_fields, field_updates)
+            updated_svg, updated_fields = update_svg_from_field_updates(base_svg, form_fields, field_updates)
+            # Only save the updated SVG - let model.save() parse it to regenerate form_fields
             validated_data["svg"] = updated_svg
+            # Remove form_fields from validated_data so save() will parse from the updated SVG
+            validated_data.pop("form_fields", None)
         elif template and "svg" not in validated_data:
             # Optimize: Only fetch SVG from template
             template = Template.objects.only('svg').get(pk=template.pk)

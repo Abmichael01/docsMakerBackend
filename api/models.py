@@ -109,7 +109,8 @@ class PurchasedTemplate(models.Model):
                 self.name = f"Orphaned Template #{count}"
 
         if self.svg:
-            # Parse SVG to generate form fields
+            # Always parse SVG to generate form fields from the latest SVG content
+            # This ensures that if parsing logic is updated, it will always use the new logic
             # SVG is kept as-is (no minification) to preserve Photoshop-exported designs
             self.form_fields = parse_svg_to_form_fields(self.svg)
 
