@@ -57,7 +57,8 @@ class Template(models.Model):
                 self.keywords = []
             else:
                 self.keywords = [str(self.keywords)]
-        super().save(*args, **kwargs)
+        
+        return super().save(*args, **kwargs)
 
     class Meta:
         indexes = [

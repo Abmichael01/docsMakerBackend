@@ -772,15 +772,13 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
         """Override list method"""
         return super().list(request, *args, **kwargs)
     
-    @cache_template_detail(timeout=600)  # Cache for 10 minutes
     def retrieve(self, request, *args, **kwargs):
-        """Override retrieve to add caching"""
+        """Override retrieve - no caching for admin to ensure fresh data"""
         return super().retrieve(request, *args, **kwargs)
     
-    @cache_template_svg(timeout=1800)  # Cache for 30 minutes
     @action(detail=True, methods=['get'], url_path='svg')
     def get_svg(self, request, pk=None):
-        """Separate endpoint to load SVG content for admin (no watermark)"""
+        """Separate endpoint to load SVG content for admin (no watermark) - NO CACHING for immediate updates"""
         # Create a minimal queryset without select_related/prefetch_related for SVG-only fetch
         template = Template.objects.only('svg').get(pk=pk)
         svg_content = template.svg

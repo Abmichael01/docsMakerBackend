@@ -284,7 +284,7 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Template
         fields = '__all__'
-        read_only_fields = ('id', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'created_at', 'updated_at', 'form_fields')
     
     def create(self, validated_data):
         fonts_data = validated_data.pop('fonts', None)
@@ -294,10 +294,18 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
         return template
     
     def update(self, instance, validated_data):
+        # Remove form_fields if present (should be read-only, but extra safety)
+        if 'form_fields' in validated_data:
+            validated_data.pop('form_fields', None)
+        
         fonts_data = validated_data.pop('fonts', None)
+        
         instance = super().update(instance, validated_data)
+        
         if fonts_data is not None:
             instance.fonts.set(fonts_data)
+        
+        print(f"SERIALIZER UPDATE: Returning instance. SVG will be saved by Django ORM.")
         return instance
     
     def to_representation(self, instance):
