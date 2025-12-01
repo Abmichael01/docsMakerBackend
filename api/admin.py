@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib import messages
 from .models import *
-
+ 
 class TemplateAdmin(admin.ModelAdmin):
     def delete_model(self, request, obj):
         # Count purchased templates before deletion
