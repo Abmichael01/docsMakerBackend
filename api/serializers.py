@@ -165,9 +165,13 @@ class AdminUsersSerializer(serializers.Serializer):
 
 
 class TutorialSerializer(serializers.ModelSerializer):
+    template_name = serializers.CharField(source='template.name', read_only=True)
+    template_tool = serializers.CharField(source='template.tool.id', read_only=True, allow_null=True)
+    template_tool_name = serializers.CharField(source='template.tool.name', read_only=True, allow_null=True)
+    
     class Meta:
         model = Tutorial
-        fields = ['id', 'template', 'url', 'title', 'created_at', 'updated_at']
+        fields = ['id', 'template', 'template_name', 'template_tool', 'template_tool_name', 'url', 'title', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
