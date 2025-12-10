@@ -31,8 +31,23 @@ BASIC FIELD TYPES
    Example: Reference_Code.gen.max_10 generates 10-character codes
 
 5. DEPENDENT FIELD
+   For TEXT dependencies (no field type needed):
    ID: City.depends_Country
    Meaning: This field copies the same content as the "Country" field - when Country changes, this field shows the same content
+   
+   For IMAGE dependencies (requires .upload):
+   ID: Photo.upload
+   ID: Photo_Copy.upload.depends_Photo
+   Meaning: Photo_Copy automatically displays the same image as Photo
+   ⚠️ IMPORTANT for image dependencies:
+   - Use .upload.depends_SourceField format (field type required!)
+   - The dependent field (Photo_Copy) will be HIDDEN from the form (auto-populated)
+   - The field name MUST be unique (Photo_Copy, Photo2, etc. - NOT the same as source)
+   
+   For SIGNATURE dependencies (requires .sign):
+   ID: Signature.sign
+   ID: Signature_Copy.sign.depends_Signature
+   Meaning: Signature_Copy automatically displays the same signature
 
 6. DATE FIELD
    ID: Start_Date.date
@@ -149,6 +164,13 @@ Order_Number.gen.max_12.tracking_id.link_https://track.example.com
 
 City.depends_Country
 - Creates: City field that copies the same content as Country field
+- Note: No field type needed for text dependencies
+
+Photo.upload
+Photo_Copy.upload.depends_Photo
+- Creates: Photo_Copy image field that automatically displays the same image as Photo
+- Photo_Copy is hidden from form (auto-populated when Photo changes)
+- Field name must be unique (Photo_Copy, not Photo)
 
 Start_Date.date
 - Creates: Basic date picker field (YYYY-MM-DD format)
