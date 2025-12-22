@@ -46,7 +46,20 @@ class Template(models.Model):
     
 
     def save(self, *args, **kwargs):
+        # Optimization: Only parse SVG if it has changed
+        should_parse = False
         if self.svg:
+            if self.pk:
+                try:
+                    old_instance = Template.objects.only('svg').get(pk=self.pk)
+                    if old_instance.svg != self.svg:
+                        should_parse = True
+                except Template.DoesNotExist:
+                    should_parse = True
+            else:
+                should_parse = True
+
+        if should_parse:
             # Parse SVG to generate form fields
             # SVG is kept as-is (no minification) to preserve Photoshop-exported designs
             self.form_fields = parse_svg_to_form_fields(self.svg)
@@ -109,7 +122,20 @@ class PurchasedTemplate(models.Model):
                 count = PurchasedTemplate.objects.filter(buyer=self.buyer, template__isnull=True).count() + 1
                 self.name = f"Orphaned Template #{count}"
 
+        # Optimization: Only parse SVG if it has changed
+        should_parse = False
         if self.svg:
+            if self.pk:
+                try:
+                    old_instance = PurchasedTemplate.objects.only('svg').get(pk=self.pk)
+                    if old_instance.svg != self.svg:
+                        should_parse = True
+                except PurchasedTemplate.DoesNotExist:
+                    should_parse = True
+            else:
+                should_parse = True
+
+        if should_parse:
             # Always parse SVG to generate form fields from the latest SVG content
             # This ensures that if parsing logic is updated, it will always use the new logic
             # SVG is kept as-is (no minification) to preserve Photoshop-exported designs

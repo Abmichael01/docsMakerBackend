@@ -83,9 +83,15 @@ class TemplateViewSet(viewsets.ModelViewSet):
         queryset = queryset.order_by('-created_at')
         return queryset
     
+    @cache_template_list(timeout=300)
     def list(self, request, *args, **kwargs):
         """Override list method"""
         return super().list(request, *args, **kwargs)
+    
+    @cache_template_detail(timeout=600)
+    def retrieve(self, request, *args, **kwargs):
+        """Override retrieve method to add caching"""
+        return super().retrieve(request, *args, **kwargs)
     
     def create(self, request, *args, **kwargs):
         """Override create to invalidate cache"""
