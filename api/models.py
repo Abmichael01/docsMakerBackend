@@ -7,6 +7,8 @@ from django.contrib.postgres.fields import JSONField  # Use `models.JSONField` i
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
 from .svg_parser import parse_svg_to_form_fields
+from django.core.files.base import ContentFile
+
 # SVG minification removed - SVGs from Photoshop are already optimized and minification can break designs
 
 User = get_user_model()
@@ -35,6 +37,8 @@ class Template(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     svg = models.TextField()
+    svg_file = models.FileField(upload_to='templates/svgs/', blank=True, null=True, help_text="SVG file storage")
+
     banner = models.ImageField(upload_to='template_banners/', blank=True, null=True, help_text="Banner image for the template")
     form_fields = models.JSONField(default=dict, blank=True)
     type = models.CharField(max_length=20, choices=TEMPLATE_TYPE_CHOICES)
@@ -59,10 +63,13 @@ class Template(models.Model):
             else:
                 should_parse = True
 
-        if should_parse:
+        if should_parse and self.svg:
             # Parse SVG to generate form fields
-            # SVG is kept as-is (no minification) to preserve Photoshop-exported designs
             self.form_fields = parse_svg_to_form_fields(self.svg)
+            
+            # Save SVG to file
+            filename = f"{self.id}.svg"
+            self.svg_file.save(filename, ContentFile(self.svg.encode('utf-8')), save=False)
 
         # Ensure keywords is always a list
         if not isinstance(self.keywords, list):
@@ -102,6 +109,7 @@ class PurchasedTemplate(models.Model):
     name = models.CharField(max_length=255, blank=True)
 
     svg = models.TextField()
+    svg_file = models.FileField(upload_to='purchased_templates/svgs/', blank=True, null=True, help_text="SVG file storage")
     form_fields = models.JSONField(default=dict, blank=True)
     test = models.BooleanField(default=True)
 
@@ -135,11 +143,13 @@ class PurchasedTemplate(models.Model):
             else:
                 should_parse = True
 
-        if should_parse:
+        if should_parse and self.svg:
             # Always parse SVG to generate form fields from the latest SVG content
-            # This ensures that if parsing logic is updated, it will always use the new logic
-            # SVG is kept as-is (no minification) to preserve Photoshop-exported designs
             self.form_fields = parse_svg_to_form_fields(self.svg)
+            
+            # Save SVG to file
+            filename = f"{self.id}.svg"
+            self.svg_file.save(filename, ContentFile(self.svg.encode('utf-8')), save=False)
 
         # Inherit keywords from template if not provided
         if not self.keywords and self.template and self.template.keywords:

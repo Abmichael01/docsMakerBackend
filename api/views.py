@@ -133,15 +133,28 @@ class TemplateViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], url_path='svg')
     def get_svg(self, request, pk=None):
         """Separate endpoint to load SVG content for better UX"""
-        # Create a minimal queryset without select_related/prefetch_related for SVG-only fetch
-        template = Template.objects.only('svg').get(pk=pk)
-        svg_content = template.svg
+        template = Template.objects.get(pk=pk)
+        
+        # Admin gets URL directly (fast)
+        is_admin = request.user.is_authenticated and request.user.is_staff
+        if is_admin and template.svg_file:
+             return Response({"url": request.build_absolute_uri(template.svg_file.url), "svg": None}, status=status.HTTP_200_OK)
+        
+        # Public gets watermarked content
+        if template.svg_file:
+            try:
+                # Read from file
+                with template.svg_file.open('rb') as f:
+                    svg_content = f.read().decode('utf-8')
+            except Exception as e:
+                print(f"Error reading SVG file: {e}")
+                svg_content = template.svg # Fallback
+        else:
+            svg_content = template.svg
         
         if not svg_content:
             return Response({"svg": None}, status=status.HTTP_200_OK)
         
-        # Add watermark for non-admin users
-        is_admin = request.user.is_authenticated and request.user.is_staff
         if not is_admin:
             watermarked_svg = WaterMark().add_watermark(svg_content)
         else:
@@ -207,15 +220,21 @@ class PurchasedTemplateViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], url_path='svg')
     def get_svg(self, request, pk=None):
         """Separate endpoint to load SVG content for purchased templates"""
-        # Create a minimal queryset without select_related/prefetch_related for SVG-only fetch
-        user = request.user
-        queryset = PurchasedTemplate.objects.only('svg', 'test')
+        purchased_template = PurchasedTemplate.objects.get(pk=pk)
         
-        if not user.is_staff:
-            queryset = queryset.filter(buyer=user)
-        
-        purchased_template = queryset.get(pk=pk)
-        svg_content = purchased_template.svg
+        # If test=False (Paid), return URL directly for speed
+        if not purchased_template.test and purchased_template.svg_file:
+             return Response({"url": request.build_absolute_uri(purchased_template.svg_file.url)}, status=status.HTTP_200_OK)
+
+        # If test=True or no file, read content
+        if purchased_template.svg_file:
+             try:
+                 with purchased_template.svg_file.open('rb') as f:
+                     svg_content = f.read().decode('utf-8')
+             except Exception:
+                 svg_content = purchased_template.svg
+        else:
+             svg_content = purchased_template.svg
         
         if not svg_content:
             return Response({"svg": None}, status=status.HTTP_200_OK)
@@ -274,10 +293,15 @@ class DownloadDoc(APIView):
             purchased_template = PurchasedTemplate.objects.select_related('template').prefetch_related(
                 'template__fonts'
             ).only(
-                'svg', 'test', 'name', 'keywords', 
+                'svg', 'svg_file', 'test', 'name', 'keywords', 
                 'template__id', 'template__keywords'  # Only these template fields are loaded
             ).get(id=purchased_template_id, buyer=request.user)
-            svg_content = purchased_template.svg
+            
+            if purchased_template.svg_file:
+                with purchased_template.svg_file.open('rb') as f:
+                    svg_content = f.read().decode('utf-8')
+            else:
+                svg_content = purchased_template.svg
             if not template_name:
                 template_name = purchased_template.name or ""
         except PurchasedTemplate.DoesNotExist:
@@ -789,14 +813,15 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], url_path='svg')
     def get_svg(self, request, pk=None):
         """Separate endpoint to load SVG content for admin (no watermark) - NO CACHING for immediate updates"""
-        # Create a minimal queryset without select_related/prefetch_related for SVG-only fetch
-        template = Template.objects.only('svg').get(pk=pk)
-        svg_content = template.svg
+        template = Template.objects.get(pk=pk)
         
+        if template.svg_file:
+             return Response({"url": request.build_absolute_uri(template.svg_file.url), "svg": None}, status=status.HTTP_200_OK)
+        
+        svg_content = template.svg
         if not svg_content:
             return Response({"svg": None}, status=status.HTTP_200_OK)
         
-        # Admin gets SVG without watermark
         return Response({"svg": svg_content}, status=status.HTTP_200_OK)
     
     def create(self, request, *args, **kwargs):
