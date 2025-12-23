@@ -11,6 +11,7 @@ from wallet.models import Transaction
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from wallet.serializers import WalletSerializer
+from api.models import SiteSettings
 
 
 def send_wallet_update(user, new_payment):
@@ -36,10 +37,13 @@ class WalletDetailView(APIView):
  
 class CreateCryptoPaymentView(APIView):
     TICKER = "bep20/usdt"
-    RECEIVING_ADDRESS = "0x8482a1d4716736bf3b71736fafac9e8cd679fae8"
     CALLBACK_SECRET = "your_callback_secret_here"
 
     def post(self, request):
+        # Fetch dynamic receiving address from SiteSettings
+        settings_obj = SiteSettings.get_settings()
+        receiving_address = settings_obj.crypto_address or "0x8482a1d4716736bf3b71736fafac9e8cd679fae8"
+
         # Generate a unique UUID per transaction
         tx_id = uuid.uuid4()
 
@@ -52,7 +56,7 @@ class CreateCryptoPaymentView(APIView):
         cryptapi_url = f"https://api.cryptapi.io/{self.TICKER}/create/"
         params = {
             "callback": callback_url,
-            "address": self.RECEIVING_ADDRESS,
+            "address": receiving_address,
             "confirmations": "1",
             "pending": "0",
             "post": "1",

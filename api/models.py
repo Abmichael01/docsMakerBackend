@@ -212,3 +212,36 @@ class Font(models.Model):
             'woff2': 'woff2',
         }
         return format_map.get(ext, 'truetype')
+
+class SiteSettings(models.Model):
+    """
+    Singleton model for site-wide settings like payment details and security questions.
+    """
+    crypto_address = models.CharField(max_length=255, blank=True, help_text="Crypto address for payments")
+    whatsapp_number = models.CharField(max_length=50, blank=True, help_text="WhatsApp number for manual payments")
+    manual_purchase_text = models.TextField(blank=True, help_text="Instructions for manual purchases")
+    
+    # Obfuscated security answers
+    dev_name_obfuscated = models.TextField(blank=True, help_text="Answer to: Second name of developer")
+    owner_name_obfuscated = models.TextField(blank=True, help_text="Answer to: Second name of owner")
+    
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        # Ensure only one instance exists
+        if not self.pk and SiteSettings.objects.exists():
+            return  # Prevent creation of new records via save()
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_settings(cls):
+        """Helper to get OR create the singleton instance"""
+        obj, created = cls.objects.get_or_create(pk=1)
+        return obj
+
+    class Meta:
+        verbose_name = "Site Settings"
+        verbose_name_plural = "Site Settings"
+
+    def __str__(self):
+        return "Site Settings"

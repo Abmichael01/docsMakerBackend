@@ -4,7 +4,7 @@ from django.db.models import Sum, Count
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from api.watermark import WaterMark
-from .models import Template, PurchasedTemplate, Tool, Tutorial, Font
+from .models import Template, PurchasedTemplate, Tool, Tutorial, Font, SiteSettings
 from wallet.models import Wallet
 from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
@@ -460,6 +460,12 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
         if request and hasattr(request, 'build_absolute_uri'):
             return request.build_absolute_uri(banner_url)
         return banner_url
+
+class SiteSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SiteSettings
+        fields = ['crypto_address', 'whatsapp_number', 'manual_purchase_text', 'updated_at']
+        read_only_fields = ['updated_at']
     
 
     

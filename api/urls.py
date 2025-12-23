@@ -1,6 +1,5 @@
 from rest_framework.routers import DefaultRouter
 from .views import *
-from .views_admin import AdminOverview, AdminUsers, AdminUserDetails
 from django.urls import path
 
 router = DefaultRouter()
@@ -10,6 +9,7 @@ router.register(r'admin/templates', AdminTemplateViewSet, basename='admin-templa
 router.register(r'purchased-templates', PurchasedTemplateViewSet, basename='purchased-template')
 router.register(r'tutorials', TutorialViewSet, basename='tutorial')
 router.register(r'fonts', FontViewSet, basename='font')
+router.register(r'settings', SiteSettingsViewSet, basename='settings')
 
 urlpatterns = [
     path("track/<str:tracking_id>/", PublicTemplateTrackingView.as_view(), name="track-template"),

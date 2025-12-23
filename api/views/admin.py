@@ -1,22 +1,18 @@
-from .serializers import *
-from .permissions import *
-from rest_framework.permissions import SAFE_METHODS
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.http import HttpResponse
-import cairosvg
-from django.contrib.auth import get_user_model
-from django.db.models import Sum, Count, Q
+from rest_framework.pagination import PageNumberPagination
+from django.db.models import Q
 from django.utils import timezone
 from datetime import timedelta
-from rest_framework.pagination import PageNumberPagination
-from wallet.models import Wallet, Transaction
-from accounts.serializers import CustomUserDetailsSerializer
 from django.shortcuts import get_object_or_404
+from django.contrib.auth import get_user_model
+
+from ..serializers import AdminOverviewSerializer, AdminUsersSerializer
+from ..permissions import IsAdminOrReadOnly
+from accounts.serializers import CustomUserDetailsSerializer
 
 User = get_user_model()
-
 
 class AdminOverview(APIView):
     permission_classes = [IsAdminOrReadOnly]
@@ -50,11 +46,6 @@ class AdminUsers(APIView):
         - new_users: New users for today, past 7/14/30 days
         - total_purchases_users: Users with purchases for today, past 7/14/30 days
         - users: Paginated user list
-        
-        Query Parameters:
-        - page: Page number (default: 1)
-        - page_size: Items per page (default: 10)
-        - search: Search term to filter users by username or email
         """
         try:
             # Get query parameters
@@ -65,17 +56,14 @@ class AdminUsers(APIView):
             # Base queryset
             users_queryset = User.objects.all()
             
-            # Apply search filter if search parameter is provided
+            # Apply search filter
             if search:
                 users_queryset = users_queryset.filter(
                     Q(username__icontains=search) | 
                     Q(email__icontains=search)
                 )
             
-            # Get all users count (with search filter applied)
-            all_users = users_queryset.count()
-            
-            # Get new users statistics (with search filter applied)
+            # Get statistics
             now = timezone.now()
             today = now.date()
             seven_days_ago = today - timedelta(days=7)
@@ -89,7 +77,6 @@ class AdminUsers(APIView):
                 'past_30_days': users_queryset.filter(date_joined__date__gte=thirty_days_ago).count(),
             }
             
-            # Get users with purchases statistics (with search filter applied)
             total_purchases_users = {
                 'today': users_queryset.filter(
                     purchased_templates__test=False,
@@ -109,11 +96,10 @@ class AdminUsers(APIView):
                 ).distinct().count(),
             }
             
-            # Get paginated users (with search filter applied)
+            # Pagination
             paginator = PageNumberPagination()
             paginator.page_size = page_size
             
-            # Order by date joined (newest first)
             users_queryset = users_queryset.order_by('-date_joined')
             paginated_users = paginator.paginate_queryset(users_queryset, request)
             
@@ -129,17 +115,16 @@ class AdminUsers(APIView):
             }
             
             data = {
-                'all_users': all_users,
+                'all_users': users_queryset.count(),
                 'new_users': new_users,
                 'total_purchases_users': total_purchases_users,
                 'users': users_data,
-                'search_term': search,  # Include the search term in response
+                'search_term': search,
             }
             
             return Response(data, status=status.HTTP_200_OK)
             
         except Exception as e:
-            print(f"Error in AdminUsers view: {str(e)}")
             return Response(
                 {'error': 'Internal server error', 'details': str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -150,134 +135,82 @@ class AdminUserDetails(APIView):
     permission_classes = [IsAdminOrReadOnly]
     
     def get(self, request, user_id):
-        """
-        Get detailed information about a specific user including:
-        - User details
-        - Wallet information
-        - Purchase history
-        - Wallet transaction history
-        """
         try:
-            # Get user or return 404
             user = get_object_or_404(User, id=user_id)
-            
-            # Get user details
             user_serializer = CustomUserDetailsSerializer(user)
-            user_data = user_serializer.data
             
-            # Get wallet information
-            wallet_data = None
-            try:
+            # Wallet data
+            wallet_data = {
+                'id': None,
+                'balance': 0.0,
+                'created_at': user.date_joined.isoformat(),
+            }
+            if hasattr(user, 'wallet'):
                 wallet = user.wallet
                 wallet_data = {
                     'id': str(wallet.id),
                     'balance': float(wallet.balance),
-                    'created_at': wallet.user.date_joined.isoformat(),
-                }
-            except:
-                wallet_data = {
-                    'id': None,
-                    'balance': 0.0,
-                    'created_at': user.date_joined.isoformat(),
+                    'created_at': wallet.created_at.isoformat() if hasattr(wallet, 'created_at') else user.date_joined.isoformat(),
                 }
             
-            # Get purchase history
+            # Purchase history
             purchases = user.purchased_templates.all().order_by('-created_at')
-            purchase_history = []
-            for purchase in purchases:
-                purchase_history.append({
-                    'id': str(purchase.id),
-                    'template_name': purchase.template.name,
-                    'name': purchase.name,
-                    'test': purchase.test,
-                    'tracking_id': purchase.tracking_id,
-                    'created_at': purchase.created_at.isoformat(),
-                    'updated_at': purchase.updated_at.isoformat(),
-                })
+            purchase_history = [{
+                'id': str(p.id),
+                'template_name': p.template.name if p.template else "Deleted Template",
+                'name': p.name,
+                'test': p.test,
+                'tracking_id': p.tracking_id,
+                'created_at': p.created_at.isoformat(),
+                'updated_at': p.updated_at.isoformat(),
+            } for p in purchases]
             
-            # Get wallet transaction history
+            # Transaction history
             transaction_history = []
-            try:
+            if hasattr(user, 'wallet'):
                 transactions = user.wallet.transactions.all().order_by('-created_at')
-                for transaction in transactions:
-                    transaction_history.append({
-                        'id': str(transaction.id),
-                        'type': transaction.type,
-                        'amount': float(transaction.amount),
-                        'status': transaction.status,
-                        'description': transaction.description,
-                        'tx_id': transaction.tx_id,
-                        'address': transaction.address,
-                        'created_at': transaction.created_at.isoformat(),
-                    })
-            except:
-                pass  # No wallet or transactions
+                transaction_history = [{
+                    'id': str(t.id),
+                    'type': t.type,
+                    'amount': float(t.amount),
+                    'status': t.status,
+                    'description': t.description,
+                    'tx_id': t.tx_id,
+                    'address': t.address,
+                    'created_at': t.created_at.isoformat(),
+                } for t in transactions]
             
-            # Get additional statistics
+            # Stats
             stats = {
                 'total_purchases': user.purchased_templates.count(),
                 'paid_purchases': user.purchased_templates.filter(test=False).count(),
                 'test_purchases': user.purchased_templates.filter(test=True).count(),
-                'total_downloads': user.downloads,
+                'total_downloads': getattr(user, 'downloads', 0),
                 'days_since_joined': (timezone.now() - user.date_joined).days,
             }
             
-            data = {
-                'user': user_data,
+            return Response({
+                'user': user_serializer.data,
                 'wallet': wallet_data,
                 'purchase_history': purchase_history,
                 'transaction_history': transaction_history,
                 'stats': stats,
-            }
-            
-            return Response(data, status=status.HTTP_200_OK)
+            }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            print(f"Error in AdminUserDetails view: {str(e)}")
             return Response(
                 {'error': 'Internal server error', 'details': str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
     def delete(self, request, user_id):
-        """
-        Delete a user and all associated data
-        """
         try:
-            # Get user or return 404
             user = get_object_or_404(User, id=user_id)
-            
-            # Prevent deletion of superusers
             if user.is_superuser:
-                return Response(
-                    {'error': 'Cannot delete superuser'}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({'error': 'Cannot delete superuser'}, status=status.HTTP_400_BAD_REQUEST)
             
-            # Store user info for response
-            user_info = {
-                'id': user.id,
-                'username': user.username,
-                'email': user.email,
-            }
-            
-            # Delete the user (this will cascade delete related data)
+            user_info = {'id': user.id, 'username': user.username, 'email': user.email}
             user.delete()
-            
-            return Response(
-                {
-                    'message': 'User deleted successfully',
-                    'deleted_user': user_info
-                }, 
-                status=status.HTTP_200_OK
-            )
-            
+            return Response({'message': 'User deleted successfully', 'deleted_user': user_info}, status=status.HTTP_200_OK)
         except Exception as e:
-            print(f"Error in AdminUserDetails delete: {str(e)}")
-            return Response(
-                {'error': 'Internal server error', 'details': str(e)}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-        
-
-
+            return Response({'error': 'Internal server error', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
