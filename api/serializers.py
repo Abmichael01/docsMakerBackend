@@ -4,7 +4,7 @@ from django.db.models import Sum, Count
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from api.watermark import WaterMark
-from .models import Template, PurchasedTemplate, Tool, Tutorial, Font, SiteSettings
+from .models import Template, PurchasedTemplate, Tool, Tutorial, Font, SiteSettings, TransformVariable
 from wallet.models import Wallet
 from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
@@ -25,6 +25,12 @@ class FieldUpdateSerializer(serializers.Serializer):
 class ToolSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tool
+        fields = '__all__'
+
+
+class TransformVariableSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TransformVariable
         fields = '__all__'
 
 

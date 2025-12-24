@@ -245,3 +245,31 @@ class SiteSettings(models.Model):
 
     def __str__(self):
         return "Site Settings"
+
+class TransformVariable(models.Model):
+    """
+    Model for storing reusable SVG transform values (Rotate, Scale, Position).
+    Can be categorized by transform type.
+    """
+    CATEGORY_CHOICES = [
+        ('rotate', 'Rotation'),
+        ('scale', 'Scale'),
+        ('translateX', 'Position X'),
+        ('translateY', 'Position Y'),
+    ]
+    
+    name = models.CharField(max_length=100)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='rotate')
+    value = models.FloatField(default=0.0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.get_category_display()})"
+
+    class Meta:
+        verbose_name = "Transform Variable"
+        verbose_name_plural = "Transform Variables"
+        ordering = ['category', 'name']
+        unique_together = ['name', 'category']
