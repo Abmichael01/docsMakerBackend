@@ -370,10 +370,26 @@ def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
     for i, element in enumerate(elements):
         original_element_id = element.attrib.get("id", "")
         
+
+        
         if not original_element_id:
             continue
         
-        text_content = (element.text or "").strip()
+        # Robust text extraction: Handle multiline text (tspans)
+        # element.text only gets text before the first child.
+        text_parts = []
+        if element.text and element.text.strip():
+            text_parts.append(element.text.strip())
+            
+        for child in element:
+            # We assume children (like tspan) represent new segments/lines
+            if child.text and child.text.strip():
+                text_parts.append(child.text.strip())
+            # Capture tail text (text after closing tag of child)
+            if child.tail and child.tail.strip():
+                text_parts.append(child.tail.strip())
+        
+        text_content = "\n".join(text_parts)
         
         # Extract link URL before splitting (URLs contain dots)
         element_id, url = extract_link_url(original_element_id)

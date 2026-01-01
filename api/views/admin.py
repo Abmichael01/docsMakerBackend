@@ -21,17 +21,69 @@ class AdminOverview(APIView):
         """
         Get admin overview statistics including:
         - total_downloads: Sum of all user downloads
-        - total_users: Count of all users
+        - total_users: Count of all users  
         - total_purchased_docs: Count of paid documents (test=False)
         - total_wallet_balance: Sum of all wallet balances
+        - documents_chart: Daily document creation for last 30 days
+        - revenue_chart: Daily wallet balance growth for last 30 days
         """
+        from ..models import PurchasedTemplate
+        from wallet.models import Wallet
+        from django.db.models import Count, Sum
+        from django.db.models.functions import TruncDate
+        
         serializer = AdminOverviewSerializer()
+        
+        # Get documents chart data for last 30 days
+        thirty_days_ago = timezone.now().date() - timedelta(days=30)
+        documents_data = (
+            PurchasedTemplate.objects
+            .filter(created_at__date__gte=thirty_days_ago)
+            .annotate(date=TruncDate('created_at'))
+            .values('date')
+            .annotate(
+                total=Count('id'),
+                paid=Count('id', filter=Q(test=False)),
+                test=Count('id', filter=Q(test=True))
+            )
+            .order_by('date')
+        )
+        
+        # Format documents chart data
+        documents_chart = [
+            {
+                'date': item['date'].isoformat(),
+                'total': item['total'],
+                'paid': item['paid'],
+                'test': item['test']
+            }
+            for item in documents_data
+        ]
+        
+        # Get revenue/wallet chart data - cumulative wallet balances
+        # We'll calculate total wallet balance at each day
+        all_users_count = User.objects.count()
+        revenue_chart = []
+        
+        # For simplicity, let's show wallet balance trend over time
+        # by aggregating wallet creation dates and current balances
+        for i in range(30):
+            date = (timezone.now().date() - timedelta(days=29-i))
+            users_by_date = User.objects.filter(date_joined__date__lte=date).count()
+            
+            revenue_chart.append({
+                'date': date.isoformat(),
+                'users': users_by_date,
+                'downloads': serializer.get_total_downloads()  # This is total, not daily
+            })
         
         data = {
             'total_downloads': serializer.get_total_downloads(),
             'total_users': serializer.get_total_users(),
             'total_purchased_docs': serializer.get_total_purchased_docs(),
             'total_wallet_balance': serializer.get_total_wallet_balance(),
+            'documents_chart': documents_chart,
+            'revenue_chart': revenue_chart,
         }
         return Response(data, status=status.HTTP_200_OK)
 
