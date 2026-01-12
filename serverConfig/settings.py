@@ -62,7 +62,8 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'django.middleware.gzip.GZipMiddleware',  # GZIP compression for API responses
+    'django.middleware.gzip.GZipMiddleware',  # GZip must be high in the stack for API responses
+    'django.middleware.http.ConditionalGetMiddleware',  # Adds ETag support
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
