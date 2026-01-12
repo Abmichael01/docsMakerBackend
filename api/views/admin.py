@@ -19,23 +19,25 @@ class AdminOverview(APIView):
     
     def get(self, request):
         """
-        Get admin overview statistics including:
-        - total_downloads: Sum of all user downloads
-        - total_users: Count of all users  
-        - total_purchased_docs: Count of paid documents (test=False)
-        - total_wallet_balance: Sum of all wallet balances
-        - documents_chart: Daily document creation for last 30 days
-        - revenue_chart: Daily wallet balance growth for last 30 days
+        Get admin overview statistics with optimized queries and caching.
         """
+        from django.core.cache import cache
         from ..models import PurchasedTemplate
         from wallet.models import Wallet
         from django.db.models import Count, Sum
         from django.db.models.functions import TruncDate
         
+        # Try to get from cache first
+        cache_key = "admin_overview_stats"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(cached_data, status=status.HTTP_200_OK)
+            
         serializer = AdminOverviewSerializer()
+        now = timezone.now()
+        thirty_days_ago = now.date() - timedelta(days=30)
         
-        # Get documents chart data for last 30 days
-        thirty_days_ago = timezone.now().date() - timedelta(days=30)
+        # 1. Get documents chart data - optimized with single query
         documents_data = (
             PurchasedTemplate.objects
             .filter(created_at__date__gte=thirty_days_ago)
@@ -49,7 +51,6 @@ class AdminOverview(APIView):
             .order_by('date')
         )
         
-        # Format documents chart data
         documents_chart = [
             {
                 'date': item['date'].isoformat(),
@@ -60,31 +61,47 @@ class AdminOverview(APIView):
             for item in documents_data
         ]
         
-        # Get revenue/wallet chart data - cumulative wallet balances
-        # We'll calculate total wallet balance at each day
-        all_users_count = User.objects.count()
+        # 2. Get user growth data - optimized (no loop)
+        user_growth_data = (
+            User.objects
+            .filter(date_joined__date__gte=thirty_days_ago)
+            .annotate(date=TruncDate('date_joined'))
+            .values('date')
+            .annotate(count=Count('id'))
+            .order_by('date')
+        )
+        
+        # Calculate cumulative users
+        total_users_before_thirty_days = User.objects.filter(date_joined__date__lt=thirty_days_ago).count()
+        current_cumulative = total_users_before_thirty_days
+        
+        growth_lookup = {item['date']: item['count'] for item in user_growth_data}
         revenue_chart = []
         
-        # For simplicity, let's show wallet balance trend over time
-        # by aggregating wallet creation dates and current balances
+        total_downloads = serializer.get_total_downloads()
+        
         for i in range(30):
-            date = (timezone.now().date() - timedelta(days=29-i))
-            users_by_date = User.objects.filter(date_joined__date__lte=date).count()
-            
+            date = thirty_days_ago + timedelta(days=i+1)
+            count_on_day = growth_lookup.get(date, 0)
+            current_cumulative += count_on_day
             revenue_chart.append({
                 'date': date.isoformat(),
-                'users': users_by_date,
-                'downloads': serializer.get_total_downloads()  # This is total, not daily
+                'users': current_cumulative,
+                'downloads': total_downloads
             })
         
         data = {
-            'total_downloads': serializer.get_total_downloads(),
+            'total_downloads': total_downloads,
             'total_users': serializer.get_total_users(),
             'total_purchased_docs': serializer.get_total_purchased_docs(),
             'total_wallet_balance': serializer.get_total_wallet_balance(),
             'documents_chart': documents_chart,
             'revenue_chart': revenue_chart,
         }
+        
+        # Cache for 5 minutes
+        cache.set(cache_key, data, 300)
+        
         return Response(data, status=status.HTTP_200_OK)
 
 
@@ -93,61 +110,62 @@ class AdminUsers(APIView):
     
     def get(self, request):
         """
-        Get users data for the Users admin page with statistics:
-        - all_users: Total number of users
-        - new_users: New users for today, past 7/14/30 days
-        - total_purchases_users: Users with purchases for today, past 7/14/30 days
-        - users: Paginated user list
+        Get users data with optimized statistics aggregation.
         """
         try:
+            from django.core.cache import cache
+            
             # Get query parameters
             page = int(request.GET.get('page', 1))
             page_size = int(request.GET.get('page_size', 10))
             search = request.GET.get('search', '').strip()
             
-            # Base queryset
+            # Base queryset for users list (pagination)
             users_queryset = User.objects.all()
-            
-            # Apply search filter
             if search:
                 users_queryset = users_queryset.filter(
                     Q(username__icontains=search) | 
                     Q(email__icontains=search)
                 )
             
-            # Get statistics
-            now = timezone.now()
-            today = now.date()
-            seven_days_ago = today - timedelta(days=7)
-            fourteen_days_ago = today - timedelta(days=14)
-            thirty_days_ago = today - timedelta(days=30)
+            # Statistics Caching (stats don't need to be recalculated on every page change)
+            stats_cache_key = f"admin_user_stats_{hash(search)}"
+            stats_data = cache.get(stats_cache_key)
             
-            new_users = {
-                'today': users_queryset.filter(date_joined__date=today).count(),
-                'past_7_days': users_queryset.filter(date_joined__date__gte=seven_days_ago).count(),
-                'past_14_days': users_queryset.filter(date_joined__date__gte=fourteen_days_ago).count(),
-                'past_30_days': users_queryset.filter(date_joined__date__gte=thirty_days_ago).count(),
-            }
-            
-            total_purchases_users = {
-                'today': users_queryset.filter(
-                    purchased_templates__test=False,
-                    purchased_templates__created_at__date=today
-                ).distinct().count(),
-                'past_7_days': users_queryset.filter(
-                    purchased_templates__test=False,
-                    purchased_templates__created_at__date__gte=seven_days_ago
-                ).distinct().count(),
-                'past_14_days': users_queryset.filter(
-                    purchased_templates__test=False,
-                    purchased_templates__created_at__date__gte=fourteen_days_ago
-                ).distinct().count(),
-                'past_30_days': users_queryset.filter(
-                    purchased_templates__test=False,
-                    purchased_templates__created_at__date__gte=thirty_days_ago
-                ).distinct().count(),
-            }
-            
+            if not stats_data:
+                now = timezone.now()
+                today = now.date()
+                intervals = {
+                    'today': today,
+                    'past_7_days': today - timedelta(days=7),
+                    'past_14_days': today - timedelta(days=14),
+                    'past_30_days': today - timedelta(days=30),
+                }
+                
+                # Optimized stats aggregation
+                new_users = User.objects.aggregate(
+                    today=Count('id', filter=Q(date_joined__date=intervals['today'])),
+                    past_7_days=Count('id', filter=Q(date_joined__date__gte=intervals['past_7_days'])),
+                    past_14_days=Count('id', filter=Q(date_joined__date__gte=intervals['past_14_days'])),
+                    past_30_days=Count('id', filter=Q(date_joined__date__gte=intervals['past_30_days'])),
+                )
+                
+                # Fetch purchase stats - combined query
+                from ..models import PurchasedTemplate
+                purchases_stats = PurchasedTemplate.objects.filter(test=False).aggregate(
+                    today=Count('buyer_id', filter=Q(created_at__date=intervals['today']), distinct=True),
+                    past_7_days=Count('buyer_id', filter=Q(created_at__date__gte=intervals['past_7_days']), distinct=True),
+                    past_14_days=Count('buyer_id', filter=Q(created_at__date__gte=intervals['past_14_days']), distinct=True),
+                    past_30_days=Count('buyer_id', filter=Q(created_at__date__gte=intervals['past_30_days']), distinct=True),
+                )
+                
+                stats_data = {
+                    'all_users': User.objects.count() if not search else users_queryset.count(),
+                    'new_users': new_users,
+                    'total_purchases_users': purchases_stats,
+                }
+                cache.set(stats_cache_key, stats_data, 300) # Cache for 5 mins
+
             # Pagination
             paginator = PageNumberPagination()
             paginator.page_size = page_size
@@ -157,7 +175,7 @@ class AdminUsers(APIView):
             
             user_serializer = CustomUserDetailsSerializer(paginated_users, many=True)
             
-            users_data = {
+            users_list_data = {
                 'results': user_serializer.data,
                 'count': paginator.page.paginator.count,
                 'next': paginator.get_next_link(),
@@ -166,15 +184,18 @@ class AdminUsers(APIView):
                 'total_pages': paginator.page.paginator.num_pages,
             }
             
-            data = {
-                'all_users': users_queryset.count(),
-                'new_users': new_users,
-                'total_purchases_users': total_purchases_users,
-                'users': users_data,
+            return Response({
+                **stats_data,
+                'users': users_list_data,
                 'search_term': search,
-            }
+            }, status=status.HTTP_200_OK)
             
-            return Response(data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(
+                {'error': 'Internal server error', 'details': str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
             
         except Exception as e:
             return Response(
