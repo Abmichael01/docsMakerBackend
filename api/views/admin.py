@@ -196,13 +196,6 @@ class AdminUsers(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-            
-        except Exception as e:
-            return Response(
-                {'error': 'Internal server error', 'details': str(e)}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
 
 class AdminUserDetails(APIView):
     permission_classes = [IsAdminOrReadOnly]

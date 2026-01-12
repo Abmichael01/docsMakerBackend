@@ -36,7 +36,9 @@ class CustomUserDetailsSerializer(UserDetailsSerializer):
         return ROLE_CODES["user"]
 
     def get_wallet_balance(self, user):
-        return getattr(user.wallet, "balance", 0)
+        if hasattr(user, 'wallet'):
+            return user.wallet.balance
+        return 0
 
     def get_total_purchases(self, user):
         return user.purchased_templates.count()
