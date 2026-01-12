@@ -18,11 +18,15 @@ class Tool(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
         verbose_name_plural = "Tools"
         ordering = ['name']
+        indexes = [
+            models.Index(fields=['is_active']),
+        ]
     
     def __str__(self):
         return self.name
@@ -43,6 +47,7 @@ class Template(models.Model):
     form_fields = models.JSONField(default=dict, blank=True)
     type = models.CharField(max_length=20, choices=TEMPLATE_TYPE_CHOICES)
     tool = models.ForeignKey(Tool, on_delete=models.SET_NULL, null=True, blank=True, related_name='templates')
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     hot = models.BooleanField(default=False)
     keywords = models.JSONField(default=list, blank=True)
@@ -86,6 +91,7 @@ class Template(models.Model):
             models.Index(fields=['hot']),
             models.Index(fields=['created_at']),
             models.Index(fields=['tool']),
+            models.Index(fields=['is_active']),
         ]
 
     def get_purchased_count(self):
