@@ -2,13 +2,17 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
-from django.db.models import Q
+from django.db.models import Q, Count, Sum
+from django.db.models.functions import TruncDate
 from django.utils import timezone
 from datetime import timedelta
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 
-from ..serializers import AdminOverviewSerializer, AdminUsersSerializer
+from django.core.cache import cache
+from ..models import PurchasedTemplate
+from wallet.models import Wallet
+from ..serializers import AdminOverviewSerializer
 from ..permissions import IsAdminOrReadOnly
 from accounts.serializers import CustomUserDetailsSerializer
 
@@ -21,12 +25,6 @@ class AdminOverview(APIView):
         """
         Get admin overview statistics with optimized queries and caching.
         """
-        from django.core.cache import cache
-        from ..models import PurchasedTemplate
-        from wallet.models import Wallet
-        from django.db.models import Count, Sum
-        from django.db.models.functions import TruncDate
-        
         # Try to get from cache first
         cache_key = "admin_overview_stats"
         cached_data = cache.get(cache_key)
@@ -113,8 +111,6 @@ class AdminUsers(APIView):
         Get users data with optimized statistics aggregation.
         """
         try:
-            from django.core.cache import cache
-            
             # Get query parameters
             page = int(request.GET.get('page', 1))
             page_size = int(request.GET.get('page_size', 10))

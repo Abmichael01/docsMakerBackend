@@ -215,26 +215,33 @@ FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
 REQUEST_BODY_SIZE_LIMIT = 100 * 1024 * 1024  # 100MB
 
 # Cache Configuration for better performance
-# Use Redis for caching if available, fallback to local memory cache
+# Use Redis for caching in production, fallback to local memory cache in development
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/1")
 
-# Try to use Redis cache, fallback to local memory cache
-try:
-    import django_redis
-    CACHES = {
-        'default': {
-            'BACKEND': 'django_redis.cache.RedisCache',
-            'LOCATION': REDIS_URL,
-            'OPTIONS': {
-                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            },
-            'KEY_PREFIX': 'sharptoolz',
-            'TIMEOUT': 300,  # Default timeout: 5 minutes
+if ENV == "production":
+    try:
+        import django_redis
+        CACHES = {
+            'default': {
+                'BACKEND': 'django_redis.cache.RedisCache',
+                'LOCATION': REDIS_URL,
+                'OPTIONS': {
+                    'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                },
+                'KEY_PREFIX': 'sharptoolz',
+                'TIMEOUT': 300,  # Default timeout: 5 minutes
+            }
         }
-    }
-except (ImportError, Exception) as e:
-    # Fallback to local memory cache if django-redis is not installed or Redis is unavailable
-    print(f"Warning: Redis cache not available, using local memory cache. Error: {e}")
+    except (ImportError, Exception) as e:
+        print(f"Warning: Redis cache configured but not available. Error: {e}")
+        CACHES = {
+            'default': {
+                'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+                'LOCATION': 'unique-snowflake',
+            }
+        }
+else:
+    # Use local memory cache for development
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
