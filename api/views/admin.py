@@ -259,12 +259,43 @@ class AdminUserDetails(APIView):
                 'stats': stats,
             }, status=status.HTTP_200_OK)
             
+    def patch(self, request, user_id):
+        try:
+            user = get_object_or_404(User, id=user_id)
+            role = request.data.get('role')
+            
+            if role:
+                from accounts.serializers import ROLE_CODES
+                if role == ROLE_CODES["admin"]:
+                    user.is_superuser = True
+                    user.is_staff = True
+                elif role == ROLE_CODES["user"]:
+                    # Prevent demoting the last superuser if needed, but for now just follow the plan
+                    user.is_superuser = False
+                    user.is_staff = False
+                else:
+                    return Response({'error': 'Invalid role code'}, status=status.HTTP_400_BAD_REQUEST)
+                
+            # Also allow toggling is_active if needed
+            is_active = request.data.get('is_active')
+            if is_active is not None:
+                user.is_active = bool(is_active)
+                
+            user.save()
+            
+            # Return updated user details
+            user_serializer = CustomUserDetailsSerializer(user)
+            return Response({
+                'message': 'User updated successfully',
+                'user': user_serializer.data
+            }, status=status.HTTP_200_OK)
+            
         except Exception as e:
             return Response(
                 {'error': 'Internal server error', 'details': str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-    
+
     def delete(self, request, user_id):
         try:
             user = get_object_or_404(User, id=user_id)
