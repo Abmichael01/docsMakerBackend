@@ -39,7 +39,7 @@ class FontSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Font
-        fields = ['id', 'name', 'font_file', 'font_url', 'created_at']
+        fields = ['id', 'name', 'family', 'weight', 'style', 'font_file', 'font_url', 'created_at']
         read_only_fields = ['id', 'created_at']
     
     def get_font_url(self, obj):
@@ -357,7 +357,7 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
 
 class PurchasedTemplateSerializer(serializers.ModelSerializer):
     field_updates = FieldUpdateSerializer(many=True, write_only=True, required=False)
-    fonts = FontSerializer(source='template.fonts', many=True, read_only=True)
+    fonts = FontSerializer(many=True, read_only=True)
     banner = serializers.SerializerMethodField()
     
     class Meta:

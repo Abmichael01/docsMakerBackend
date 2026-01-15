@@ -124,6 +124,7 @@ class PurchasedTemplate(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     keywords = models.JSONField(default=list, blank=True)
+    fonts = models.ManyToManyField('Font', blank=True, related_name='purchased_templates', help_text="Fonts copied from template at purchase time")
 
     def save(self, *args, **kwargs):
         # Auto-generate name if not provided
@@ -168,6 +169,10 @@ class PurchasedTemplate(models.Model):
 
         super().save(*args, **kwargs)
 
+        # Copy fonts from parent template if this is a new purchase and has no fonts yet
+        if self.template and self.template.fonts.exists() and not self.fonts.exists():
+             self.fonts.set(self.template.fonts.all())
+
     class Meta:
         indexes = [
             models.Index(fields=['buyer']),
@@ -196,6 +201,9 @@ class Font(models.Model):
     """Font files for SVG templates"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, help_text="Font family name (e.g., 'OCR B', 'Arial')")
+    family = models.CharField(max_length=255, blank=True, help_text="CSS Font Family (e.g., 'Roboto'). Groups variants.")
+    weight = models.CharField(max_length=50, default="normal", help_text="CSS Font Weight (e.g., 'normal', 'bold', '400', '700')")
+    style = models.CharField(max_length=50, default="normal", help_text="CSS Font Style (e.g., 'normal', 'italic')")
     font_file = models.FileField(upload_to='fonts/', help_text="Font file (TTF, OTF, WOFF, WOFF2)")
     created_at = models.DateTimeField(auto_now_add=True)
     

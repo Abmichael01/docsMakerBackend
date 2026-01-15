@@ -24,17 +24,21 @@ URL_SRC_PATTERN = re.compile(r'src\s*:\s*url\s*\(\s*["\']?(https?://[^)"\'\s]+)'
 STYLE_PATTERN_IN_DEFS = re.compile(r'(<style[^>]*>)(<!\[CDATA\[)?(.*?)(\]\]>)?(</style>)', re.IGNORECASE | re.DOTALL)
 
 
-def _build_font_face(font_family: str, font_url: str, font_format: str) -> str:
+def _build_font_face(font_family: str, font_url: str, font_format: str, weight: str = "normal", style: str = "normal") -> str:
     return f'''@font-face {{
   font-family: "{font_family}";
   src: url("{font_url}") format("{font_format}");
+  font-weight: {weight};
+  font-style: {style};
 }}'''
 
 
-def _normalize_font_key(name: Optional[str]) -> str:
+def _normalize_font_key(name: Optional[str], weight: str = "normal", style: str = "normal") -> str:
     if not name:
         return ""
-    return re.sub(r'[^a-z0-9]', '', name.lower())
+    base_key = re.sub(r'[^a-z0-9]', '', name.lower())
+    # Create unique key for family + weight + style combination
+    return f"{base_key}_{weight}_{style}"
 
 
 def _extract_font_aliases(svg_content: str) -> dict:
@@ -51,8 +55,8 @@ def _extract_font_aliases(svg_content: str) -> dict:
         if not first_family:
             return
         
-        # Normalize for matching, but store the EXACT original
-        key = _normalize_font_key(first_family)
+        # Normalize for matching (name only)
+        key = re.sub(r'[^a-z0-9]', '', first_family.lower())
         if key:
             # Store the exact name as it appears in SVG (preserves quotes, spacing, case)
             alias_map[key] = first_family
@@ -160,43 +164,49 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
         if not font_url:
             continue
         
-        # Try to match font to what's actually used in SVG
-        candidates = _get_font_candidates(font)
-        css_family = None
+        # Use explicit family if present, otherwise font.name
+        # Important: Group variants under the same family name
+        effective_family = font.family if font.family else font.name
         
-        # First, try to find exact match in alias_map (what SVG actually uses)
-        for candidate in candidates:
-            key = _normalize_font_key(candidate)
-            if key and key in alias_map:
-                # Use the EXACT font-family name as it appears in the SVG
-                css_family = alias_map[key]
-                break
+        # If we have a clean family name, use it. 
+        # Otherwise fallback to matching logic which might grab the full name "Roboto Bold" as family
+        if font.family:
+             css_family = font.family
+        else:
+            # Try to find what SVG uses
+            candidates = _get_font_candidates(font)
+            # ... existing matching logic ...
+            # For back-compat with existing behavior if family not set
+            for candidate in candidates:
+                key = re.sub(r'[^a-z0-9]', '', candidate.lower()) # simple key for matching name only
+                if key and key in alias_map:
+                    css_family = alias_map[key]
+                    break
+            
+            if not css_family:
+                # If no family set and no match, default to name
+                 css_family = font.name
+
+        weight = getattr(font, 'weight', 'normal')
+        style = getattr(font, 'style', 'normal')
         
-        # If no match found, check if any alias matches our font name (reverse lookup)
-        if not css_family:
-            font_key = _normalize_font_key(font.name)
-            if font_key and font_key in alias_map:
-                css_family = alias_map[font_key]
+        # Generate unique key for this specific variant
+        variant_key = _normalize_font_key(css_family, weight, style)
         
-        # Fallback: use font name, but this might not match SVG exactly
-        if not css_family:
-            css_family = font.name or (candidates[0] if candidates else "CustomFont")
-            # Log warning if we couldn't match
-            if alias_map:
-                print(f"Warning: Font '{font.name}' not found in SVG. SVG uses: {list(alias_map.values())}")
-        
-        font_faces.append((css_family, _build_font_face(css_family, font_url, font_format)))
+        font_faces.append((variant_key, css_family, _build_font_face(css_family, font_url, font_format, weight, style)))
     
-    if not font_faces:
-        return svg_content
-    
-    # Deduplicate font-faces by family name (normalized) to avoid duplicates
-    # Map: normalized_family_key -> (css_family, font_face_css)
+    # Deduplicate font-faces by unique key (family + weight + style)
+    # Map: normalized_variant_key -> (css_family, font_face_css)
     unique_font_map = {}
     for css_family, font_face in font_faces:
-        family_key = _normalize_font_key(css_family)
-        if family_key not in unique_font_map:
-            unique_font_map[family_key] = (css_family, font_face)
+         # To be safe, we re-parse or pass key. 
+         # We already have the key in the tuple now: (key, css_family, font_face)
+         pass
+
+    unique_font_map = {}
+    for variant_key, css_family, font_face in font_faces:
+        if variant_key not in unique_font_map:
+            unique_font_map[variant_key] = (css_family, font_face)
     
     if not unique_font_map:
         return svg_content
@@ -252,9 +262,10 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
                 
                 # Now add all our fonts (new ones + replacements for removed URL-based ones)
                 missing_font_faces = []
-                for family_key, (css_family, font_face) in unique_font_map.items():
-                    if family_key not in existing_families or family_key in url_based_families:
-                        missing_font_faces.append(font_face)
+                for variant_key, (css_family, font_face) in unique_font_map.items():
+                    # If using base64, we just append all our unique fonts. 
+                    # We might duplicate if same font is already there in base64, but better than missing it.
+                    missing_font_faces.append(font_face)
                 
                 if missing_font_faces:
                     new_style_content = modified_style + '\n' + '\n'.join(missing_font_faces)
@@ -263,10 +274,10 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
             else:
                 # Original behavior: only add font-faces that don't already exist
                 missing_font_faces = []
-                for family_key, (css_family, font_face) in unique_font_map.items():
-                    # Check if this font-family already has a @font-face declaration (not just CSS usage)
-                    if family_key not in existing_families:
-                        missing_font_faces.append(font_face)
+                for variant_key, (css_family, font_face) in unique_font_map.items():
+                    # Always inject our fonts, trusting the unique_font_map to keep them unique among themselves.
+                    # We skip the complex 'existing_families' check to avoid false negatives on variants.
+                    missing_font_faces.append(font_face)
                 
                 new_style_content = existing_style + ('\n' + '\n'.join(missing_font_faces) if missing_font_faces else '')
             
