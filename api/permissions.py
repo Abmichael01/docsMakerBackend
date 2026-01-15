@@ -20,3 +20,7 @@ class IsOwnerOrAdmin(BasePermission):
 class IsAdminOnly(BasePermission):
     def has_permission(self, request, view):
         return request.user and request.user.is_authenticated and request.user.is_staff
+
+class IsSuperUser(BasePermission):
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and request.user.is_superuser

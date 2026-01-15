@@ -13,7 +13,7 @@ from django.core.cache import cache
 from ..models import PurchasedTemplate
 from wallet.models import Wallet
 from ..serializers import AdminOverviewSerializer
-from ..permissions import IsAdminOrReadOnly
+from ..permissions import IsAdminOrReadOnly, IsSuperUser
 from accounts.serializers import CustomUserDetailsSerializer
 
 User = get_user_model()
@@ -92,7 +92,7 @@ class AdminOverview(APIView):
             'total_downloads': total_downloads,
             'total_users': serializer.get_total_users(),
             'total_purchased_docs': serializer.get_total_purchased_docs(),
-            'total_wallet_balance': serializer.get_total_wallet_balance(),
+            'total_wallet_balance': serializer.get_total_wallet_balance() if request.user.is_superuser else None,
             'documents_chart': documents_chart,
             'revenue_chart': revenue_chart,
         }
@@ -104,7 +104,7 @@ class AdminOverview(APIView):
 
 
 class AdminUsers(APIView):
-    permission_classes = [IsAdminOrReadOnly]
+    permission_classes = [IsSuperUser]
     
     def get(self, request):
         """
@@ -194,7 +194,7 @@ class AdminUsers(APIView):
 
 
 class AdminUserDetails(APIView):
-    permission_classes = [IsAdminOrReadOnly]
+    permission_classes = [IsSuperUser]
     
     def get(self, request, user_id):
         try:
@@ -274,6 +274,9 @@ class AdminUserDetails(APIView):
                 from accounts.serializers import ROLE_CODES
                 if role == ROLE_CODES["admin"]:
                     user.is_superuser = True
+                    user.is_staff = True
+                elif role == ROLE_CODES["staff"]:
+                    user.is_superuser = False
                     user.is_staff = True
                 elif role == ROLE_CODES["user"]:
                     # Prevent demoting the last superuser if needed, but for now just follow the plan

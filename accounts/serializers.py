@@ -12,6 +12,7 @@ User = get_user_model()
 
 ROLE_CODES = {
     "admin": "ZK7T-93XY",
+    "staff": "S9K3-41TV",
     "user": "LQ5D-21VM",
 }
 
@@ -33,6 +34,8 @@ class CustomUserDetailsSerializer(UserDetailsSerializer):
     def get_role(self, user):
         if user.is_superuser:
             return ROLE_CODES["admin"]
+        if user.is_staff:
+            return ROLE_CODES["staff"]
         return ROLE_CODES["user"]
 
     def get_wallet_balance(self, user):
