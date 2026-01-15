@@ -259,6 +259,12 @@ class AdminUserDetails(APIView):
                 'stats': stats,
             }, status=status.HTTP_200_OK)
             
+        except Exception as e:
+            return Response(
+                {'error': 'Internal server error', 'details': str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
     def patch(self, request, user_id):
         try:
             user = get_object_or_404(User, id=user_id)
