@@ -52,19 +52,45 @@ class TemplateViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
         invalidate_template_cache()
+        
+        # Log action
+        from analytics.utils import log_action
+        log_action(
+            actor=request.user,
+            action="ADD_TEMPLATE",
+            target=f"Template {response.data.get('id', '?')}",
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
         return response
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         response = super().update(request, *args, **kwargs)
         invalidate_template_cache(template_id=instance.id)
+        
+        from analytics.utils import log_action
+        log_action(
+            actor=request.user,
+            action="UPDATE_TEMPLATE",
+            target=f"{instance.name} ({instance.id})",
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
         return response
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         template_id = instance.id
+        template_name = instance.name
         response = super().destroy(request, *args, **kwargs)
         invalidate_template_cache(template_id=template_id)
+        
+        from analytics.utils import log_action
+        log_action(
+            actor=request.user,
+            action="DELETE_TEMPLATE",
+            target=f"{template_name} ({template_id})",
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
         return response
 
     @action(detail=True, methods=['get'], url_path='svg')

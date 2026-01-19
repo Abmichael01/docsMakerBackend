@@ -77,5 +77,16 @@ class SiteSettingsViewSet(viewsets.ViewSet):
         serializer = SiteSettingsSerializer(settings_obj, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
+            
+            # Log action
+            from analytics.utils import log_action
+            log_action(
+                actor=request.user,
+                action="UPDATE_SETTINGS",
+                target="Site Settings",
+                ip_address=request.META.get('REMOTE_ADDR'),
+                details=request.data
+            )
+            
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

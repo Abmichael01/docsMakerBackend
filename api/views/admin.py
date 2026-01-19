@@ -288,6 +288,16 @@ class AdminUserDetails(APIView):
                 
             user.save()
             
+            # Log action
+            from analytics.utils import log_action
+            log_action(
+                actor=request.user,
+                action="UPDATE_USER",
+                target=f"{user.username} ({user.id})",
+                ip_address=request.META.get('REMOTE_ADDR'),
+                details=request.data
+            )
+            
             # Return updated user details
             user_serializer = CustomUserDetailsSerializer(user)
             return Response({
@@ -308,6 +318,16 @@ class AdminUserDetails(APIView):
                 return Response({'error': 'Cannot delete superuser'}, status=status.HTTP_400_BAD_REQUEST)
             
             user_info = {'id': user.id, 'username': user.username, 'email': user.email}
+            
+            # Log action before delete
+            from analytics.utils import log_action
+            log_action(
+                actor=request.user,
+                action="DELETE_USER",
+                target=f"{user.username} ({user.id})",
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            
             user.delete()
             return Response({'message': 'User deleted successfully', 'deleted_user': user_info}, status=status.HTTP_200_OK)
         except Exception as e:

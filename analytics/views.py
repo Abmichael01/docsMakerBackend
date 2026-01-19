@@ -122,9 +122,21 @@ class AnalyticsDashboardView(APIView):
                     "device": "Desktop",
                     "count": VisitorLog.objects.filter(timestamp__gte=start_date).exclude(user_agent__icontains="Mobile").exclude(user_agent__icontains="Tablet").count()
                 },
-                 {
-                    "device": "Tablet",
-                    "count": VisitorLog.objects.filter(timestamp__gte=start_date, user_agent__icontains="Tablet").count()
                 }
             ]
         })
+
+from rest_framework import viewsets
+from .models import AuditLog
+from .serializers import AuditLogSerializer
+
+class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Read-only viewset for Audit Logs. Restricted to Admins.
+    """
+    queryset = AuditLog.objects.all()
+    serializer_class = AuditLogSerializer
+    permission_classes = [IsAdminUser] # Staff can view logs? Let's allow IsAdminUser
+    
+    def get_queryset(self):
+        return AuditLog.objects.select_related('actor').order_by('-timestamp')
