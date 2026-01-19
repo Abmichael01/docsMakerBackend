@@ -121,7 +121,6 @@ class AnalyticsDashboardView(APIView):
                 {
                     "device": "Desktop",
                     "count": VisitorLog.objects.filter(timestamp__gte=start_date).exclude(user_agent__icontains="Mobile").exclude(user_agent__icontains="Tablet").count()
-                },
                 }
             ]
         })
