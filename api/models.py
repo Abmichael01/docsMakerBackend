@@ -3,6 +3,7 @@ import logging
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from .svg_parser import parse_svg_to_form_fields
 
 logger = logging.getLogger(__name__)
@@ -56,8 +57,15 @@ class Template(models.Model):
         raw_svg = getattr(self, '_raw_svg_data', None)
         if raw_svg:
             self.form_fields = parse_svg_to_form_fields(raw_svg)
-            filename = f"{self.id}.svg"
-            self.svg_file.save(filename, ContentFile(raw_svg.encode('utf-8')), save=False)
+            # Use a fixed path and write directly to storage to prevent Django from
+            # generating a new suffixed filename when the file already exists (which
+            # caused the doubled path: templates/svgs/templates/svgs/.svg)
+            storage_path = f"templates/svgs/{self.id}.svg"
+            content = ContentFile(raw_svg.encode('utf-8'))
+            if default_storage.exists(storage_path):
+                default_storage.delete(storage_path)
+            default_storage.save(storage_path, content)
+            self.svg_file.name = storage_path
         
         # 2. TRIGGER RE-PARSING ONLY IF FORCED (Manual Admin Button)
         # We no longer auto-reparse on patches to ensure maximum speed.
@@ -107,8 +115,12 @@ class PurchasedTemplate(models.Model):
         # 1. Handle initial SVG ingestion for purchases (bespoke uploads)
         raw_svg = getattr(self, '_raw_svg_data', None)
         if raw_svg:
-            filename = f"{self.id}.svg"
-            self.svg_file.save(filename, ContentFile(raw_svg.encode('utf-8')), save=False)
+            storage_path = f"purchased_templates/svgs/{self.id}.svg"
+            content = ContentFile(raw_svg.encode('utf-8'))
+            if default_storage.exists(storage_path):
+                default_storage.delete(storage_path)
+            default_storage.save(storage_path, content)
+            self.svg_file.name = storage_path
         
         # 2. Inherit basic meta on first save
         if not self.pk and self.template:
