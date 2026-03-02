@@ -9,7 +9,7 @@ class TemplateAdmin(admin.ModelAdmin):
         super().delete_model(request, obj)
         
         if purchased_count > 0:
-            messages.warning(
+            messages.warning( 
                 request, 
                 f"Template '{obj.name}' deleted successfully. {purchased_count} purchased template(s) are now orphaned but preserved."
             )
