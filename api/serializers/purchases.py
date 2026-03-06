@@ -179,3 +179,28 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
         if obj.template and obj.template.svg_file:
             return get_signed_url(obj.template.svg_file)
         return None
+
+class PublicTrackingSerializer(serializers.ModelSerializer):
+    """
+    Restricted serializer for public tracking sites.
+    Only returns fields marked with tracking roles and basic status info.
+    """
+    form_fields = serializers.SerializerMethodField()
+    updated_at = serializers.DateTimeField(read_only=True)
+
+    class Meta:
+        model = PurchasedTemplate
+        fields = ['id', 'tracking_id', 'name', 'form_fields', 'test', 'updated_at']
+
+    def get_form_fields(self, obj):
+        # Only return fields that have a trackingRole assigned in the SVG
+        return [
+            {
+                "id": f.get("id"),
+                "name": f.get("name"),
+                "trackingRole": f.get("trackingRole"),
+                "currentValue": f.get("currentValue") or f.get("defaultValue")
+            }
+            for f in (obj.form_fields or [])
+            if f.get("trackingRole")
+        ]

@@ -190,7 +190,8 @@ class PublicTemplateTrackingView(APIView):
         from ..serializers import PurchasedTemplateSerializer
         try:
             purchase = PurchasedTemplate.objects.get(tracking_id=tracking_id)
-            serializer = PurchasedTemplateSerializer(purchase)
+            from ..serializers.purchases import PublicTrackingSerializer
+            serializer = PublicTrackingSerializer(purchase)
             return Response(serializer.data)
         except PurchasedTemplate.DoesNotExist:
             return Response({"error": "Template not found"}, status=status.HTTP_404_NOT_FOUND)
