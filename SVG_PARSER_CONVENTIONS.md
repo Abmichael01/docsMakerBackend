@@ -168,9 +168,25 @@ When `ANOTHER_ID` changes, this field copies the same value.
 ```
 - Maps fields to specific roles for tracking website display
 - Must be the last extension (after `.gen`, `.max_`, `.link_`, `.editable`, etc.)
-- Common roles: `track_name`, `track_email`, `track_status`, `track_destination`, `track_package`, `track_weight`, `track_error_message`
+- Common roles: `track_name`, `track_email`, `track_status`, `track_destination`, `track_package`, `track_weight`, `track_error_message`, `track_origin1`, `track_destination1`, `track_origin1_departure_date`, `track_origin1_departure_time`
 
-**Examples:**
+**Flight Specific Roles (Multi-Leg Itineraries):**
+For complex journeys (One Way, Return, Stop Over), use numbered legs (e.g., `origin1`, `origin2`). Each leg supports distinct departure and arrival details:
+
+- `track_origin{N}`: Departure city for Leg N (e.g., `track_origin1`)
+- `track_origin{N}_departure_date`: Date the flight leaves the origin city
+- `track_origin{N}_departure_time`: Time the flight leaves the origin city
+- `track_destination{N}`: Arrival city for Leg N (e.g., `track_destination1`)
+- `track_destination{N}_arrival_date`: Date the flight arrives at the destination city
+- `track_destination{N}_arrival_time`: Time the flight arrives at the destination city
+- `track_flight_type`: Explicitly set "Return", "One Way", etc. (optional, auto-detected if omitted)
+- `track_flight`: General flight number fallback
+
+**Example Leg 1 (London to New York):**
+- Origin: `id="City.text.track_origin1"` (Value: "London")
+- Dep Date: `id="Date.text.track_origin1_departure_date"` (Value: "10 Jan")
+- Destination: `id="City.text.track_destination1"` (Value: "New York")
+- Arr Time: `id="Time.text.track_destination1_arrival_time"` (Value: "8:00 PM")
 ```xml
 <text id="Customer_Name.text.track_name">John Doe</text>
 <text id="Customer_Email.email.track_email">john@example.com</text>
