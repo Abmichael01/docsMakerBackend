@@ -185,19 +185,16 @@ For complex journeys (One Way, Return, Stop Over), use numbered legs (e.g., `ori
 **Example: Stop Over Flight (London -> Dubai -> Tokyo)**
 
 *Leg 1 (London to Dubai):*
-- Origin: `id="City.text.track_origin1"` (Value: "London")
-- Dep Date: `id="Date.text.track_origin1_departure_date"` (Value: "10 Jan")
-- Dep Time: `id="Time.text.track_origin1_departure_time"` (Value: "10:00 AM")
-- Destination: `id="City.text.track_destination1"` (Value: "Dubai")
-- Arr Date: `id="Date.text.track_destination1_arrival_date"` (Value: "10 Jan")
-- Arr Time: `id="Time.text.track_destination1_arrival_time"` (Value: "8:00 PM")
+- Origin: `id="Flight_Departure_Location.text.track_origin1"` (Value: "London")
+- Dep Date/Time: `id="Flight_Departure_Date_and_Time.text.track_origin1_departure_date"` (Value: "10 Jan, 10:00 AM")
+- Destination: `id="Flight_Arrival_Location.text.track_destination1"` (Value: "Dubai")
+- Arr Date/Time: `id="Flight_Arrival_Date_and_Time.text.track_destination1_arrival_date"` (Value: "10 Jan, 8:00 PM")
 
 *Leg 2 (Dubai to Tokyo):*
-- Origin: `id="City.text.track_origin2"` (Value: "Dubai")
-- Dep Date: `id="Date.text.track_origin2_departure_date"` (Value: "11 Jan")
-- Dep Time: `id="Time.text.track_origin2_departure_time"` (Value: "09:00 AM")
-- Destination: `id="City.text.track_destination2"` (Value: "Tokyo")
-- Arr Date: `id="Date.text.track_destination2_arrival_date"` (Value: "12 Jan")
+- Origin: `id="Flight_Departure_Location_2.text.track_origin2"` (Value: "Dubai")
+- Dep Date/Time: `id="Flight_Departure_Date_and_Time_2.text.track_origin2_departure_date"` (Value: "11 Jan, 09:00 AM")
+- Destination: `id="Flight_Arrival_Location_2.text.track_destination2"` (Value: "Tokyo")
+- Arr Date/Time: `id="Flight_Arrival_Date_and_Time_2.text.track_destination2_arrival_date"` (Value: "12 Jan, 02:00 PM")
 - Arr Time: `id="Time.text.track_destination2_arrival_time"` (Value: "06:00 AM")
 ```xml
 <text id="Customer_Name.text.track_name">John Doe</text>
