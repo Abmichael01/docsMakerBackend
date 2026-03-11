@@ -182,3 +182,42 @@ class SvgSyncIdChangeTest(TestCase):
         self.assertEqual(field['defaultValue'], 'New Name')
         self.assertEqual(field['currentValue'], 'New Name')
 
+
+class SvgIdValidationTest(TestCase):
+    """Tests for the new validate_svg_id() DSL validator."""
+
+    def test_valid_ids(self):
+        from .svg_parser import validate_svg_id
+        valid_samples = [
+            "Passport_No.text",
+            "Flight_No.text.track_flight_number",
+            "Logo.upload.editable",
+            "Price.number.max_100",
+            "Options.select_Option1.track_role",
+            "Departure.date_MM/DD/YYYY.track_origin1",
+            "Ref.gen_(rn[8]).tracking_id",
+            "Status.text.editable.track_status"
+        ]
+        for sample in valid_samples:
+            is_valid, error = validate_svg_id(sample)
+            self.assertTrue(is_valid, f"Should be valid: {sample}. Error: {error}")
+
+    def test_invalid_ids(self):
+        from .svg_parser import validate_svg_id
+        invalid_samples = [
+            ("", "ID cannot be empty"),
+            ("no_dot", "💡 Add '.text' or another extension to make this an editable field!"),
+            (".leading_dot.text", "Base ID (before the first dot) cannot be empty"),
+            ("base..double_dot", "ID contains empty segments (double dots)"),
+            ("base.dot_at_end.", "ID contains empty segments (double dots)"),
+            ("base.max_", "✍️ Add a value after 'max' (e.g., .max_50)."),
+            ("base.track_origin1.text", "⚠️ Move 'track_origin1' to the very end of the ID."),
+            ("base.track_", "Tracking role is missing a name"),
+            ("base.wrong_ext.text", "❌ 'wrong_ext' is not a valid extension."),
+            ("base.text.textarea", "❌ Field type '.textarea' must come immediately after the base ID.")
+        ]
+        for sample, expected_error in invalid_samples:
+            is_valid, error = validate_svg_id(sample)
+            self.assertFalse(is_valid, f"Should be invalid: {sample}")
+            self.assertIn(expected_error, error if error else "")
+

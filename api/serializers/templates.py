@@ -209,7 +209,18 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
         if svg_patch_data:
             from ..svg_utils import merge_svg_patches
             from ..svg_sync import sync_form_fields_with_patches
-            # 1. Merge new patches with existing ones in the database
+            from ..svg_parser import validate_svg_id
+
+            # 1. Validate Patch IDs against DSL
+            for patch in svg_patch_data:
+                if patch.get('attribute') == 'id':
+                    new_id = patch.get('value')
+                    is_valid, error = validate_svg_id(new_id)
+                    if not is_valid:
+                        print(f"[Admin-Update] REJECTED invalid ID: {new_id} - {error}")
+                        raise serializers.ValidationError(f"Invalid SVG ID '{new_id}': {error}")
+
+            # 2. Merge new patches with existing ones in the database
             existing_patches = instance.svg_patches or []
             print(f"[Admin-Update] New Patches: {len(svg_patch_data)}, Existing: {len(existing_patches)}")
             combined_patches = existing_patches + svg_patch_data

@@ -282,3 +282,39 @@ For complex journeys (One Way, Return, Stop Over), use numbered legs (e.g., `ori
 - Use `.tracking_id` to mark the main tracking field
 - All field names should use underscores for spaces
 - The parser converts SVG text elements into form fields automatically
+
+## SVG ID Validation Rules (DSL)
+
+To ensure system stability and scalability, all SVG IDs must follow a strict formal syntax (DSL). The validation engine (shared by frontend and backend) enforces these rules:
+
+### 1. Structure
+IDs must follow the pattern: `[base_id].[type].[extension_1].[extension_2]...[track_role]`
+- **At least one dot is required.** (e.g., `Flight_No.text`)
+- **No empty segments.** Double dots (`..`) or leading/trailing dots are forbidden.
+
+### 2. Base ID
+The `base_id` is the part before the first dot.
+- It must be **unique** within the SVG.
+- It cannot contain dots.
+- It should represent the logical field name (e.g., `Passport_No`).
+
+### 3. Extensions with Values
+Extensions that require a value (like `max`, `select`, `depends`, `date`, `gen`) must use an underscore `_` followed by the value.
+- **Valid:** `.max_50`, `.select_USA`, `.depends_Passport_No`
+- **Invalid:** `.max`, `.select_`, `.depends` (missing value)
+
+### 4. Field Types
+The first extension (or one in the chain) should ideally be a valid field type (e.g., `.text`, `.textarea`, `.upload`, `.date`, `.gen`). If omitted, it defaults to `text`.
+
+### 5. Tracking Roles (`.track_`)
+- **Placement:** Must be the **VERY LAST** extension in the ID.
+- **Value:** Must have a role name (e.g., `.track_name`).
+- **Valid:** `Departure.text.editable.track_origin1`
+- **Invalid:** `Departure.track_origin1.text` (wrong order)
+
+### 6. Duplicates
+- **Only one field type** extension is allowed per ID.
+- **Duplicate extensions** (e.g., `.max_10.max_20`) are strictly forbidden.
+
+> [!IMPORTANT]
+> The Admin Editor will highlight invalid IDs in red and disable the **Apply** button. The backend will reject any request containing an invalid SVG ID.

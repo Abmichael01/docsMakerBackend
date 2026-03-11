@@ -47,9 +47,9 @@ def extract_link_url(element_id: str) -> tuple[str, Optional[str]]:
     if ".link_" not in element_id:
         return element_id, None
     
-    link_start = element_id.index(".link_") + 6  # 6 = len(".link_")
-    url = element_id[link_start:]
-    cleaned_id = element_id[:element_id.index(".link_")]
+    link_start = str(element_id).index(".link_") + 6  # 6 = len(".link_")
+    url = str(element_id)[link_start:]
+    cleaned_id = str(element_id)[:str(element_id).index(".link_")]
     
     return cleaned_id, url
 
@@ -73,10 +73,110 @@ def get_extension_value(part: str, prefix: str) -> str:
     return part.replace(prefix, "")
 
 
+# Whitelist based on SharpToolz ID Intelligence Specification (Synced with Frontend)
+VALID_TYPES = ["text", "textarea", "upload", "file", "sign", "date", "gen", "number", "checkbox", "range", "color", "email", "tel", "status", "depends"]
+VALID_MODIFIERS = ["max_", "depends_", "select_", "link_", "date_", "gen_", "editable", "tracking_id", "grayscale", "grayscale_", "hide_checked", "hide_unchecked", "mode"]
+
+# Grammar rules (mapping allowed extensions after specific parts)
+# Note: In Python we use a dict for allowedAfter parity
+ALLOWED_AFTER = {
+    "max": ["text", "textarea", "gen", "number", "range", "min"],
+    "min": ["text", "textarea", "gen", "number", "range", "max"],
+    "editable": ["text", "textarea", "gen", "email", "number", "date", "checkbox", "upload", "tel", "password", "range", "color", "file", "status", "sign"],
+    "tracking_id": ["gen", "max", "min", "text", "number"],
+    "link": ["tracking_id"],
+    "date_format": ["date"],
+    "gen_rule": ["gen"],
+    "mode": ["gen"],
+    "grayscale": ["upload", "file"],
+    "hide_checked": ["text", "textarea", "gen", "email", "number", "date", "checkbox", "upload", "tel", "password", "range", "color", "file", "status", "sign", "editable", "max", "min", "tracking_id", "link", "date_format", "gen_rule"],
+    "hide_unchecked": ["text", "textarea", "gen", "email", "number", "date", "checkbox", "upload", "tel", "password", "range", "color", "file", "status", "sign", "editable", "max", "min", "tracking_id", "link", "date_format", "gen_rule"],
+    "select": ["editable", "track"] # track_ is special
+}
+
+def validate_svg_id(element_id: str) -> tuple[bool, Optional[str]]:
+    """
+    Validates an SVG ID string against our formal DSL.
+    VS Code / IDE Grade experience. (Synced with Frontend)
+    """
+    if not element_id:
+        return False, "ID cannot be empty"
+
+    # 1. Mandatory Extension Rule
+    if "." not in element_id:
+        return False, "💡 Add '.text' or another extension to make this an editable field!"
+
+    parts = element_id.split(".")
+    base_id = parts[0]
+
+    # 2. Validate Base ID
+    if not base_id:
+        return False, "Base ID (before the first dot) cannot be empty"
+
+    # 3. Check for empty segments (double dots)
+    if any(not p for p in parts):
+        return False, "ID contains empty segments (double dots)"
+
+    type_count = 0
+    last_part_base = ""
+
+    # 4. Whitelist & Syntax Enforcement
+    for i in range(1, len(parts)):
+        part = parts[i]
+        part_base = part.split("_")[0]
+        is_whitelisted = False
+
+        # A. Check Field Types
+        if part_base in VALID_TYPES:
+            is_whitelisted = True
+            type_count += 1
+            
+            # Field types must come first (after base ID)
+            if i != 1:
+                return False, f"❌ Field type '.{part_base}' must come immediately after the base ID."
+
+        # B. Check Modifiers/Extensions
+        if not is_whitelisted and (part_base in VALID_MODIFIERS or any(part.startswith(m) for m in VALID_MODIFIERS)):
+            is_whitelisted = True
+            
+            # Check allowedAfter (grammatical order)
+            if last_part_base:
+                if part_base in ALLOWED_AFTER:
+                    if last_part_base not in ALLOWED_AFTER[part_base]:
+                         return False, f"❌ Extension '.{part_base}' is not allowed after '.{last_part_base}'."
+            
+            # Check for duplicates
+            if any(p.split("_")[0] == part_base for p in parts[1:i]):
+                return False, f"❌ Duplicate extension '.{part_base}' not allowed."
+
+        # C. Check Roles
+        if part.startswith("track_"):
+            is_whitelisted = True
+            # Tracking role MUST be last
+            if i != len(parts) - 1:
+                return False, f"⚠️ Move '{part}' to the very end of the ID."
+            if part == "track_":
+                return False, "Tracking role is missing a name (e.g., use .track_name)"
+
+        if not is_whitelisted:
+            return False, f"❌ '{part}' is not a valid extension."
+
+        # Missing Values (e.g. .max_)
+        if part.endswith("_") and not part.startswith("track_"):
+             return False, f"✍️ Add a value after '{part[:-1]}' (e.g., .{part}50)."
+
+        last_part_base = part_base
+
+    # 5. Unique Type Rule
+    if type_count > 1:
+        return False, "Too many field types. Pick one: .text, .textarea, .upload, etc."
+
+    return True, None
+
+
 def validate_track_position(parts: List[str]) -> bool:
     """
-    Validate that track_ extension is the last extension (if present).
-    Returns True if valid, False if track_ is not in the last position.
+    Kept for backward compatibility but using the new validator logic.
     """
     track_index = next((i for i, p in enumerate(parts) if p.startswith("track_")), None)
     if track_index is not None:
@@ -201,7 +301,7 @@ def parse_field_extensions(parts: List[str]) -> Dict[str, Any]:
                 result["max_generation"] = max_content
             else:
                 try:
-                    result["max_value"] = int(max_content)
+                    result["max_value"] = str(max_content)
                 except ValueError:
                     pass
         
@@ -240,30 +340,30 @@ def parse_field_extensions(parts: List[str]) -> Dict[str, Any]:
         elif part == "editable":
             result["editable"] = True
 
-        elif part == "grayscale":
+        if part == "grayscale":
             result["requires_grayscale"] = True
-            result["grayscale_intensity"] = 100
+            result["grayscale_intensity"] = "100"
 
         elif part.startswith("grayscale_"):
             result["requires_grayscale"] = True
             intensity_raw = get_extension_value(part, "grayscale_")
             try:
                 intensity_value = int(float(intensity_raw))
-                result["grayscale_intensity"] = max(0, min(100, intensity_value))
+                result["grayscale_intensity"] = str(max(0, min(100, intensity_value)))
             except ValueError:
                 logger.warning(
                     "Invalid grayscale intensity '%s' on element '%s'; defaulting to 100",
                     intensity_raw,
                     parts[0],
                 )
-                result["grayscale_intensity"] = 100
+                result["grayscale_intensity"] = "100"
 
         # Handle field type extensions
         elif part.startswith("hide") or part in FIELD_TYPES:
             result["field_type"] = "hide" if part.startswith("hide") else part
     
     if result["requires_grayscale"] and result["grayscale_intensity"] is None:
-        result["grayscale_intensity"] = 100
+        result["grayscale_intensity"] = "100"
 
     return result
 
@@ -449,6 +549,12 @@ def process_element_to_field(element: ET.Element, fields_list: List[Dict[str, An
     
     text_content = "\n".join(text_parts)
     
+    # 1. Validate ID against DSL
+    is_valid, error = validate_svg_id(original_element_id)
+    if not is_valid:
+        logger.warning(f"Skipping element '{original_element_id}': {error}")
+        return
+
     # Extract link URL before splitting (URLs contain dots)
     element_id, url = extract_link_url(original_element_id)
     
