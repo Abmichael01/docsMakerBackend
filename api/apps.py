@@ -7,3 +7,8 @@ class ApiConfig(AppConfig):
 
     def ready(self):
         import api.signals
+        
+        # Background download of AI models for rembg
+        import threading
+        from scripts.download_models import download_models
+        threading.Thread(target=download_models, daemon=True).start()
