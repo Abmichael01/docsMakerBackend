@@ -13,6 +13,8 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.conf import settings
 from django.http import HttpResponse
 
+import rembg
+
 import cairosvg
 
 from ..models import PurchasedTemplate
@@ -288,48 +290,41 @@ class DownloadDoc(APIView):
 
 
 class RemoveBackgroundView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny] # Allow all users to access free feature
     
     def post(self, request):
         try:
+            # Handle both file uploads and base64 strings
+            image_data = None
             uploaded_file = request.FILES.get('image')
-            if not uploaded_file:
-                return Response({"error": "No image file provided"}, status=status.HTTP_400_BAD_REQUEST)
             
-            if uploaded_file.size > 10 * 1024 * 1024:  # 10MB limit
-                return Response({"error": "File too large (max 10MB)"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            user = request.user
-            charge_amount = 0.20
-            
-            if not hasattr(user, "wallet") or user.wallet.balance < charge_amount:
-                return Response({"error": "Insufficient wallet balance."}, status=status.HTTP_400_BAD_REQUEST)
-            
-            api_key = settings.REMOVEBG_API_KEY
-            if not api_key:
-                return Response({"error": "Remove.bg API key not configured."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
-            image_data = uploaded_file.read()
-            response = req.post(
-                'https://api.remove.bg/v1.0/removebg',
-                files={'image_file': image_data},
-                data={'size': 'auto'},
-                headers={'X-Api-Key': api_key},
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                user.wallet.debit(charge_amount, description="Background removal (Remove.bg)")
-                send_wallet_update(user, False)
-                result_base64 = base64.b64encode(response.content).decode('utf-8')
-                return Response({
-                    "success": True,
-                    "image": f"data:image/png;base64,{result_base64}",
-                    "message": "Background removed successfully"
-                })
+            if uploaded_file:
+                if uploaded_file.size > 15 * 1024 * 1024:  # 15MB limit
+                    return Response({"error": "File too large (max 15MB)"}, status=status.HTTP_400_BAD_REQUEST)
+                image_data = uploaded_file.read()
             else:
-                error_msg = response.json().get('errors', [{}])[0].get('title', 'Unknown error')
-                raise Exception(f"Remove.bg API error: {error_msg}")
+                base64_data = request.data.get('image')
+                if base64_data:
+                    if ',' in base64_data:
+                        base64_data = base64_data.split(',')[1]
+                    image_data = base64.b64decode(base64_data)
+            
+            if not image_data:
+                return Response({"error": "No image data provided"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Process with rembg
+            print(f"[RemoveBackgroundView] Processing background removal for image ({len(image_data)} bytes)")
+            
+            # rembg.remove returns bytes
+            output_data = rembg.remove(image_data)
+            
+            result_base64 = base64.b64encode(output_data).decode('utf-8')
+            return Response({
+                "success": True,
+                "image": f"data:image/png;base64,{result_base64}",
+                "message": "Background removed successfully using server-side AI"
+            })
             
         except Exception as e:
+            print(f"[RemoveBackgroundView] ERROR: {str(e)}")
             return Response({"error": f"Background removal failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
