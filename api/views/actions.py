@@ -334,5 +334,17 @@ class RemoveBackgroundView(APIView):
             })
             
         except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
             print(f"[RemoveBackgroundView] ERROR: {str(e)}")
-            return Response({"error": f"Background removal failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            print(f"[RemoveBackgroundView] TRACEBACK:\n{error_details}")
+            
+            # Additional debug info
+            import os
+            print(f"[RemoveBackgroundView] DEBUG: U2NET_HOME={os.environ.get('U2NET_HOME')}")
+            print(f"[RemoveBackgroundView] DEBUG: Current User={os.getlogin() if hasattr(os, 'getlogin') else 'unknown'}")
+            
+            return Response({
+                "error": f"Background removal failed: {str(e)}",
+                "debug_message": "Please check server logs for full traceback."
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
