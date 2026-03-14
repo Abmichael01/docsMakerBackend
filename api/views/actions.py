@@ -312,11 +312,19 @@ class RemoveBackgroundView(APIView):
             if not image_data:
                 return Response({"error": "No image data provided"}, status=status.HTTP_400_BAD_REQUEST)
             
-            # Process with rembg
+            # Process with rembg using a more accurate model and alpha matting for better edges
             print(f"[RemoveBackgroundView] Processing background removal for image ({len(image_data)} bytes)")
             
-            # rembg.remove returns bytes
-            output_data = rembg.remove(image_data)
+            # Using isnet-general-use for better subject detection and alpha_matting for clean edges
+            session = rembg.new_session("isnet-general-use")
+            output_data = rembg.remove(
+                image_data, 
+                session=session,
+                alpha_matting=True,
+                alpha_matting_foreground_threshold=240,
+                alpha_matting_background_threshold=10,
+                alpha_matting_erode_size=10
+            )
             
             result_base64 = base64.b64encode(output_data).decode('utf-8')
             return Response({
