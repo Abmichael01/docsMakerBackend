@@ -196,19 +196,21 @@ def get_field_name(base_id: str) -> str:
 # SELECT FIELD HANDLING
 # ============================================================================
 
-def create_select_option(element_id: str, element: ET.Element, parts: List[str]) -> Dict[str, Any]:
+def create_select_option(element_id: str, element: ET.Element, parts: List[str], option_text: str = "") -> Dict[str, Any]:
     """
     Create a select option dictionary from element data.
     """
     select_part = next(p for p in parts if p.startswith("select_"))
-    label = get_extension_value(select_part, "select_").replace("_", " ")
-    option_text = (element.text or "").strip()
+    # Technical value is the extension value (e.g., 'usa' from '.select_usa')
+    value = get_extension_value(select_part, "select_")
+    # Label is the element text (e.g., 'United States'), fallback to formatted key
+    label = option_text.strip() or value.replace("_", " ").title()
     
     return {
-        "value": element_id,
+        "value": value,
         "label": label,
         "svgElementId": element_id,
-        "displayText": option_text or label
+        "displayText": option_text.strip() or label
     }
 
 
@@ -237,15 +239,15 @@ def create_select_field(base_id: str, element_id: str, editable: bool) -> Dict[s
     Create a new select field dictionary.
     """
     return {
-                    "id": base_id,
+        "id": base_id,
         "name": get_field_name(base_id),
-                    "type": "select",
+        "type": "select",
         "svgElementId": element_id,
-                    "options": [],
-                    "defaultValue": "",
-                    "currentValue": "",
-                    "editable": editable,
-                }
+        "options": [],
+        "defaultValue": "",
+        "currentValue": "",
+        "editable": editable,
+    }
 
 
 def update_select_field(field: Dict[str, Any], option: Dict[str, Any], 
@@ -253,13 +255,17 @@ def update_select_field(field: Dict[str, Any], option: Dict[str, Any],
     """
     Update select field with new option and modifiers.
     """
+    curr_before = field.get("currentValue")
     # Set currentValue to visible option (the one shown in SVG)
-    if is_visible:
+    # Only set if not already set, so we don't default to the last visible option encountered
+    if is_visible and not field.get("currentValue"):
         field["currentValue"] = option["value"]
+        logger.info(f"[Select-Parser] Setting currentValue for {field['id']} to {option['value']} (visible: {is_visible}, before: '{curr_before}')")
     
     # Set defaultValue to first option if not set
     if not field.get("defaultValue") and field["options"]:
         field["defaultValue"] = field["options"][0]["value"]
+        logger.info(f"[Select-Parser] Setting defaultValue for {field['id']} to {field['defaultValue']} (options_count: {len(field['options'])})")
     
     # Set tracking role if present
     if modifiers["tracking_role"]:
@@ -566,7 +572,7 @@ def process_element_to_field(element: ET.Element, fields_list: List[Dict[str, An
     # HANDLE SELECT FIELDS
     # ====================================================================
     if any(p.startswith("select_") for p in parts):
-        option = create_select_option(original_element_id, element, parts)
+        option = create_select_option(original_element_id, element, parts, text_content)
         modifiers = extract_select_modifiers(parts)
         
         # Create select field if first option
@@ -620,6 +626,7 @@ def process_element_to_field(element: ET.Element, fields_list: List[Dict[str, An
 def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
     """
     Parse SVG text and convert elements with IDs into form field definitions.
+    Elements with the same base_id are merged into a single field.
     """
     try:
         root = ET.fromstring(svg_text)
@@ -629,11 +636,41 @@ def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
     
     elements = root.findall(".//*[@id]")
     
-    fields_list = []
+    fields_map: Dict[str, Dict[str, Any]] = {}
     select_options_map: Dict[str, List[Dict[str, Any]]] = {}
     
     for element in elements:
-        process_element_to_field(element, fields_list, select_options_map)
+        # Temporary list to catch the new field from this element
+        temp_list = []
+        process_element_to_field(element, temp_list, select_options_map)
+        
+        if not temp_list:
+            continue
+            
+        new_field = temp_list[0]
+        base_id = new_field["id"]
+        
+        if base_id not in fields_map:
+            fields_map[base_id] = new_field
+        else:
+            existing_field = fields_map[base_id]
+            # Merge logic:
+            # 1. Select type takes precedence
+            if new_field["type"] == "select":
+                # Transfer options and modifiers if moving from regular to select
+                new_field["currentValue"] = existing_field.get("currentValue") or new_field.get("currentValue")
+                new_field["touched"] = existing_field.get("touched") or new_field.get("touched")
+                fields_map[base_id] = new_field
+            elif existing_field["type"] == "select":
+                # Keep select but maybe update current/default value if this new element is visible
+                # update_select_field already handles some of this via select_options_map indirectly
+                pass
+            
+            # Additional merging (editable, trackingRole, etc.)
+            if new_field.get("editable"):
+                existing_field["editable"] = True
+            if new_field.get("trackingRole"):
+                existing_field["trackingRole"] = new_field["trackingRole"]
     
-    return fields_list
+    return list(fields_map.values())
 

@@ -3,6 +3,9 @@ import hashlib
 import json
 import math
 from typing import Any, Dict, List, Tuple
+import logging
+
+logger = logging.getLogger(__name__)
 
 from lxml import etree
 from django.core.cache import cache
@@ -185,11 +188,16 @@ def update_svg_from_field_updates(
     for field in form_fields:
         field_values[field.get("id")] = field.get("currentValue") or field.get("defaultValue") or ""
 
+    # Map for easy access to rotations and other non-value updates
+    rotation_updates: Dict[str, float] = {}
+
     # Apply incoming updates
     for update in field_updates or []:
         field_id = update.get("id")
         if field_id in field_map:
             field_values[field_id] = update.get("value", "")
+            if "rotation" in update:
+                rotation_updates[field_id] = update.get("rotation")
 
     # Apply dependency extraction pass
     computed_values: Dict[str, Any] = {}
@@ -202,11 +210,14 @@ def update_svg_from_field_updates(
             computed_values[field_id] = field_values.get(field_id, "")
 
     # Build a lookup map for faster element finding (O(1) instead of O(n))
-    element_map = {}
+    # Note: We support multiple elements per ID (duplicate IDs or prefix matching)
+    element_map: Dict[str, List[etree.Element]] = {}
     for elem in root.iter():
         elem_id = elem.get("id")
         if elem_id:
-            element_map[elem_id] = elem
+            if elem_id not in element_map:
+                element_map[elem_id] = []
+            element_map[elem_id].append(elem)
 
     # Update SVG elements based on computed values
     for field in form_fields:
@@ -221,125 +232,185 @@ def update_svg_from_field_updates(
                 svg_element_id = option.get("svgElementId")
                 if not svg_element_id:
                     continue
-                el = element_map.get(svg_element_id)
-                if el is None:
-                    continue
-                # Hide all options first - match frontend exactly
-                # Remove any existing style attribute first (frontend line 43)
-                el.attrib.pop("style", None)
-                # Set attributes that will be preserved in serialization
-                el.set("opacity", "0")
-                el.set("visibility", "hidden")
-                el.set("display", "none")
+                els = element_map.get(svg_element_id, [])
+                for el in els:
+                    # Hide all options first - match frontend exactly
+                    # Remove any existing style attribute first (frontend line 43)
+                    el.attrib.pop("style", None)
+                    # Set attributes that will be preserved in serialization
+                    el.set("opacity", "0")
+                    el.set("visibility", "hidden")
+                    el.set("display", "none")
             
             # Then, show only the selected option
-            # Frontend uses field.currentValue directly for select comparison (line 51)
+            # Frontend uses field.currentValue directly for select comparison
             # Use the value from field_values (which has the updated value from field_updates)
             field_value = str(field_values.get(field_id, ""))
             
             selected_option = None
             for option in options:
-                option_value = str(option.get("value"))
-                if option_value == field_value:
+                # Compare the technical value (usa, canada, etc.)
+                if str(option.get("value")) == field_value:
                     selected_option = option
                     break
             
             # Show the selected option - match frontend exactly
             if selected_option and selected_option.get("svgElementId"):
-                selected_el = element_map.get(selected_option.get("svgElementId"))
-                if selected_el is not None:
+                selected_els = element_map.get(selected_option.get("svgElementId"), [])
+                for selected_el in selected_els:
                     # Use SVG attributes that will be preserved in serialization
                     selected_el.set("opacity", "1")
                     selected_el.set("visibility", "visible")
                     # Remove display attribute to show the element (frontend line 60)
                     selected_el.attrib.pop("display", None)
-            continue
 
-        svg_element_id = field.get("svgElementId")
-        if not svg_element_id:
-            continue
-        el = element_map.get(svg_element_id)
-        if el is None:
-            continue
-
-        field_type = (field.get("type") or "text").lower()
-
-        if field_type in {"upload", "file", "sign"}:
-            # Sync transforms so we can apply rotation properly
-            _normalize_transform(el)
-
-            if value and isinstance(value, str) and value.strip():
-                el.set("{http://www.w3.org/1999/xlink}href", value)
-                el.set("preserveAspectRatio", "none")
+            # Match frontend logic: use selected option's displayText/label for text elements
+            if selected_option:
+                # Store the selected option's display value so it can be used for text injection below
+                # and the raw value for image injection.
+                select_text = selected_option.get("displayText") or selected_option.get("label") or field_value
+                # We do NOT continue here, so the code below can handle text/image injection
+            else:
+                select_text = field_value
             
-            # Apply rotation if present
-            rotation_val = field.get("rotation")
+            logger.info(f"[Select-Updater] Field {field_id}: Value='{field_value}', SelectedOption='{selected_option.get('label') if selected_option else 'None'}', InjectionText='{select_text}'")
+
+            # Use the select_text for text elements if this is a select field
+            value = select_text
+
+        # Find ALL target elements for this field
+        # Mirror frontend findElements: Exact ID match + prefix matching [id^="baseId."]
+        target_ids = {field.get("svgElementId"), field.get("id")}
+        target_elements = []
+        
+        for tid in target_ids:
+            if not tid: continue
+            # 1. Exact matches
+            target_elements.extend(element_map.get(tid, []))
             
-            # Inheritance logic: If this field depends on another field AND has no rotation of its own,
-            # try to inherit the rotation from the parent field.
+            # 2. Prefix matches (e.g. if field is 'Name', find 'Name.text')
+            # For efficiency, we only check this if tid is a base ID (not already specialized)
+            if "." not in tid:
+                for eid, els in element_map.items():
+                    if eid.startswith(f"{tid}."):
+                        target_elements.extend(els)
+        
+        # Deduplicate targets
+        target_elements = list(dict.fromkeys(target_elements))
+
+        for el in target_elements:
+            field_type = (field.get("type") or "text").lower()
+            tag_name = el.tag.split("}")[-1] if "}" in el.tag else el.tag
+            
+            is_image_tag = tag_name in {"image", "use"}
+            is_image_field = field_type in {"upload", "file", "sign"}
+            # Support .depends both as a type and as an extension in the ID for backward compatibility
+            is_depends_field = field_type == "depends" or ".depends" in field_id
+            
+            # Final sanity check: if the value is definitely an image data URL, we should allow updating image tags
+            is_image_value = isinstance(value, str) and (
+                value.startswith("data:image/") or 
+                value.startswith("blob:") or 
+                "base64" in value or
+                isinstance(value, str) and (value.endswith(".png") or value.endswith(".jpg") or value.endswith(".jpeg"))
+            )
+
+            # 1. IMAGE UPDATES
+            if is_image_tag:
+                # Only allow image updates if the field is an image field, a dependency field,
+                # or if the value itself clearly looks like an image (backward compatibility).
+                if not (is_image_field or is_depends_field or is_image_value):
+                    continue
+                
+                # Sync transforms
+                _normalize_transform(el)
+
+                if value and isinstance(value, str) and value.strip():
+                    el.set("{http://www.w3.org/1999/xlink}href", value)
+                    el.set("preserveAspectRatio", "none")
+            
+            # 2. VISIBILITY SPECIAL CASES (Can apply to any tag)
+            elif field_type == "hide" or field_type == "status":
+                visible = _bool_from_value(value)
+                if visible:
+                    el.set("opacity", "1")
+                    el.set("visibility", "visible")
+                    if "display" in el.attrib:
+                        el.attrib.pop("display")
+                else:
+                    el.set("opacity", "0")
+                    el.set("visibility", "hidden")
+                    el.set("display", "none")
+
+            # 3. TEXT UPDATES
+            else:
+                # Text updates should NOT hit image tags OR come from image fields
+                if is_image_tag or is_image_field:
+                    continue
+
+                string_value = "" if value is None else str(value)
+                for child in list(el):
+                    el.remove(child)
+                el.text = string_value
+
+            # 4. UNIVERSAL TRANSFORMATIONS (Rotation)
+            # Apply rotation to any element that hasn't been skipped
+            rotation_val = rotation_updates.get(field_id)
+            if rotation_val is None:
+                rotation_val = field.get("rotation")
+            
+            # Inheritance logic (from parent fields for .depends)
             if rotation_val is None and field.get("dependsOn"):
                 base_parent_id = field.get("dependsOn").split('[')[0]
-                parent_field = field_map.get(base_parent_id)
-                if parent_field and parent_field.get("rotation") is not None:
-                    rotation_val = parent_field.get("rotation")
+                parent_field_rotation = rotation_updates.get(base_parent_id)
+                if parent_field_rotation is None:
+                     parent_field = field_map.get(base_parent_id)
+                     if parent_field:
+                         parent_field_rotation = parent_field.get("rotation")
+                
+                if parent_field_rotation is not None:
+                    rotation_val = parent_field_rotation
             
             if rotation_val is not None:
                 try:
                     rotation = float(rotation_val)
-                    if math.isnan(rotation):
-                        continue
-                    
-                    x = float(el.get("x", 0))
-                    y = float(el.get("y", 0))
-                    w = float(el.get("width", 0))
-                    h = float(el.get("height", 0))
-                    cx = x + w / 2
-                    cy = y + h / 2
-                    
-                    existing_transform = el.get("transform", "")
-                    base_rotation = 0
-                    
-                    # Parse existing rotation if present. We look for rotate(angle, ...)
-                    rotate_match = re.search(r"rotate\s*\(\s*(-?\d+\.?\d*)", existing_transform)
-                    if rotate_match:
-                        base_rotation = float(rotate_match.group(1))
-                    
-                    # Add user rotation to base rotation
-                    total_rotation = base_rotation + rotation
-                    rotation_str = f"rotate({total_rotation}, {cx}, {cy})" if total_rotation != 0 else ""
-                    
-                    if "rotate(" in existing_transform:
-                        # Replace existing rotation with combined rotation
-                        new_transform = re.sub(r"rotate\([^)]+\)", rotation_str, existing_transform).strip()
-                    elif rotation_str:
-                        # Append new rotation
-                        new_transform = f"{existing_transform} {rotation_str}".strip()
-                    else:
-                        new_transform = existing_transform
-                    
-                    if new_transform:
-                        el.set("transform", new_transform)
-                    else:
-                        el.attrib.pop("transform", None)
+                    if not math.isnan(rotation):
+                        # For rotation, we need center points. 
+                        # Text elements use (x,y), Image elements use center.
+                        x = float(el.get("x", 0))
+                        y = float(el.get("y", 0))
+                        
+                        if is_image_tag:
+                            w = float(el.get("width", 0))
+                            h = float(el.get("height", 0))
+                            cx = x + w / 2
+                            cy = y + h / 2
+                        else:
+                            cx = x
+                            cy = y
+
+                        existing_transform = el.get("transform", "")
+                        base_rotation = 0
+                        rotate_match = re.search(r"rotate\s*\(\s*(-?\d+\.?\d*)", existing_transform)
+                        if rotate_match:
+                            base_rotation = float(rotate_match.group(1))
+                        
+                        total_rotation = base_rotation + rotation
+                        rotation_str = f"rotate({total_rotation}, {cx}, {cy})" if total_rotation != 0 else ""
+                        
+                        if "rotate(" in existing_transform:
+                            new_transform = re.sub(r"rotate\([^)]+\)", rotation_str, existing_transform).strip()
+                        elif rotation_str:
+                            new_transform = f"{existing_transform} {rotation_str}".strip()
+                        else:
+                            new_transform = existing_transform
+                        
+                        if new_transform:
+                            el.set("transform", new_transform)
+                        else:
+                            el.attrib.pop("transform", None)
                 except (ValueError, TypeError):
                     pass
-        elif field_type == "hide":
-            visible = _bool_from_value(value)
-            if visible:
-                el.set("opacity", "1")
-                el.set("visibility", "visible")
-                el.attrib.pop("display", None)
-            else:
-                el.set("opacity", "0")
-                el.set("visibility", "hidden")
-                el.set("display", "none")
-        else:
-            string_value = "" if value is None else str(value)
-            # For lxml, set text content (this replaces existing text)
-            # Remove all children first to ensure clean text replacement
-            for child in list(el):
-                el.remove(child)
-            el.text = string_value
 
     # Update stored values to reflect latest state
     for field in form_fields:
@@ -356,4 +427,3 @@ def update_svg_from_field_updates(
         cache.set(cache_key, result, 3600)
     
     return result
-
