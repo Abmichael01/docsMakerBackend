@@ -144,13 +144,9 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
     
     # Temporary field for initial SVG ingestion or full overwrites
     svg = serializers.CharField(write_only=True, required=False)
-    
-    # Use ListField for structured data. For FormData, this will need parsing in `update`.
-    svg_patch = serializers.ListField(
-        child=serializers.DictField(),
-        write_only=True,
-        required=False
-    )
+
+    # Flexible field to accept both JSON string (FormData) and list (JSON request)
+    svg_patch = serializers.JSONField(write_only=True, required=False)
 
     class Meta:
         model = Template
@@ -186,25 +182,31 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         if 'form_fields' in validated_data:
             validated_data.pop('form_fields', None)
-        
+
         fonts_data = validated_data.pop('fonts', None)
         svg_data = validated_data.pop('svg', None)
-        
+
         if svg_data:
             instance._raw_svg_data = svg_data
             # CRITICAL: Clear patches when replacing base SVG to avoid graphical corruption
             instance.svg_patches = []
             print(f"[Admin-Update] SVG replaced for {instance.name}. Cleared all patches.")
-        
+
         # --- Figma-style Patch Logic ---
         svg_patch_data = validated_data.pop('svg_patch', None)
-        
+
         request = self.context.get('request')
-        if not svg_patch_data and request and 'svg_patch' in request.data:
+        
+        # Handle FormData: svg_patch might be a JSON string
+        if svg_patch_data and isinstance(svg_patch_data, str):
             try:
-                svg_patch_data = json.loads(request.data.get('svg_patch'))
-            except (json.JSONDecodeError, TypeError):
-                raise serializers.ValidationError("Invalid JSON format for svg_patch.")
+                svg_patch_data = json.loads(svg_patch_data)
+            except (json.JSONDecodeError, TypeError) as e:
+                raise serializers.ValidationError(f"Invalid JSON format for svg_patch: {str(e)}")
+        
+        # Ensure svg_patch_data is a list
+        if svg_patch_data and not isinstance(svg_patch_data, list):
+            raise serializers.ValidationError("svg_patch must be a list of patch objects")
 
         if svg_patch_data:
             from ..svg_utils import merge_svg_patches

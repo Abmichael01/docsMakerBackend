@@ -123,31 +123,52 @@ def validate_svg_id(element_id: str) -> tuple[bool, Optional[str]]:
     # 4. Whitelist & Syntax Enforcement
     for i in range(1, len(parts)):
         part = parts[i]
-        part_base = part.split("_")[0]
         is_whitelisted = False
+
+        # Check if this is a FLAG extension (no underscore suffix needed)
+        # Examples: "tracking_id", "editable", "hide_checked", "hide_unchecked"
+        is_flag_extension = part in FLAG_EXTENSIONS
+
+        # For non-flag extensions, extract the base (e.g., "max_50" → "max", "link_http://..." → "link")
+        part_base = part.split("_")[0] if not is_flag_extension else part
 
         # A. Check Field Types
         if part_base in VALID_TYPES:
             is_whitelisted = True
             type_count += 1
-            
+
             # Field types must come first (after base ID)
             if i != 1:
                 return False, f"❌ Field type '.{part_base}' must come immediately after the base ID."
 
         # B. Check Modifiers/Extensions
-        if not is_whitelisted and (part_base in VALID_MODIFIERS or any(part.startswith(m) for m in VALID_MODIFIERS)):
-            is_whitelisted = True
-            
-            # Check allowedAfter (grammatical order)
-            if last_part_base:
-                if part_base in ALLOWED_AFTER:
-                    if last_part_base not in ALLOWED_AFTER[part_base]:
-                         return False, f"❌ Extension '.{part_base}' is not allowed after '.{last_part_base}'."
-            
-            # Check for duplicates
-            if any(p.split("_")[0] == part_base for p in parts[1:i]):
-                return False, f"❌ Duplicate extension '.{part_base}' not allowed."
+        if not is_whitelisted:
+            # Check exact match for flag extensions
+            if is_flag_extension:
+                is_whitelisted = True
+            # Check prefix match for modifiers with values (e.g., "max_50", "link_http://...")
+            elif any(part.startswith(m) for m in VALID_MODIFIERS):
+                is_whitelisted = True
+            # Check exact base match (for ALLOWED_AFTER lookups)
+            elif part_base in VALID_MODIFIERS:
+                is_whitelisted = True
+
+            if is_whitelisted:
+                # Check allowedAfter (grammatical order)
+                if last_part_base:
+                    # For flag extensions, use the full part name; otherwise use base
+                    lookup_key = part if is_flag_extension else part_base
+                    if lookup_key in ALLOWED_AFTER:
+                        if last_part_base not in ALLOWED_AFTER[lookup_key]:
+                             return False, f"❌ Extension '.{part}' is not allowed after '.{last_part_base}'."
+
+                # Check for duplicates
+                if is_flag_extension:
+                    if any(p == part for p in parts[1:i]):
+                        return False, f"❌ Duplicate extension '.{part}' not allowed."
+                else:
+                    if any(p.split("_")[0] == part_base for p in parts[1:i]):
+                        return False, f"❌ Duplicate extension '.{part_base}' not allowed."
 
         # C. Check Roles
         if part.startswith("track_"):
