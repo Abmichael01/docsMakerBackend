@@ -39,17 +39,33 @@ FLAG_EXTENSIONS = [
 def extract_link_url(element_id: str) -> tuple[str, Optional[str]]:
     """
     Extract link URL from element ID and return cleaned ID.
+    Supports both legacy link_URL and new link_"URL" syntax.
     URLs are extracted BEFORE splitting by dots to preserve URL structure.
     
     Returns:
         tuple: (cleaned_element_id, url)
     """
-    if ".link_" not in element_id:
-        return element_id, None
+    if ".link_\"" in str(element_id):
+        # New syntax: .link_"URL"
+        id_str = str(element_id)
+        start = id_str.find(".link_\"")
+        url_start = start + 7  # len(".link_\"")
+        url_end = id_str.find("\"", url_start)
+        
+        if url_end != -1:
+            url = id_str[url_start:url_end]
+            # Remove link portion and join parts before and after
+            cleaned_id = id_str[:start] + id_str[url_end + 1:]
+            return cleaned_id, url
+
+    if ".link_" not in str(element_id):
+        return str(element_id), None
     
-    link_start = str(element_id).index(".link_") + 6  # 6 = len(".link_")
-    url = str(element_id)[link_start:]
-    cleaned_id = str(element_id)[:str(element_id).index(".link_")]
+    id_str = str(element_id)
+    link_start = id_str.index(".link_")
+    url_start = link_start + 6  # 6 = len(".link_")
+    url = id_str[url_start:]
+    cleaned_id = id_str[:link_start]
     
     return cleaned_id, url
 
@@ -102,11 +118,14 @@ def validate_svg_id(element_id: str) -> tuple[bool, Optional[str]]:
     if not element_id:
         return False, "ID cannot be empty"
 
+    # Extract link URL BEFORE splitting (URLs contain dots)
+    cleaned_id, url = extract_link_url(element_id)
+
     # 1. Mandatory Extension Rule
-    if "." not in element_id:
+    if "." not in cleaned_id:
         return False, "💡 Add '.text' or another extension to make this an editable field!"
 
-    parts = element_id.split(".")
+    parts = cleaned_id.split(".")
     base_id = parts[0]
 
     # 2. Validate Base ID
@@ -525,53 +544,25 @@ def parse_field_from_id(element_id: str, text_content: str = "") -> Optional[Dic
 # MAIN PARSER FUNCTION
 # ============================================================================
 
-def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
-
-    """
-    Parse SVG text and convert elements with IDs into form field definitions.
-    
-    Supports extensions like:
-    - .text, .textarea, .upload, .sign, etc. (field types)
-    - .max_N (character/number limit)
-    - .depends_FIELD (field synchronization)
-    - .select_OPTION (dropdown options)
-    - .track_ROLE (tracking role - must be last)
-    - .editable (editable after purchase)
-    - .tracking_id (mark as tracking ID)
-    - .link_URL (external link)
-    - .grayscale or .grayscale_80 (force grayscale rendering with optional intensity)
-    
-    Args:
-        svg_text: SVG content as string
-        
-    Returns:
-        List of field dictionaries
-    """
-    try:
-        root = ET.fromstring(svg_text)
-    except ET.ParseError as e:
-        logger.error(f"Failed to parse SVG: {e}")
-        return []
-    
-    elements = root.findall(".//*[@id]")
     
 def process_element_to_field(element: ET.Element, fields_list: List[Dict[str, Any]], select_options_map: Dict[str, List[Dict[str, Any]]]):
     """
     Process a single SVG element and either update existing fields or add new ones.
     """
-    original_element_id = element.attrib.get("id", "")
+    # Prioritize data-name (preserves original naming with quotes/dots/slashes)
+    original_element_id = element.attrib.get("data-name") or element.attrib.get("id", "")
     if not original_element_id:
         return
 
     # Robust text extraction: Handle multiline text (tspans)
     text_parts = []
-    if element.text and element.text.strip():
+    if element.text is not None and element.text.strip():
         text_parts.append(element.text.strip())
         
     for child in element:
-        if child.text and child.text.strip():
+        if child.text is not None and child.text.strip():
             text_parts.append(child.text.strip())
-        if child.tail and child.tail.strip():
+        if child.tail is not None and child.tail.strip():
             text_parts.append(child.tail.strip())
     
     text_content = "\n".join(text_parts)
@@ -655,7 +646,11 @@ def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
         logger.error(f"Failed to parse SVG: {e}")
         return []
     
-    elements = root.findall(".//*[@id]")
+    # Find all elements with an ID OR a data-name (which Figma uses for layer names)
+    elements = root.findall(".//*[@id]") + root.findall(".//*[@data-name]")
+    
+    # De-duplicate elements (some might have both)
+    elements = list({id(el): el for el in elements}.values())
     
     fields_map: Dict[str, Dict[str, Any]] = {}
     select_options_map: Dict[str, List[Dict[str, Any]]] = {}

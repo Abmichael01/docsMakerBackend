@@ -7,3 +7,4 @@ from .actions import DownloadDoc, RemoveBackgroundView
 from .admin import AdminOverview, AdminUsers, AdminUserDetails, AdminDocuments
 from .variables import TransformVariableViewSet
 from .settings import SiteSettingsViewSet
+from .wallet import WalletStatsView, WalletListView, WalletAdjustView, PendingRequestsView, ApproveRequestView, RejectRequestView, TransactionHistoryView

@@ -359,6 +359,36 @@ class AdminDocuments(APIView):
                     Q(template__name__icontains=search)
                 )
 
+            # Calculate stats
+            now = timezone.now()
+            seven_days_ago = now - timedelta(days=7)
+            
+            # Get total revenue from paid templates (price comes from Tool)
+            total_revenue_data = (
+                PurchasedTemplate.objects
+                .filter(test=False, template__isnull=False)
+                .select_related('template__tool')
+                .aggregate(total=Sum('template__tool__price'))['total'] or 0
+            )
+            
+            # Get most popular template
+            popular_template_data = (
+                PurchasedTemplate.objects
+                .filter(template__isnull=False)
+                .values('template__name')
+                .annotate(count=Count('id'))
+                .order_by('-count')
+                .first()
+            )
+            popular_template = popular_template_data['template__name'] if popular_template_data else 'N/A'
+            
+            stats = {
+                'total_purchases': PurchasedTemplate.objects.count(),
+                'total_revenue': float(total_revenue_data),
+                'popular_template': popular_template,
+                'recent_count': PurchasedTemplate.objects.filter(created_at__gte=seven_days_ago).count(),
+            }
+
             paginator = PageNumberPagination()
             paginator.page_size = page_size
             paginated_qs = paginator.paginate_queryset(queryset, request)
@@ -391,6 +421,7 @@ class AdminDocuments(APIView):
                 'current_page': paginator.page.number,
                 'next': paginator.get_next_link(),
                 'previous': paginator.get_previous_link(),
+                'stats': stats,
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
