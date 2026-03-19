@@ -170,13 +170,18 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
         """Manually force re-parsing of the template SVG to update form_fields."""
         template = self.get_object()
 
+        logger.info(f"[Template.reparse] >>> REPARSE REQUESTED for {template.name} (ID: {template.id}) by user {request.user}")
+
         try:
             # Trigger the manual re-parse logic in model.save()
+            logger.info(f"[Template.reparse] Setting _force_reparse=True and calling save()...")
             template._force_reparse = True
             template.save()
+            logger.info(f"[Template.reparse] Save completed. Form fields count: {len(template.form_fields) if template.form_fields else 0}")
 
             # Invalidate cache
             invalidate_template_cache(template_id=template.id)
+            logger.info(f"[Template.reparse] Cache invalidated")
 
             return Response({
                 'status': 'success',
