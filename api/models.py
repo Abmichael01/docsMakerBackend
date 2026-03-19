@@ -79,47 +79,47 @@ class Template(models.Model):
         # 2. TRIGGER RE-PARSING & BAKING (Manual Admin Button)
         # We no longer auto-reparse on patches to ensure maximum speed.
         elif self.pk and self.svg_file and getattr(self, '_force_reparse', False):
-            logger.info(f"[Template.save] >>> FORCE REPARSE TRIGGERED for {self.name} (ID: {self.id})")
+            print(f"[Template.save] >>> FORCE REPARSE TRIGGERED for {self.name} (ID: {self.id})")
             try:
                 # Step 1: Read base SVG
-                logger.info(f"[Template.save] Step 1: Reading base SVG from storage...")
+                print(f"[Template.save] Step 1: Reading base SVG from storage...")
                 with self.svg_file.open('rb') as f:
                     base_svg = f.read().decode('utf-8')
-                logger.info(f"[Template.save] Base SVG read successfully ({len(base_svg)} chars)")
+                print(f"[Template.save] Base SVG read successfully ({len(base_svg)} chars)")
 
                 # Step 2: Parse from clean base
-                logger.info(f"[Template.save] Step 2: Parsing form fields from clean base SVG...")
+                print(f"[Template.save] Step 2: Parsing form fields from clean base SVG...")
                 import time
                 parse_start = time.time()
                 parsed_fields = parse_svg_to_form_fields(base_svg)
                 parse_duration = time.time() - parse_start
-                logger.info(f"[Template.save] Parse completed in {parse_duration:.3f}s - got {len(parsed_fields) if isinstance(parsed_fields, list) else 'INVALID'} fields")
+                print(f"[Template.save] Parse completed in {parse_duration:.3f}s - got {len(parsed_fields) if isinstance(parsed_fields, list) else 'INVALID'} fields")
 
                 # Validate that parsing returned valid data
                 if not isinstance(parsed_fields, list):
-                    logger.error(f"[Template.save] ERROR: parse_svg_to_form_fields returned {type(parsed_fields)} instead of list")
+                    print(f"[Template.save] ERROR: parse_svg_to_form_fields returned {type(parsed_fields)} instead of list")
                     raise ValueError(f"parse_svg_to_form_fields returned invalid data type: {type(parsed_fields)}")
 
                 if len(parsed_fields) == 0:
-                    logger.warning(f"[Template.save] WARNING: Parse returned 0 fields for {self.name}. Check SVG has valid IDs.")
+                    print(f"[Template.save] WARNING: Parse returned 0 fields for {self.name}. Check SVG has valid IDs.")
 
                 self.form_fields = parsed_fields
 
                 # Step 3: Apply patches
-                logger.info(f"[Template.save] Step 3: Applying {len(self.svg_patches or [])} patches...")
+                print(f"[Template.save] Step 3: Applying {len(self.svg_patches or [])} patches...")
                 patch_start = time.time()
                 from .svg_utils import apply_svg_patches
                 reconstructed_svg = apply_svg_patches(base_svg, self.svg_patches or [])
                 patch_duration = time.time() - patch_start
-                logger.info(f"[Template.save] Patches applied in {patch_duration:.3f}s - baked SVG is {len(reconstructed_svg)} chars")
+                print(f"[Template.save] Patches applied in {patch_duration:.3f}s - baked SVG is {len(reconstructed_svg)} chars")
 
                 # Validate baked SVG
                 if not reconstructed_svg or not reconstructed_svg.strip():
-                    logger.error(f"[Template.save] ERROR: Baked SVG is empty after applying patches")
+                    print(f"[Template.save] ERROR: Baked SVG is empty after applying patches")
                     raise ValueError("Baked SVG is empty after applying patches")
 
                 # Step 4: Save baked version
-                logger.info(f"[Template.save] Step 4: Saving baked SVG to storage...")
+                print(f"[Template.save] Step 4: Saving baked SVG to storage...")
                 save_start = time.time()
                 storage_path = f"templates/svgs/{self.id}.svg"
                 content = ContentFile(reconstructed_svg.encode('utf-8'))
@@ -128,15 +128,17 @@ class Template(models.Model):
                 default_storage.save(storage_path, content)
                 self.svg_file.name = storage_path
                 save_duration = time.time() - save_start
-                logger.info(f"[Template.save] Baked SVG saved in {save_duration:.3f}s")
+                print(f"[Template.save] Baked SVG saved in {save_duration:.3f}s")
 
                 # Step 5: Clear patches
-                logger.info(f"[Template.save] Step 5: Clearing {len(self.svg_patches)} patches...")
+                print(f"[Template.save] Step 5: Clearing {len(self.svg_patches)} patches...")
                 self.svg_patches = []
 
-                logger.info(f"[Template.save] >>> FORCE REPARSE COMPLETE for {self.name}. Total fields: {len(self.form_fields)}")
+                print(f"[Template.save] >>> FORCE REPARSE COMPLETE for {self.name}. Total fields: {len(self.form_fields)}")
             except Exception as e:
-                logger.error(f"[Template.save] Reparse/Bake failed for {self.id}: {e}", exc_info=True)
+                print(f"[Template.save] Reparse/Bake failed for {self.id}: {e}")
+                import traceback
+                traceback.print_exc()
                 # Re-raise to prevent silent failure - this will be caught by the view
                 raise ValueError(f"Reparse failed: {str(e)}") from e
 
