@@ -135,14 +135,16 @@ All elements with same base ID + `.select_` become one dropdown.
 
 ### Field Sync (.depends)
 ```xml
-<text id="fieldname.text.depends_ANOTHER_ID">This field will sync with ANOTHER_ID</text>
+<text id="fieldname.depends_ANOTHER_ID">This field will sync with ANOTHER_ID</text>
 ```
 When `ANOTHER_ID` changes, this field copies the same value.
+`.depends_FIELD` **replaces** the need for a field type — do not add `.text`, `.upload` etc.
+After `.depends_`, only `.grayscale` / `.grayscale_N` and `.track_ROLE` are allowed.
 
 **Examples:**
 ```xml
 <text id="company_name.text">Enter company name</text>
-<text id="company_display.text.depends_company_name">Will show same as company name</text>
+<text id="company_display.depends_company_name">Will show same as company name</text>
 ```
 
 ### Tracking ID with Link (.tracking_id .link_)
@@ -246,7 +248,7 @@ For complex journeys (One Way, Return, Stop Over), use numbered legs (e.g., `ori
 ### Form with Sync Fields
 ```xml
 <text id="full_name.text">Enter full name</text>
-<text id="display_name.text.depends_full_name">Will show same as full name</text>
+<text id="display_name.depends_full_name">Will show same as full name</text>
 ```
 
 ### Form with Dropdown
@@ -269,7 +271,7 @@ For complex journeys (One Way, Return, Stop Over), use numbered legs (e.g., `ori
 | `.max_N` | Character limit | `id="title.text.max_100"` |
 | `.date_FORMAT` | Date with format | `id="dob.date_MM/DD/YYYY"` |
 | `.select_OPTION` | Dropdown option | `id="country.select_usa"` |
-| `.depends_FIELD` | Sync with field | `id="confirm.text.depends_email"` |
+| `.depends_FIELD` | Sync with field | `id="confirm.depends_email"` |
 | `.tracking_id` | Mark as tracking ID | `id="Order.gen.max_8.tracking_id"` |
 | `.link_URL` | Add external link | `id="Order.tracking_id.link_https://..."` |
 | `.editable` | Editable after purchase | `id="status.text.editable"` |

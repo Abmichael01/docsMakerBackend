@@ -153,8 +153,16 @@ def apply_svg_patches(svg_content, patches):
         if not patches:
             return etree.tostring(svg_tree, pretty_print=True, encoding='unicode', xml_declaration=False)
 
+        # 2. Sort patches to apply 'id' attributes FIRST.
+        # This ensures that if we are renaming an element, subsequent patches
+        # targeting the NEW ID will find it.
+        patches_sorted = sorted(
+            patches, 
+            key=lambda x: 0 if x.get('attribute') == 'id' else 1
+        )
+
         applied_count = 0
-        for patch in patches:
+        for patch in patches_sorted:
             element_id = patch.get('id')
             attribute = patch.get('attribute')
             value = patch.get('value')
@@ -163,15 +171,28 @@ def apply_svg_patches(svg_content, patches):
                 continue
 
             # Find the element using multiple possible attributes
-            xpath_queries = [
+            # Strategy: 
+            #  1. Exact match on internal Id or real ID
+            #  2. Fuzzy match on Base ID (only if element_id contains a dot)
+            base_id = element_id.split('.')[0] if '.' in element_id else element_id
+            
+            queries = [
                 f".//*[@data-internal-id='{element_id}']",
                 f".//*[@id='{element_id}']",
                 f".//*[@name='{element_id}']",
                 f".//*[@data-name='{element_id}']"
             ]
             
+            # If we didn't find it exactly, and it looks like a field, try the base ID
+            if '.' in element_id:
+                queries.extend([
+                    f".//*[@id='{base_id}']",
+                    f".//*[@name='{base_id}']",
+                    f".//*[@data-name='{base_id}']"
+                ])
+            
             elements = []
-            for query in xpath_queries:
+            for query in queries:
                 try:
                     elements = svg_tree.xpath(query, namespaces=namespaces)
                 except Exception:
@@ -188,7 +209,8 @@ def apply_svg_patches(svg_content, patches):
                 if success:
                     applied_count += 1
             else:
-                print(f"[SVG-Patcher] Warning: Element not found: {element_id}")
+                # Silently skip missing elements during re-upload bakes
+                pass
 
         print(f"[SVG-Patcher] Stats: {applied_count}/{len(patches)} patches applied")
         

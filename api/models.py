@@ -4,6 +4,8 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 from .svg_parser import parse_svg_to_form_fields
 
 logger = logging.getLogger(__name__)
@@ -61,9 +63,16 @@ class Template(models.Model):
                 try:
                     from .svg_utils import apply_svg_patches
                     raw_svg = apply_svg_patches(raw_svg, self.svg_patches)
-                    print(f"[Template.save] Applied {len(self.svg_patches)} existing patches to new upload.")
+                    print(f"[Template.save] Applied {len(self.svg_patches)} existing patches to new upload. Clearing patches.")
+                    self.svg_patches = []
                 except Exception as e:
                     print(f"[Template.save] Failed to apply patches to new upload: {e}")
+
+            from .svg_parser import fix_svg_element_ids
+            fixed_svg, fixes_made = fix_svg_element_ids(raw_svg)
+            if fixes_made > 0:
+                print(f"[Template.save] Fixed {fixes_made} invalid element IDs in new upload.")
+                raw_svg = fixed_svg
 
             self.form_fields = parse_svg_to_form_fields(raw_svg)
             # Use a fixed path and write directly to storage to prevent Django from
@@ -86,6 +95,16 @@ class Template(models.Model):
                 with self.svg_file.open('rb') as f:
                     base_svg = f.read().decode('utf-8')
                 print(f"[Template.save] Base SVG read successfully ({len(base_svg)} chars)")
+
+                # Step 1.5: Fix invalid element IDs (e.g., .upload.grayscale.depends_ → .depends_.upload.grayscale)
+                print(f"[Template.save] Step 1.5: Checking and fixing invalid element IDs...")
+                from .svg_parser import fix_svg_element_ids
+                fixed_svg, fixes_made = fix_svg_element_ids(base_svg)
+                if fixes_made > 0:
+                    print(f"[Template.save] Fixed {fixes_made} invalid element IDs")
+                    base_svg = fixed_svg
+                else:
+                    print(f"[Template.save] No invalid element IDs found")
 
                 # Step 2: Parse from clean base
                 print(f"[Template.save] Step 2: Parsing form fields from clean base SVG...")
@@ -278,3 +297,25 @@ class TransformVariable(models.Model):
 
     class Meta:
         unique_together = ['name', 'category']
+
+@receiver(post_delete, sender=Template)
+def auto_delete_file_on_delete_template(sender, instance, **kwargs):
+    """Deletes base SVG file from storage when Template is deleted."""
+    if instance.svg_file:
+        try:
+            if default_storage.exists(instance.svg_file.name):
+                default_storage.delete(instance.svg_file.name)
+                print(f"[Signal] Deleted base SVG for Template {instance.id}")
+        except Exception as e:
+            logger.error(f"Failed to delete SVG file for template {instance.id}: {e}")
+
+@receiver(post_delete, sender=PurchasedTemplate)
+def auto_delete_file_on_delete_purchase(sender, instance, **kwargs):
+    """Deletes baked SVG file from storage when purchase is deleted."""
+    if instance.svg_file:
+        try:
+            if default_storage.exists(instance.svg_file.name):
+                default_storage.delete(instance.svg_file.name)
+                print(f"[Signal] Deleted baked SVG for Purchase {instance.id}")
+        except Exception as e:
+            logger.error(f"Failed to delete SVG file for purchase {instance.id}: {e}")

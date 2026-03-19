@@ -188,9 +188,8 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
 
         if svg_data:
             instance._raw_svg_data = svg_data
-            # CRITICAL: Clear patches when replacing base SVG to avoid graphical corruption
-            instance.svg_patches = []
-            print(f"[Admin-Update] SVG replaced for {instance.name}. Cleared all patches.")
+            print(f"[Admin-Update] SVG replacement requested for {instance.name}. Existing patches will be baked in.")
+            instance._force_reparse = True
 
         # --- Figma-style Patch Logic ---
         svg_patch_data = validated_data.pop('svg_patch', None)
@@ -232,16 +231,12 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
             print(f"[SVG-Sync] Started for template: {instance.name} ({instance.id})")
             updated_fields, modified = sync_form_fields_with_patches(instance, svg_patch_data)
             
-            if modified:
-                print(f"[SVG-Sync] Modified {len(updated_fields)} fields. Saving to DB.")
-                instance.form_fields = updated_fields
-                # Save explicitly here to ensure sync is locked in before return
-                instance.save(update_fields=['form_fields', 'svg_patches'])
-                print(f"[SVG-Sync] SUCCESS: form_fields updated and saved.")
-            else:
-                # Still save svg_patches if they were updated
-                instance.save(update_fields=['svg_patches'])
-                print(f"[SVG-Sync] NOTICE: No fields modified by these patches, but svg_patches saved.")
+            # --- Direct Edit Bake Flow ---
+            # If the template is UNPUBLISHED, we automatically trigger a bake on every patch save
+            # to ensure the "initial" state is always clean.
+            if not instance.is_active:
+                print(f"[Admin-Update] Unpublished template detected. Triggering auto-bake (_force_reparse=True)...")
+                instance._force_reparse = True
 
 
         # Continue with metadata updates

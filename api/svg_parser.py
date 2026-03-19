@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 import logging
-from typing import Optional, Dict, List, Any
+import re
+from typing import Optional, Dict, List, Any, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,101 @@ FLAG_EXTENSIONS = [
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
+
+def fix_svg_element_ids(svg_content: str) -> Tuple[str, int]:
+    """
+    Fix invalid element IDs where extensions are in wrong order.
+
+    Specifically fixes:
+    - .upload.grayscale.depends_XXX → .depends_XXX.upload.grayscale
+    - .file.grayscale.depends_XXX → .depends_XXX.file.grayscale
+    - Any pattern where .depends_ is not first after base ID
+
+    Returns:
+        tuple: (fixed_svg_content, number_of_fixes_made)
+    """
+    print("[SVG-ID-Fixer] Starting ID fix scan...")
+    fixes_info = [0]
+
+    # Pattern to match element IDs with attributes
+    # Matches: id="something.something" or id='something.something'
+    id_pattern = r'(id\s*=\s*["\'])([^"\']+)(["\'])'
+
+    def fix_id(match):
+        prefix = match.group(1)
+        element_id = match.group(2)
+        suffix = match.group(3)
+
+        # Skip if no dots (no extensions)
+        if '.' not in element_id:
+            return match.group(0)
+
+        parts = element_id.split('.')
+        base_id = parts[0]
+        extensions = parts[1:]
+
+        # Check if we have a depends_ extension (catch typos like depend_)
+        raw_depends = next((e for e in extensions if e.startswith('depends_') or e.startswith('depend_')), None)
+        
+        if raw_depends:
+            # Canonicalize to "depends_"
+            if raw_depends.startswith('depend_') and not raw_depends.startswith('depends_'):
+                depends_val = f"depends_{raw_depends[7:]}" # Fix typo
+            else:
+                depends_val = raw_depends
+
+            # RULE: When depends_ is present, it REPLACES the field type.
+            # We must remove .upload, .text, .file, .textarea, etc.
+            # and any other modifiers that are forbidden with depends_ (except grayscale/track_)
+            
+            # Forbidden prefixes when depends_ is present
+            forbidden_prefixes = ("text", "upload", "file", "textarea", "number", "email", "tel", "gen", "sign", "status")
+            
+            # Filter extensions: Keep only those that are NOT forbidden and NOT the depends itself (we'll re-insert it)
+            # but preserve grayscale and track_
+            fixed_extensions = []
+            track_val = next((e for e in extensions if e.startswith('track_')), None)
+            
+            # We only keep grayscale and track_ when depends is present
+            # (Plus any other safe modifiers we want to allow, but user said "only grayscale/track_ after depends")
+            for ext in extensions:
+                if ext == depends_val: continue
+                if ext == track_val: continue
+                
+                # If it's grayscale or starts with grayscale_, keep it
+                if ext == "grayscale" or ext.startswith("grayscale_"):
+                    fixed_extensions.append(ext)
+                # If it's NOT a forbidden type, we *might* keep it, but per DSL only a few are allowed.
+                # To be safe and meet user request "upload can never be there", we strip all types.
+                elif not any(ext.startswith(p) for p in forbidden_prefixes):
+                    # We skip other modifiers for now to keep depends_ clean as per DSL
+                    pass
+            
+            # Re-assemble: [depends, ...fixed..., track]
+            final_extensions = [depends_val] + fixed_extensions
+            if track_val:
+                final_extensions.append(track_val)
+                
+            new_id = f"{base_id}.{'.'.join(final_extensions)}"
+            
+            if new_id != element_id:
+                print(f"[SVG-ID-Fixer] Fixed: {element_id} → {new_id}")
+                fixes_info[0] += 1
+                return f'{prefix}{new_id}{suffix}'
+            return match.group(0)
+
+        # Legacy logic: If no depends_, just check for track_ position
+        # (Though track position is usually handled by elements, we can add a fix here if needed)
+        
+        return match.group(0)
+
+        return match.group(0)
+
+    fixed_svg = re.sub(id_pattern, fix_id, svg_content)
+    print(f"[SVG-ID-Fixer] Completed. Fixed {fixes_info[0]} IDs.")
+
+    return fixed_svg, fixes_info[0]
+
 
 def extract_link_url(element_id: str) -> tuple[str, Optional[str]]:
     """
@@ -89,154 +185,18 @@ def get_extension_value(part: str, prefix: str) -> str:
     return part.replace(prefix, "")
 
 
-# Whitelist based on SharpToolz ID Intelligence Specification (Synced with Frontend)
-# Note: "depends" is both a field type (first-order) AND a modifier (depends_)
-VALID_TYPES = ["text", "textarea", "upload", "file", "sign", "date", "gen", "number", "checkbox", "range", "color", "email", "tel", "status", "depends"]
-VALID_MODIFIERS = ["max_", "depends_", "select_", "link_", "date_", "gen_", "editable", "tracking_id", "grayscale", "grayscale_", "hide_checked", "hide_unchecked", "mode"]
+# ============================================================================
+# SVG ID VALIDATION — extracted to svg_validator.py for clean code
+# ============================================================================
+from .svg_validator import (
+    VALID_TYPES,
+    VALID_MODIFIER_PREFIXES as VALID_MODIFIERS,
+    FLAG_EXTENSIONS as VALIDATOR_FLAG_EXTENSIONS,
+    ALLOWED_AFTER,
+    validate_svg_id,
+    validate_track_position,
+)
 
-# Grammar rules (mapping allowed extensions after specific parts)
-# Note: In Python we use a dict for allowedAfter parity
-# IMPORTANT: "depends" must come FIRST. After "depends", only "grayscale" and track_ roles can follow.
-ALLOWED_AFTER = {
-    "max": ["text", "textarea", "gen", "number", "range", "min"],
-    "min": ["text", "textarea", "gen", "number", "range", "max"],
-    "editable": ["text", "textarea", "gen", "email", "number", "date", "checkbox", "upload", "tel", "password", "range", "color", "file", "status", "sign"],
-    "tracking_id": ["gen", "max", "min", "text", "number"],
-    "link": ["tracking_id"],
-    "date_format": ["date"],
-    "gen_rule": ["gen"],
-    "mode": ["gen"],
-    "grayscale": ["upload", "file", "depends"],  # Can come after upload, file, OR depends
-    "hide_checked": ["text", "textarea", "gen", "email", "number", "date", "checkbox", "upload", "tel", "password", "range", "color", "file", "status", "sign", "editable", "max", "min", "tracking_id", "link", "date_format", "gen_rule"],
-    "hide_unchecked": ["text", "textarea", "gen", "email", "number", "date", "checkbox", "upload", "tel", "password", "range", "color", "file", "status", "sign", "editable", "max", "min", "tracking_id", "link", "date_format", "gen_rule"],
-    "select": ["editable", "track"] # track_ is special
-}
-
-def validate_svg_id(element_id: str) -> tuple[bool, Optional[str]]:
-    """
-    Validates an SVG ID string against our formal DSL.
-    VS Code / IDE Grade experience. (Synced with Frontend)
-    """
-    if not element_id:
-        return False, "ID cannot be empty"
-
-    # Extract link URL BEFORE splitting (URLs contain dots)
-    cleaned_id, url = extract_link_url(element_id)
-
-    # 1. Mandatory Extension Rule
-    if "." not in cleaned_id:
-        return False, "💡 Add '.text' or another extension to make this an editable field!"
-
-    parts = cleaned_id.split(".")
-    base_id = parts[0]
-
-    # 2. Validate Base ID
-    if not base_id:
-        return False, "Base ID (before the first dot) cannot be empty"
-
-    # 3. Check for empty segments (double dots)
-    if any(not p for p in parts):
-        return False, "ID contains empty segments (double dots)"
-
-    type_count = 0
-    last_part_base = ""
-
-    # 4. Whitelist & Syntax Enforcement
-    for i in range(1, len(parts)):
-        part = parts[i]
-        is_whitelisted = False
-
-        # Check if this is a FLAG extension (no underscore suffix needed)
-        # Examples: "tracking_id", "editable", "hide_checked", "hide_unchecked"
-        is_flag_extension = part in FLAG_EXTENSIONS
-
-        # For non-flag extensions, extract the base (e.g., "max_50" → "max", "link_http://..." → "link")
-        part_base = part.split("_")[0] if not is_flag_extension else part
-
-        # SPECIAL CASE: .depends MUST come FIRST (position 1)
-        # Check if this is a depends_ extension and enforce position
-        if part.startswith("depends_"):
-            if i != 1:
-                return False, f"❌ '.depends' must come FIRST (immediately after base ID), not after '.{last_part_base}'."
-            is_whitelisted = True
-            last_part_base = "depends"
-            continue
-
-        # IMPORTANT: Check modifiers FIRST before field types
-        # This handles cases like "depends_Photo" which should be treated as a modifier, not a field type
-        is_modifier = any(part.startswith(m) for m in VALID_MODIFIERS) or part_base in VALID_MODIFIERS
-
-        # A. Check Field Types (only if NOT a modifier)
-        if not is_modifier and part_base in VALID_TYPES:
-            is_whitelisted = True
-            type_count += 1
-
-            # Field types must come first (after base ID)
-            if i != 1:
-                return False, f"❌ Field type '.{part_base}' must come immediately after the base ID."
-
-        # B. Check Modifiers/Extensions
-        if not is_whitelisted:
-            # Check exact match for flag extensions
-            if is_flag_extension:
-                is_whitelisted = True
-            # Check prefix match for modifiers with values (e.g., "max_50", "link_http://...")
-            elif is_modifier:
-                is_whitelisted = True
-            # Check exact base match (for ALLOWED_AFTER lookups)
-            elif part_base in VALID_MODIFIERS:
-                is_whitelisted = True
-
-            if is_whitelisted:
-                # Check allowedAfter (grammatical order)
-                if last_part_base:
-                    # For flag extensions, use the full part name; otherwise use base
-                    lookup_key = part if is_flag_extension else part_base
-                    if lookup_key in ALLOWED_AFTER:
-                        if last_part_base not in ALLOWED_AFTER[lookup_key]:
-                             return False, f"❌ Extension '.{part}' is not allowed after '.{last_part_base}'."
-
-                # Check for duplicates
-                if is_flag_extension:
-                    if any(p == part for p in parts[1:i]):
-                        return False, f"❌ Duplicate extension '.{part}' not allowed."
-                else:
-                    if any(p.split("_")[0] == part_base for p in parts[1:i]):
-                        return False, f"❌ Duplicate extension '.{part_base}' not allowed."
-
-        # C. Check Roles
-        if part.startswith("track_"):
-            is_whitelisted = True
-            # Tracking role MUST be last
-            if i != len(parts) - 1:
-                return False, f"⚠️ Move '{part}' to the very end of the ID."
-            if part == "track_":
-                return False, "Tracking role is missing a name (e.g., use .track_name)"
-
-        if not is_whitelisted:
-            return False, f"❌ '{part}' is not a valid extension."
-
-        # Missing Values (e.g. .max_)
-        if part.endswith("_") and not part.startswith("track_"):
-             return False, f"✍️ Add a value after '{part[:-1]}' (e.g., .{part}50)."
-
-        last_part_base = part_base
-
-    # 5. Unique Type Rule
-    if type_count > 1:
-        return False, "Too many field types. Pick one: .text, .textarea, .upload, etc."
-
-    return True, None
-
-
-def validate_track_position(parts: List[str]) -> bool:
-    """
-    Kept for backward compatibility but using the new validator logic.
-    """
-    track_index = next((i for i, p in enumerate(parts) if p.startswith("track_")), None)
-    if track_index is not None:
-        return track_index == len(parts) - 1
-    return True
 
 
 def get_field_name(base_id: str) -> str:
