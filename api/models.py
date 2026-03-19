@@ -56,6 +56,15 @@ class Template(models.Model):
         # 1. Handle initial ingestion or full overwrite
         raw_svg = getattr(self, '_raw_svg_data', None)
         if raw_svg:
+            # APPLY EXISTING PATCHES IF ANY (to preserve edits on re-upload)
+            if self.pk and self.svg_patches:
+                try:
+                    from .svg_utils import apply_svg_patches
+                    raw_svg = apply_svg_patches(raw_svg, self.svg_patches)
+                    print(f"[Template.save] Applied {len(self.svg_patches)} existing patches to new upload.")
+                except Exception as e:
+                    print(f"[Template.save] Failed to apply patches to new upload: {e}")
+
             self.form_fields = parse_svg_to_form_fields(raw_svg)
             # Use a fixed path and write directly to storage to prevent Django from
             # generating a new suffixed filename when the file already exists (which

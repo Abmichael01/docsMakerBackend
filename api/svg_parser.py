@@ -635,6 +635,7 @@ def process_element_to_field(element: ET.Element, fields_list: List[Dict[str, An
     fields_list.append(field)
 
 
+
 def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
     """
     Parse SVG text and convert elements with IDs into form field definitions.
@@ -646,8 +647,12 @@ def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
         logger.error(f"Failed to parse SVG: {e}")
         return []
     
-    # Find all elements with an ID OR a data-name (which Figma uses for layer names)
-    elements = root.findall(".//*[@id]") + root.findall(".//*[@data-name]")
+    # Robust element discovery: Iterate through all nodes and manually check for ID/data-name attributes.
+    # This is namespace-agnostic and works across different versions of xml.etree.
+    elements = []
+    for el in root.iter():
+        if "id" in el.attrib or "data-name" in el.attrib:
+            elements.append(el)
     
     # De-duplicate elements (some might have both)
     elements = list({id(el): el for el in elements}.values())
