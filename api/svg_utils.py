@@ -162,6 +162,8 @@ def apply_svg_patches(svg_content, patches):
         )
 
         applied_count = 0
+        matched_elements = set()  # Track which DOM elements have already been claimed by an 'id' patch
+
         for patch in patches_sorted:
             element_id = patch.get('id')
             attribute = patch.get('attribute')
@@ -171,9 +173,6 @@ def apply_svg_patches(svg_content, patches):
                 continue
 
             # Find the element using multiple possible attributes
-            # Strategy: 
-            #  1. Exact match on internal Id or real ID
-            #  2. Fuzzy match on Base ID (only if element_id contains a dot)
             base_id = element_id.split('.')[0] if '.' in element_id else element_id
             
             queries = [
@@ -183,7 +182,6 @@ def apply_svg_patches(svg_content, patches):
                 f".//*[@data-name='{element_id}']"
             ]
             
-            # If we didn't find it exactly, and it looks like a field, try the base ID
             if '.' in element_id:
                 queries.extend([
                     f".//*[@id='{base_id}']",
@@ -191,23 +189,27 @@ def apply_svg_patches(svg_content, patches):
                     f".//*[@data-name='{base_id}']"
                 ])
             
-            elements = []
+            target_element = None
             for query in queries:
                 try:
-                    elements = svg_tree.xpath(query, namespaces=namespaces)
+                    candidates = svg_tree.xpath(query, namespaces=namespaces)
+                    # Filter out candidates already matched by a previous 'id' patch
+                    unmatched = [c for c in candidates if c not in matched_elements]
+                    if unmatched:
+                        target_element = unmatched[0]
+                        break
                 except Exception:
                     continue
-                if elements:
-                    break
-
-            if elements:
-                success = False
-                for element in elements:
-                    if set_element_attribute(element, attribute, value, namespaces, svg_tree):
-                        success = True
-                
-                if success:
-                    applied_count += 1
+            
+            if target_element is not None:
+                if attribute == 'id':
+                    # Special handling for 'id' attribute to ensure uniqueness tracking
+                    target_element.set('id', str(value))
+                    matched_elements.add(target_element)
+                else:
+                    # For other attributes, use the general setter
+                    set_element_attribute(target_element, attribute, value, namespaces, svg_tree)
+                applied_count += 1
             else:
                 # Silently skip missing elements during re-upload bakes
                 pass
