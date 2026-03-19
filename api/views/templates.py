@@ -169,15 +169,32 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
     def reparse(self, request, pk=None):
         """Manually force re-parsing of the template SVG to update form_fields."""
         template = self.get_object()
-        
-        # Trigger the manual re-parse logic in model.save()
-        template._force_reparse = True
-        template.save()
-        
-        # Invalidate cache
-        invalidate_template_cache(template_id=template.id)
-        
-        return Response({'status': 'success', 'message': 'Template re-parsed and form fields synced.'})
+
+        try:
+            # Trigger the manual re-parse logic in model.save()
+            template._force_reparse = True
+            template.save()
+
+            # Invalidate cache
+            invalidate_template_cache(template_id=template.id)
+
+            return Response({
+                'status': 'success',
+                'message': 'Template re-parsed and form fields synced.',
+                'form_fields_count': len(template.form_fields) if template.form_fields else 0
+            })
+        except ValueError as e:
+            logger.error(f"[Template.reparse] ValueError: {e}")
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"[Template.reparse] Unexpected error: {e}", exc_info=True)
+            return Response({
+                'status': 'error',
+                'message': f'Unexpected error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 from rest_framework.views import APIView
