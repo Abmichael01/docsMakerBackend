@@ -140,4 +140,4 @@ def prepare_svg_for_cairosvg(svg_content: str, fonts: List[Font]) -> str:
     
     return result
 
- 
+  
