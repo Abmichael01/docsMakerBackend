@@ -76,19 +76,35 @@ class Template(models.Model):
             default_storage.save(storage_path, content)
             self.svg_file.name = storage_path
         
-        # 2. TRIGGER RE-PARSING ONLY IF FORCED (Manual Admin Button)
+        # 2. TRIGGER RE-PARSING & BAKING (Manual Admin Button)
         # We no longer auto-reparse on patches to ensure maximum speed.
         elif self.pk and self.svg_file and getattr(self, '_force_reparse', False):
             try:
                 with self.svg_file.open('rb') as f:
                     base_svg = f.read().decode('utf-8')
                 
+                # 1. PARSE FROM CLEAN BASE FIRST (Per User Request)
+                # This ensures structural fields match the "factory" state of the file.
+                self.form_fields = parse_svg_to_form_fields(base_svg)
+                
+                # 2. APPLY PATCHES & BAKE
                 from .svg_utils import apply_svg_patches
                 reconstructed_svg = apply_svg_patches(base_svg, self.svg_patches or [])
-                self.form_fields = parse_svg_to_form_fields(reconstructed_svg)
-                print(f"[Template.save] Manual structural re-parse complete.")
+                
+                # Overwrite base file with the patched (baked) version
+                storage_path = f"templates/svgs/{self.id}.svg"
+                content = ContentFile(reconstructed_svg.encode('utf-8'))
+                if default_storage.exists(storage_path):
+                    default_storage.delete(storage_path)
+                default_storage.save(storage_path, content)
+                self.svg_file.name = storage_path
+                
+                # 3. CLEAR PATCHES (They are now permanent in the file)
+                self.svg_patches = []
+                
+                print(f"[Template.save] Manual structural re-parse & bake complete for {self.name}.")
             except Exception as e:
-                print(f"[Template.save] Reparse skipped/failed: {e}")
+                print(f"[Template.save] Reparse/Bake failed for {self.id}: {e}")
 
         super().save(*args, **kwargs)
 
@@ -144,7 +160,7 @@ class PurchasedTemplate(models.Model):
         elif not self.pk and not self.name:
             self.name = "Untitled Document"
 
-        # 3. FIGMA-STYLE STRUCTURE SYNC:
+        # 3. FIGMA-STYLE STRUCTURE SYNC & BAKE:
         # We ONLY re-parse if explicitly forced.
         if getattr(self, '_force_reparse', False) and not raw_svg:
             svg_source = self.svg_file if self.svg_file else (self.template.svg_file if self.template else None)
@@ -154,21 +170,36 @@ class PurchasedTemplate(models.Model):
                     with svg_source.open('rb') as f:
                         base_svg = f.read().decode('utf-8')
                     
+                    # 1. PARSE FROM CLEAN BASE FIRST
+                    new_structure = parse_svg_to_form_fields(base_svg)
+                    
+                    # 2. APPLY PATCHES & BAKE
                     from .svg_utils import apply_svg_patches
                     reconstructed_svg = apply_svg_patches(base_svg, self.svg_patches or [])
                     
-                    new_structure = parse_svg_to_form_fields(reconstructed_svg)
+                    # Preserve existing user values during the structural sync
                     current_values = {f['id']: f.get('currentValue') for f in (self.form_fields or []) if 'id' in f}
-                    
                     for field in new_structure:
                         fid = field.get('id')
                         if fid in current_values:
                             field['currentValue'] = current_values[fid]
                     
                     self.form_fields = new_structure
-                    print(f"[PurchasedTemplate.save] Manual re-parse complete.")
+
+                    # SAVE BAKED VERSION to own file
+                    storage_path = f"purchased_templates/svgs/{self.id}.svg"
+                    content = ContentFile(reconstructed_svg.encode('utf-8'))
+                    if default_storage.exists(storage_path):
+                        default_storage.delete(storage_path)
+                    default_storage.save(storage_path, content)
+                    self.svg_file.name = storage_path
+                    
+                    # 3. CLEAR PATCHES
+                    self.svg_patches = []
+                    
+                    print(f"[PurchasedTemplate.save] Manual re-parse & bake complete.")
                 except Exception as e:
-                    print(f"[PurchasedTemplate.save] Reparse skipped: {e}")
+                    print(f"[PurchasedTemplate.save] Reparse/Bake failed: {e}")
 
         super().save(*args, **kwargs)
 

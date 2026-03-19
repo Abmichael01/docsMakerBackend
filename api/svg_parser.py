@@ -90,11 +90,13 @@ def get_extension_value(part: str, prefix: str) -> str:
 
 
 # Whitelist based on SharpToolz ID Intelligence Specification (Synced with Frontend)
+# Note: "depends" is both a field type (first-order) AND a modifier (depends_)
 VALID_TYPES = ["text", "textarea", "upload", "file", "sign", "date", "gen", "number", "checkbox", "range", "color", "email", "tel", "status", "depends"]
 VALID_MODIFIERS = ["max_", "depends_", "select_", "link_", "date_", "gen_", "editable", "tracking_id", "grayscale", "grayscale_", "hide_checked", "hide_unchecked", "mode"]
 
 # Grammar rules (mapping allowed extensions after specific parts)
 # Note: In Python we use a dict for allowedAfter parity
+# IMPORTANT: "depends" must come FIRST. After "depends", only "grayscale" and track_ roles can follow.
 ALLOWED_AFTER = {
     "max": ["text", "textarea", "gen", "number", "range", "min"],
     "min": ["text", "textarea", "gen", "number", "range", "max"],
@@ -104,7 +106,7 @@ ALLOWED_AFTER = {
     "date_format": ["date"],
     "gen_rule": ["gen"],
     "mode": ["gen"],
-    "grayscale": ["upload", "file"],
+    "grayscale": ["upload", "file", "depends"],  # Can come after upload, file, OR depends
     "hide_checked": ["text", "textarea", "gen", "email", "number", "date", "checkbox", "upload", "tel", "password", "range", "color", "file", "status", "sign", "editable", "max", "min", "tracking_id", "link", "date_format", "gen_rule"],
     "hide_unchecked": ["text", "textarea", "gen", "email", "number", "date", "checkbox", "upload", "tel", "password", "range", "color", "file", "status", "sign", "editable", "max", "min", "tracking_id", "link", "date_format", "gen_rule"],
     "select": ["editable", "track"] # track_ is special
@@ -151,8 +153,21 @@ def validate_svg_id(element_id: str) -> tuple[bool, Optional[str]]:
         # For non-flag extensions, extract the base (e.g., "max_50" → "max", "link_http://..." → "link")
         part_base = part.split("_")[0] if not is_flag_extension else part
 
-        # A. Check Field Types
-        if part_base in VALID_TYPES:
+        # SPECIAL CASE: .depends MUST come FIRST (position 1)
+        # Check if this is a depends_ extension and enforce position
+        if part.startswith("depends_"):
+            if i != 1:
+                return False, f"❌ '.depends' must come FIRST (immediately after base ID), not after '.{last_part_base}'."
+            is_whitelisted = True
+            last_part_base = "depends"
+            continue
+
+        # IMPORTANT: Check modifiers FIRST before field types
+        # This handles cases like "depends_Photo" which should be treated as a modifier, not a field type
+        is_modifier = any(part.startswith(m) for m in VALID_MODIFIERS) or part_base in VALID_MODIFIERS
+
+        # A. Check Field Types (only if NOT a modifier)
+        if not is_modifier and part_base in VALID_TYPES:
             is_whitelisted = True
             type_count += 1
 
@@ -166,7 +181,7 @@ def validate_svg_id(element_id: str) -> tuple[bool, Optional[str]]:
             if is_flag_extension:
                 is_whitelisted = True
             # Check prefix match for modifiers with values (e.g., "max_50", "link_http://...")
-            elif any(part.startswith(m) for m in VALID_MODIFIERS):
+            elif is_modifier:
                 is_whitelisted = True
             # Check exact base match (for ALLOWED_AFTER lookups)
             elif part_base in VALID_MODIFIERS:
