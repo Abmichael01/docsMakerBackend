@@ -211,9 +211,9 @@ class SvgIdValidationTest(TestCase):
             ("base..double_dot", "ID contains empty segments (double dots)"),
             ("base.dot_at_end.", "ID contains empty segments (double dots)"),
             ("base.max_", "✍️ Add a value after 'max' (e.g., .max_50)."),
-            ("base.track_origin1.text", "⚠️ Move 'track_origin1' to the very end of the ID."),
-            ("base.track_", "Tracking role is missing a name"),
-            ("base.wrong_ext.text", "❌ 'wrong_ext' is not a valid extension."),
+            ("base.track_origin1.text", "⚠️ Move '.track_origin1' to the very end of the ID."),
+            ("base.track_", "Tracking role is missing a name (e.g., use .track_name)."),
+            ("base.wrong_ext.text", "❌ '.wrong_ext' is not a valid extension."),
             ("base.text.textarea", "❌ Field type '.textarea' must come immediately after the base ID.")
         ]
         for sample, expected_error in invalid_samples:

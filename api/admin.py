@@ -1,8 +1,13 @@
 from django.contrib import admin
 from django.contrib import messages
-from .models import *
- 
+from .models import Tool, Template, PurchasedTemplate, SiteSettings
+
+@admin.register(Template)
 class TemplateAdmin(admin.ModelAdmin):
+    list_display = ('name', 'id', 'hot', 'is_active', 'created_at')
+    list_filter = ('hot', 'is_active', 'tool')
+    search_fields = ('name', 'id')
+
     def delete_model(self, request, obj):
         # Count purchased templates before deletion
         purchased_count = obj.purchases.count()
@@ -31,8 +36,7 @@ class TemplateAdmin(admin.ModelAdmin):
         else:
             messages.success(request, f"Templates deleted successfully.")
 
-# Register your models here.
+# Register other models
 admin.site.register(Tool)
-admin.site.register(Template, TemplateAdmin)
 admin.site.register(PurchasedTemplate)
 admin.site.register(SiteSettings)
