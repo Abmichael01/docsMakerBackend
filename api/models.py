@@ -55,39 +55,65 @@ class Template(models.Model):
     fonts = models.ManyToManyField('Font', blank=True, related_name='templates')
 
     def save(self, *args, **kwargs):
-        # 1. Handle initial ingestion or full overwrite
+        # 1. Detect SVG Change (either via raw data or direct file update)
         raw_svg = getattr(self, '_raw_svg_data', None)
-        if raw_svg:
-            # APPLY EXISTING PATCHES IF ANY (to preserve edits on re-upload)
-            if self.pk and self.svg_patches:
+        svg_file_changed = False
+        
+        if self.pk:
+            try:
+                old_instance = Template.objects.get(pk=self.pk)
+                if old_instance.svg_file != self.svg_file:
+                    svg_file_changed = True
+            except Template.DoesNotExist:
+                pass
+        elif self.svg_file:
+            svg_file_changed = True
+
+        # 2. Handle initial ingestion or full overwrite
+        if raw_svg or svg_file_changed:
+            print(f"[Template.save] New SVG detected for {self.name} (Source: {'raw_data' if raw_svg else 'file_upload'})")
+            
+            # If we don't have raw_svg but the file changed, read it from the file
+            if not raw_svg and self.svg_file:
                 try:
-                    from .svg_utils import apply_svg_patches
-                    raw_svg = apply_svg_patches(raw_svg, self.svg_patches)
-                    print(f"[Template.save] Applied {len(self.svg_patches)} existing patches to new upload. Clearing patches.")
-                    self.svg_patches = []
+                    self.svg_file.seek(0)
+                    raw_svg = self.svg_file.read().decode('utf-8')
                 except Exception as e:
-                    print(f"[Template.save] Failed to apply patches to new upload: {e}")
+                    print(f"[Template.save] Error reading new svg_file: {e}")
 
-            from .svg_parser import fix_svg_element_ids
-            fixed_svg, fixes_made = fix_svg_element_ids(raw_svg)
-            if fixes_made > 0:
-                print(f"[Template.save] Fixed {fixes_made} invalid element IDs in new upload.")
-                raw_svg = fixed_svg
+            if raw_svg:
+                # FIX ELEMENT IDs (e.g., depends_ position)
+                from .svg_parser import fix_svg_element_ids
+                fixed_svg, fixes_made = fix_svg_element_ids(raw_svg)
+                if fixes_made > 0:
+                    print(f"[Template.save] Fixed {fixes_made} invalid element IDs in new upload.")
+                    raw_svg = fixed_svg
 
-            self.form_fields = parse_svg_to_form_fields(raw_svg)
-            # Use a fixed path and write directly to storage to prevent Django from
-            # generating a new suffixed filename when the file already exists (which
-            # caused the doubled path: templates/svgs/templates/svgs/.svg)
-            storage_path = f"templates/svgs/{self.id}.svg"
-            content = ContentFile(raw_svg.encode('utf-8'))
-            if default_storage.exists(storage_path):
-                default_storage.delete(storage_path)
-            default_storage.save(storage_path, content)
-            self.svg_file.name = storage_path
+                # REGENERATE FORM FIELDS from the NEW SVG
+                self.form_fields = parse_svg_to_form_fields(raw_svg)
+                print(f"[Template.save] Regenerated {len(self.form_fields)} form fields from new SVG.")
 
-        # 2. TRIGGER RE-PARSING & BAKING (Manual Admin Button)
-        # We no longer auto-reparse on patches to ensure maximum speed.
+                # CLEAR PATCHES (User requirement: SVG is the state)
+                if self.svg_patches:
+                    print(f"[Template.save] Clearing {len(self.svg_patches)} existing patches.")
+                    self.svg_patches = []
+
+                # Ensure it's saved as the primary svg_file if provided via raw_svg
+                if getattr(self, '_raw_svg_data', None):
+                    storage_path = f"templates/svgs/{self.id}.svg"
+                    content = ContentFile(raw_svg.encode('utf-8'))
+                    if default_storage.exists(storage_path):
+                        default_storage.delete(storage_path)
+                    default_storage.save(storage_path, content)
+                    self.svg_file.name = storage_path
+                
+                # Clear temporary data to prevent re-triggering
+                if hasattr(self, '_raw_svg_data'):
+                    delattr(self, '_raw_svg_data')
+
+        # 3. TRIGGER RE-PARSING & BAKING (Manual Admin Button / Force Reparse)
         elif self.pk and self.svg_file and getattr(self, '_force_reparse', False):
+            # ... [rest of the force reparse logic remains the same]
             print(f"[Template.save] >>> FORCE REPARSE TRIGGERED for {self.name} (ID: {self.id})")
             try:
                 # Step 1: Read base SVG
