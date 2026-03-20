@@ -94,9 +94,12 @@ class Template(models.Model):
                 print(f"[Template.save] Regenerated {len(self.form_fields)} form fields from new SVG.")
 
                 # CLEAR PATCHES (User requirement: SVG is the state)
-                if self.svg_patches:
+                # EXCEPT if Serializer explicitly asked to PRESERVE them (e.g. new base + new patches in same save)
+                if self.svg_patches and not getattr(self, '_preserve_patches', False):
                     print(f"[Template.save] Clearing {len(self.svg_patches)} existing patches.")
                     self.svg_patches = []
+                elif getattr(self, '_preserve_patches', False):
+                    print(f"[Template.save] Preserving {len(self.svg_patches)} patches as requested.")
 
                 # Ensure it's saved as the primary svg_file if provided via raw_svg
                 if getattr(self, '_raw_svg_data', None):
@@ -191,7 +194,12 @@ class Template(models.Model):
 
     @property
     def svg_url(self):
-        return self.svg_file.url if self.svg_file else ""
+        if not self.svg_file:
+            return ""
+        # Add cache buster timestamp
+        url = self.svg_file.url
+        buster = f"v={int(self.updated_at.timestamp())}"
+        return f"{url}&{buster}" if "?" in url else f"{url}?{buster}"
 
     def __str__(self):
         return self.name

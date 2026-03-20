@@ -44,6 +44,8 @@ class TemplateSerializer(serializers.ModelSerializer):
         if obj.svg_file:
             url = get_signed_url(obj.svg_file)
             request = self.context.get('request')
+            buster = f"v={int(obj.updated_at.timestamp())}"
+            url = f"{url}&{buster}" if "?" in url else f"{url}?{buster}"
             if request and url and url.startswith('/'):
                 return request.build_absolute_uri(url)
             return url
@@ -122,6 +124,8 @@ class TemplateSerializer(serializers.ModelSerializer):
         if instance.banner:
             url = get_signed_url(instance.banner)
             request = self.context.get('request')
+            buster = f"v={int(instance.updated_at.timestamp())}"
+            url = f"{url}&{buster}" if "?" in url else f"{url}?{buster}"
             if request and url and url.startswith('/'):
                 url = request.build_absolute_uri(url)
             representation['banner'] = url
@@ -157,6 +161,8 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
         if obj.svg_file:
             url = get_signed_url(obj.svg_file)
             request = self.context.get('request')
+            buster = f"v={int(obj.updated_at.timestamp())}"
+            url = f"{url}&{buster}" if "?" in url else f"{url}?{buster}"
             if request and url and url.startswith('/'):
                 return request.build_absolute_uri(url)
             return url
@@ -190,6 +196,8 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
             instance._raw_svg_data = svg_data
             print(f"[Admin-Update] SVG replacement requested for {instance.name}. Existing patches will be baked in.")
             instance._force_reparse = True
+            # Set flag to PRESERVE patches sent in this request (don't let save() wipe them)
+            instance._preserve_patches = True
 
         # --- Figma-style Patch Logic ---
         svg_patch_data = validated_data.pop('svg_patch', None)
@@ -258,6 +266,8 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
         if instance.banner:
             url = get_signed_url(instance.banner)
             request = self.context.get('request')
+            buster = f"v={int(instance.updated_at.timestamp())}"
+            url = f"{url}&{buster}" if "?" in url else f"{url}?{buster}"
             if request and url and url.startswith('/'):
                 url = request.build_absolute_uri(url)
             representation['banner'] = url
