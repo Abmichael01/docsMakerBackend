@@ -135,11 +135,24 @@ class Template(models.Model):
                 else:
                     print(f"[Template.save] No invalid element IDs found")
 
-                # Step 2: Parse from clean base
-                print(f"[Template.save] Step 2: Parsing form fields from clean base SVG...")
+                # Step 2: Apply patches
+                print(f"[Template.save] Step 2: Applying {len(self.svg_patches or [])} patches...")
                 import time
+                patch_start = time.time()
+                from .svg_utils import apply_svg_patches
+                reconstructed_svg = apply_svg_patches(base_svg, self.svg_patches or [])
+                patch_duration = time.time() - patch_start
+                print(f"[Template.save] Patches applied in {patch_duration:.3f}s - baked SVG is {len(reconstructed_svg)} chars")
+
+                # Validate baked SVG
+                if not reconstructed_svg or not reconstructed_svg.strip():
+                    print(f"[Template.save] ERROR: Baked SVG is empty after applying patches")
+                    raise ValueError("Baked SVG is empty after applying patches")
+
+                # Step 3: Parse form fields from BAKED SVG (after patches — reflects actual field state)
+                print(f"[Template.save] Step 3: Parsing form fields from baked SVG...")
                 parse_start = time.time()
-                parsed_fields = parse_svg_to_form_fields(base_svg)
+                parsed_fields = parse_svg_to_form_fields(reconstructed_svg)
                 parse_duration = time.time() - parse_start
                 print(f"[Template.save] Parse completed in {parse_duration:.3f}s - got {len(parsed_fields) if isinstance(parsed_fields, list) else 'INVALID'} fields")
 
@@ -152,19 +165,6 @@ class Template(models.Model):
                     print(f"[Template.save] WARNING: Parse returned 0 fields for {self.name}. Check SVG has valid IDs.")
 
                 self.form_fields = parsed_fields
-
-                # Step 3: Apply patches
-                print(f"[Template.save] Step 3: Applying {len(self.svg_patches or [])} patches...")
-                patch_start = time.time()
-                from .svg_utils import apply_svg_patches
-                reconstructed_svg = apply_svg_patches(base_svg, self.svg_patches or [])
-                patch_duration = time.time() - patch_start
-                print(f"[Template.save] Patches applied in {patch_duration:.3f}s - baked SVG is {len(reconstructed_svg)} chars")
-
-                # Validate baked SVG
-                if not reconstructed_svg or not reconstructed_svg.strip():
-                    print(f"[Template.save] ERROR: Baked SVG is empty after applying patches")
-                    raise ValueError("Baked SVG is empty after applying patches")
 
                 # Step 4: Save baked version
                 print(f"[Template.save] Step 4: Saving baked SVG to storage...")

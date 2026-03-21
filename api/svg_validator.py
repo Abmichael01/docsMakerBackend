@@ -101,9 +101,9 @@ def validate_svg_id(element_id: str) -> tuple[bool, Optional[str]]:
         link_index = element_id.index(".link_")
         cleaned_id = element_id[:link_index]
 
-    # 1. Mandatory Extension Rule
+    # 1. Plain IDs (no dot) are valid SVG IDs but not form field IDs — not our concern
     if "." not in cleaned_id:
-        return False, "💡 Add '.text' or another extension to make this an editable field!"
+        return True, None
 
     parts = cleaned_id.split(".")
     base_id = parts[0]

@@ -194,26 +194,31 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
 
         if svg_data:
             instance._raw_svg_data = svg_data
-            print(f"[Admin-Update] SVG replacement requested for {instance.name}. Existing patches will be baked in.")
+            print(f"[Admin-Update] SVG replacement requested for {instance.name}.")
             instance._force_reparse = True
-            # Set flag to PRESERVE patches sent in this request (don't let save() wipe them)
-            instance._preserve_patches = True
+            # _preserve_patches is NOT set here — set conditionally below only when
+            # actual patches are being saved alongside the new SVG.
 
         # --- Figma-style Patch Logic ---
         svg_patch_data = validated_data.pop('svg_patch', None)
 
         request = self.context.get('request')
-        
+
         # Handle FormData: svg_patch might be a JSON string
         if svg_patch_data and isinstance(svg_patch_data, str):
             try:
                 svg_patch_data = json.loads(svg_patch_data)
             except (json.JSONDecodeError, TypeError) as e:
                 raise serializers.ValidationError(f"Invalid JSON format for svg_patch: {str(e)}")
-        
+
         # Ensure svg_patch_data is a list
         if svg_patch_data and not isinstance(svg_patch_data, list):
             raise serializers.ValidationError("svg_patch must be a list of patch objects")
+
+        # "Start Fresh": new SVG + explicitly empty patch list → clear all stored patches
+        if svg_data and isinstance(svg_patch_data, list) and len(svg_patch_data) == 0:
+            instance.svg_patches = []
+            print(f"[Admin-Update] Patches cleared (new SVG + empty patch list = Start Fresh).")
 
         if svg_patch_data:
             from ..svg_utils import merge_svg_patches
@@ -234,17 +239,18 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
             print(f"[Admin-Update] New Patches: {len(svg_patch_data)}, Existing: {len(existing_patches)}")
             combined_patches = existing_patches + svg_patch_data
             instance.svg_patches = merge_svg_patches(combined_patches)
-            
-            # 2. SYNC: Update form_fields JSON directly (Handles innerText and ID changes)
+
+            # Preserve combined patches when a new SVG is also being uploaded in the same save
+            if svg_data:
+                instance._preserve_patches = True
+
+            # 3. SYNC: Update form_fields JSON directly (Handles innerText and ID changes)
             print(f"[SVG-Sync] Started for template: {instance.name} ({instance.id})")
             updated_fields, modified = sync_form_fields_with_patches(instance, svg_patch_data)
-            
-            # --- Direct Edit Bake Flow ---
-            # If the template is UNPUBLISHED, we automatically trigger a bake on every patch save
-            # to ensure the "initial" state is always clean.
-            if not instance.is_active:
-                print(f"[Admin-Update] Unpublished template detected. Triggering auto-bake (_force_reparse=True)...")
-                instance._force_reparse = True
+            if modified:
+                instance.form_fields = updated_fields
+                print(f"[SVG-Sync] Applied {len(updated_fields)} synced fields to instance.")
+
 
 
         # Continue with metadata updates

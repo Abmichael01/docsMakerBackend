@@ -121,8 +121,6 @@ def fix_svg_element_ids(svg_content: str) -> Tuple[str, int]:
 
         # Legacy logic: If no depends_, just check for track_ position
         # (Though track position is usually handled by elements, we can add a fix here if needed)
-        
-        return match.group(0)
 
         return match.group(0)
 
@@ -542,6 +540,10 @@ def process_element_to_field(element: ET.Element, fields_list: List[Dict[str, An
     
     text_content = "\n".join(text_parts)
     
+    # Plain IDs (no dot) are not form fields — skip silently, no warning needed
+    if "." not in original_element_id:
+        return
+
     # 1. Validate ID against DSL
     is_valid, error = validate_svg_id(original_element_id)
     if not is_valid:
@@ -650,6 +652,13 @@ def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
             fields_map[base_id] = new_field
         else:
             existing_field = fields_map[base_id]
+            # Warn on genuine duplicates (not select options, which intentionally share a base_id)
+            if new_field["type"] != "select" and existing_field.get("type") != "select":
+                logger.warning(
+                    "[Duplicate Base ID] '%s' appears more than once. "
+                    "Only the first occurrence is used — rename the duplicate element.",
+                    base_id,
+                )
             # Merge logic:
             # 1. Select type takes precedence
             if new_field["type"] == "select":

@@ -14,144 +14,174 @@ def sync_form_fields_with_patches(instance, patches: List[Dict[str, Any]]) -> Tu
       - innerText: update the field's defaultValue / currentValue
       - id:        re-derive field metadata directly from the NEW id string
                    using parse_field_from_id() — no SVG file loading needed.
+
+    Uses field ID strings (not list indices) as lookup keys to avoid stale-index
+    bugs when fields are added/removed during iteration.
     """
     form_fields = instance.form_fields or []
     if not patches:
         return form_fields, False
 
-    updated_fields = json.loads(json.dumps(form_fields))
+    working_fields: List[Dict] = json.loads(json.dumps(form_fields))
     modified = False
 
     print(f"[SVG-Sync] Processing {len(patches)} patches for instance: {instance.id}")
 
-    # Build lookup: svgElementId -> field index  (or (field_index, option_value) for selects)
-    element_id_map: Dict[str, Any] = {}
-    for i, field in enumerate(updated_fields):
-        el_id = field.get('svgElementId')
-        if el_id:
-            element_id_map[el_id] = i
+    # Index by field ID for O(1) access — eliminates stale list-index issues.
+    fields_by_id: Dict[str, Dict] = {}
+    fields_order: List[str] = []
+    for field in working_fields:
+        fid = field.get('id')
+        if fid:
+            fields_by_id[fid] = field
+            fields_order.append(fid)
 
+    # Map svgElementId → field_id string  (or (field_id, option_value) for select options)
+    element_id_map: Dict[str, Any] = {}
+    for field in working_fields:
+        el_id = field.get('svgElementId')
+        fid = field.get('id')
+        if el_id and fid:
+            element_id_map[el_id] = fid
         if field.get('type') == 'select':
             for opt in field.get('options', []):
                 opt_el_id = opt.get('svgElementId')
-                if opt_el_id:
-                    element_id_map[opt_el_id] = (i, opt.get('value'))
+                if opt_el_id and fid:
+                    element_id_map[opt_el_id] = (fid, opt.get('value'))
 
     print(f"[SVG-Sync] Element ID Map keys: {list(element_id_map.keys())}")
 
-    for idx, patch in enumerate(patches):
-        p_id  = patch.get('id')
+    for patch_idx, patch in enumerate(patches):
+        p_id   = patch.get('id')
         p_attr = patch.get('attribute')
         p_val  = patch.get('value')
 
         if not p_id:
             continue
 
-        print(f"[SVG-Sync] Patch {idx}: ID={p_id}, ATTR={p_attr}, VAL={p_val}")
+        print(f"[SVG-Sync] Patch {patch_idx}: ID={p_id}, ATTR={p_attr}, VAL={p_val}")
 
         # ------------------------------------------------------------------ #
-        # A. innerText update — just update the field's stored text value     #
+        # A. innerText update — update stored text value                      #
         # ------------------------------------------------------------------ #
         if p_attr == 'innerText':
-            match_idx = element_id_map.get(p_id)
+            match = element_id_map.get(p_id)
 
-            if match_idx is None:
+            if match is None:
                 # Fallback: case-insensitive match
                 p_id_lower = p_id.lower()
                 for key in element_id_map:
                     if key.lower() == p_id_lower:
-                        match_idx = element_id_map[key]
+                        match = element_id_map[key]
                         print(f"[SVG-Sync]   Case-insensitive match: '{key}'")
                         break
 
-            if match_idx is not None:
-                if isinstance(match_idx, tuple):  # Select option
-                    field_idx, opt_val = match_idx
-                    field = updated_fields[field_idx]
-                    for opt in field.get('options', []):
-                        if opt.get('value') == opt_val:
-                            opt['displayText'] = p_val
-                            opt['label'] = p_val
-                            modified = True
+            if match is not None:
+                if isinstance(match, tuple):  # Select option
+                    field_id, opt_val = match
+                    field = fields_by_id.get(field_id)
+                    if field:
+                        for opt in field.get('options', []):
+                            if opt.get('value') == opt_val:
+                                opt['displayText'] = p_val
+                                opt['label'] = p_val
+                                modified = True
                 else:  # Regular field
-                    field = updated_fields[match_idx]
-                    print(f"[SVG-Sync]   Text: '{field.get('defaultValue')}' → '{p_val}'")
-                    field['defaultValue'] = p_val
-                    field['currentValue'] = p_val
-                    modified = True
+                    field = fields_by_id.get(match)
+                    if field:
+                        print(f"[SVG-Sync]   Text: '{field.get('defaultValue')}' → '{p_val}'")
+                        field['defaultValue'] = p_val
+                        field['currentValue'] = p_val
+                        modified = True
             else:
                 print(f"[SVG-Sync]   WARNING: No field found for element ID '{p_id}'")
 
         # ------------------------------------------------------------------ #
-        # B. ID update — re-parse metadata directly from the NEW id string.   #
-        #                                                                      #
-        # Strategy:                                                            #
-        #  1. Find the existing form_field by old_id (p_id)                   #
-        #  2. Call parse_field_from_id(new_id, existing_text) to get          #
-        #     the new field definition (generationRule, type, max, etc.)      #
-        #  3. Update the form_field in-place — preserving currentValue so     #
-        #     the user's data is not wiped                                     #
+        # B. ID update — re-parse metadata from the NEW id string            #
         # ------------------------------------------------------------------ #
         elif p_attr == 'id':
             old_id = p_id
             new_id = str(p_val)
             print(f"[SVG-Sync]   ID change: '{old_id}' → '{new_id}'")
 
-            # 1. Find existing field by the old svgElementId
-            orig_field_idx = element_id_map.get(old_id)
-            if isinstance(orig_field_idx, tuple):
-                orig_field_idx = None  # It's a select option — skip (select rebuilds need full parse)
+            orig_match = element_id_map.get(old_id)
+            was_select_option = isinstance(orig_match, tuple)
 
-            # Preserve existing text content so it isn't lost on a metadata-only ID change
+            if was_select_option:
+                # Select option ID changes cannot be handled incrementally —
+                # the parent select field's options list needs a full reparse.
+                print(f"[SVG-Sync]   Skipping select-option ID change (needs full reparse): "
+                      f"'{old_id}' → '{new_id}'")
+                continue
+
+            orig_field_id = orig_match if not was_select_option else None  # str or None
+
             existing_text = ""
-            if orig_field_idx is not None:
-                existing_text = str(
-                    updated_fields[orig_field_idx].get('defaultValue') or
-                    updated_fields[orig_field_idx].get('currentValue') or ""
-                )
+            if orig_field_id:
+                existing_field = fields_by_id.get(orig_field_id)
+                if existing_field:
+                    existing_text = str(
+                        existing_field.get('defaultValue') or
+                        existing_field.get('currentValue') or ""
+                    )
 
-            # 2. Parse the NEW id to get fresh field metadata
             new_field_data = parse_field_from_id(new_id, existing_text)
 
             if new_field_data:
                 base_id = new_field_data['id']
+                target_field = fields_by_id.get(base_id)
 
-                # Check if a field with the target base id already exists
-                target_field_idx = None
-                for i, f in enumerate(updated_fields):
-                    if f.get('id') == base_id and i != orig_field_idx:
-                        target_field_idx = i
-                        break
+                if orig_field_id is not None:
+                    # Update the existing field in-place (or rename it)
+                    saved_current = fields_by_id[orig_field_id].get('currentValue')
 
-                # 3. Apply the update
-                if orig_field_idx is not None:
-                    existing_current_value = updated_fields[orig_field_idx].get('currentValue')
-                    updated_fields[orig_field_idx].update(new_field_data)
-                    # Preserve the user's filled-in value through a metadata change
-                    if existing_current_value is not None:
-                        updated_fields[orig_field_idx]['currentValue'] = existing_current_value
+                    if orig_field_id != base_id:
+                        # Base ID changed — move to new key
+                        del fields_by_id[orig_field_id]
+                        order_idx = fields_order.index(orig_field_id)
+                        fields_order[order_idx] = base_id
+                        fields_by_id[base_id] = new_field_data
+                    else:
+                        fields_by_id[base_id].update(new_field_data)
+
+                    if saved_current is not None:
+                        fields_by_id[base_id]['currentValue'] = saved_current
+
                     print(f"[SVG-Sync]   Updated field '{base_id}': "
                           f"type={new_field_data.get('type')}, "
                           f"generationRule={new_field_data.get('generationRule')}")
                     modified = True
-                elif target_field_idx is not None:
-                    # Merge into already-existing field with the same base id
-                    existing_current_value = updated_fields[target_field_idx].get('currentValue')
-                    updated_fields[target_field_idx].update(new_field_data)
-                    if existing_current_value is not None:
-                        updated_fields[target_field_idx]['currentValue'] = existing_current_value
-                    modified = True
+
+                elif target_field is not None:
+                    # No old field, but a field with this base_id already exists.
+                    # Guard: never overwrite a select field with a non-select type —
+                    # that would silently destroy the options list (needs full reparse).
+                    if target_field.get('type') == 'select' and new_field_data.get('type') != 'select':
+                        print(f"[SVG-Sync]   Skipping merge: won't overwrite select '{base_id}' "
+                              f"with type={new_field_data.get('type')} (needs full reparse)")
+                    else:
+                        saved_current = target_field.get('currentValue')
+                        target_field.update(new_field_data)
+                        if saved_current is not None:
+                            target_field['currentValue'] = saved_current
+                        modified = True
+
                 else:
-                    # Brand-new field — add it
-                    updated_fields.append(new_field_data)
+                    # Brand-new field
+                    fields_by_id[base_id] = new_field_data
+                    fields_order.append(base_id)
                     print(f"[SVG-Sync]   Added new field '{base_id}'")
                     modified = True
+
             else:
                 # new_id no longer maps to a valid field — remove the old one
-                if orig_field_idx is not None and not isinstance(orig_field_idx, tuple):
-                    removed = updated_fields.pop(orig_field_idx)
-                    print(f"[SVG-Sync]   Removed field '{removed.get('id')}' (new id has no field extension)")
+                if orig_field_id and orig_field_id in fields_by_id:
+                    del fields_by_id[orig_field_id]
+                    fields_order.remove(orig_field_id)
+                    print(f"[SVG-Sync]   Removed field '{orig_field_id}' "
+                          f"(new id '{new_id}' has no field extension)")
                     modified = True
 
+    updated_fields = [fields_by_id[fid] for fid in fields_order if fid in fields_by_id]
     print(f"[SVG-Sync] Done. modified={modified}, total fields={len(updated_fields)}")
     return updated_fields, modified
