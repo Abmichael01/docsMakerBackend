@@ -42,8 +42,8 @@ def fix_svg_element_ids(svg_content: str) -> Tuple[str, int]:
     Fix invalid element IDs where extensions are in wrong order.
 
     Specifically fixes:
-    - .upload.grayscale.depends_XXX → .depends_XXX.upload.grayscale
-    - .file.grayscale.depends_XXX → .depends_XXX.file.grayscale
+    - .upload.grayscale.depends_XXX → .depends_XXX (grayscale dropped — inherited from source)
+    - .file.depends_XXX → .depends_XXX
     - Any pattern where .depends_ is not first after base ID
 
     Returns:
@@ -86,25 +86,9 @@ def fix_svg_element_ids(svg_content: str) -> Tuple[str, int]:
             # Forbidden prefixes when depends_ is present
             forbidden_prefixes = ("text", "upload", "file", "textarea", "number", "email", "tel", "gen", "sign", "status")
             
-            # Filter extensions: Keep only those that are NOT forbidden and NOT the depends itself (we'll re-insert it)
-            # but preserve grayscale and track_
+            # Filter extensions: keep only track_ after depends_ (grayscale is now inherited from source, not explicit)
             fixed_extensions = []
             track_val = next((e for e in extensions if e.startswith('track_')), None)
-            
-            # We only keep grayscale and track_ when depends is present
-            # (Plus any other safe modifiers we want to allow, but user said "only grayscale/track_ after depends")
-            for ext in extensions:
-                if ext == depends_val: continue
-                if ext == track_val: continue
-                
-                # If it's grayscale or starts with grayscale_, keep it
-                if ext == "grayscale" or ext.startswith("grayscale_"):
-                    fixed_extensions.append(ext)
-                # If it's NOT a forbidden type, we *might* keep it, but per DSL only a few are allowed.
-                # To be safe and meet user request "upload can never be there", we strip all types.
-                elif not any(ext.startswith(p) for p in forbidden_prefixes):
-                    # We skip other modifiers for now to keep depends_ clean as per DSL
-                    pass
             
             # Re-assemble: [depends, ...fixed..., track]
             final_extensions = [depends_val] + fixed_extensions
