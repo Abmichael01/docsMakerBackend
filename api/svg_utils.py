@@ -64,11 +64,11 @@ def set_element_attribute(element, attribute, value, namespaces, svg_tree):
             else:
                 # If no reference found, maybe it moved to start or end of its parent?
                 # Or we just leave it. Reordering without a reference is risky in complex SVGs.
-                print(f"[SVG-Patcher] Reorder reference not found for {element.get('id')}")
+                logger.warning("[SVG-Patcher] Reorder reference not found for %s", element.get('id'))
                 return False
-                
+
         except Exception as e:
-            print(f"[SVG-Patcher] Reorder error: {e}")
+            logger.error("[SVG-Patcher] Reorder error: %s", e)
             return False
 
     try:
@@ -198,7 +198,8 @@ def apply_svg_patches(svg_content, patches):
                     if unmatched:
                         target_element = unmatched[0]
                         break
-                except Exception:
+                except Exception as xpath_err:
+                    logger.warning("[SVG-Patcher] XPath query failed, skipping: %s", xpath_err)
                     continue
             
             if target_element is not None:

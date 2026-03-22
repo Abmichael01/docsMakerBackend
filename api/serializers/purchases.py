@@ -107,7 +107,7 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if not svg_patch_data and request and 'svg_patch' in request.data:
             try: svg_patch_data = json.loads(request.data.get('svg_patch'))
-            except: pass
+            except (json.JSONDecodeError, TypeError): pass
 
         if svg_patch_data:
             from ..svg_utils import merge_svg_patches

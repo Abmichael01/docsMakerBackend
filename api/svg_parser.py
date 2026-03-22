@@ -119,11 +119,6 @@ def fix_svg_element_ids(svg_content: str) -> Tuple[str, int]:
                 return f'{prefix}{new_id}{suffix}'
             return match.group(0)
 
-        # Legacy logic: If no depends_, just check for track_ position
-        # (Though track position is usually handled by elements, we can add a fix here if needed)
-
-        return match.group(0)
-
     fixed_svg = re.sub(id_pattern, fix_id, svg_content)
     print(f"[SVG-ID-Fixer] Completed. Fixed {fixes_info[0]} IDs.")
 

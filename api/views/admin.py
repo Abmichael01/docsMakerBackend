@@ -216,7 +216,7 @@ class AdminUserDetails(APIView):
                 }
             
             # Purchase history
-            purchases = user.purchased_templates.all().order_by('-created_at')
+            purchases = user.purchased_templates.select_related('template').order_by('-created_at')
             purchase_history = [{
                 'id': str(p.id),
                 'template_name': p.template.name if p.template else "Deleted Template",
@@ -243,10 +243,15 @@ class AdminUserDetails(APIView):
                 } for t in transactions]
             
             # Stats
+            purchase_counts = user.purchased_templates.aggregate(
+                total=Count('id'),
+                paid=Count('id', filter=Q(test=False)),
+                test_count=Count('id', filter=Q(test=True)),
+            )
             stats = {
-                'total_purchases': user.purchased_templates.count(),
-                'paid_purchases': user.purchased_templates.filter(test=False).count(),
-                'test_purchases': user.purchased_templates.filter(test=True).count(),
+                'total_purchases': purchase_counts['total'],
+                'paid_purchases': purchase_counts['paid'],
+                'test_purchases': purchase_counts['test_count'],
                 'total_downloads': getattr(user, 'downloads', 0),
                 'days_since_joined': (timezone.now() - user.date_joined).days,
             }

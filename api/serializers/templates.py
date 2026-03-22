@@ -4,9 +4,12 @@ from .base import FontSerializer
 from api.watermark import WaterMark
 from api.utils import get_signed_url
 import os
+import logging
 from lxml import etree
 import json
 from django.core.files.base import ContentFile
+
+logger = logging.getLogger(__name__)
 
 class TutorialSerializer(serializers.ModelSerializer):
     template_name = serializers.CharField(source='template.name', read_only=True)
@@ -245,11 +248,11 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
                 instance._preserve_patches = True
 
             # 3. SYNC: Update form_fields JSON directly (Handles innerText and ID changes)
-            print(f"[SVG-Sync] Started for template: {instance.name} ({instance.id})")
             updated_fields, modified = sync_form_fields_with_patches(instance, svg_patch_data)
+            # Always assign — if not modified, updated_fields == existing fields (no-op); if modified, ensures sync
+            instance.form_fields = updated_fields
             if modified:
-                instance.form_fields = updated_fields
-                print(f"[SVG-Sync] Applied {len(updated_fields)} synced fields to instance.")
+                logger.info("[SVG-Sync] Synced %d form fields for template %s", len(updated_fields), instance.id)
 
 
 

@@ -339,7 +339,7 @@ def auto_delete_file_on_delete_template(sender, instance, **kwargs):
         try:
             if default_storage.exists(instance.svg_file.name):
                 default_storage.delete(instance.svg_file.name)
-                print(f"[Signal] Deleted base SVG for Template {instance.id}")
+                logger.info("[Signal] Deleted base SVG for Template %s", instance.id)
         except Exception as e:
             logger.error(f"Failed to delete SVG file for template {instance.id}: {e}")
 
@@ -350,6 +350,6 @@ def auto_delete_file_on_delete_purchase(sender, instance, **kwargs):
         try:
             if default_storage.exists(instance.svg_file.name):
                 default_storage.delete(instance.svg_file.name)
-                print(f"[Signal] Deleted baked SVG for Purchase {instance.id}")
+                logger.info("[Signal] Deleted baked SVG for Purchase %s", instance.id)
         except Exception as e:
             logger.error(f"Failed to delete SVG file for purchase {instance.id}: {e}")
