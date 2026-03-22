@@ -42,7 +42,7 @@ def fix_svg_element_ids(svg_content: str) -> Tuple[str, int]:
     Fix invalid element IDs where extensions are in wrong order.
 
     Specifically fixes:
-    - .upload.grayscale.depends_XXX → .depends_XXX (grayscale dropped — inherited from source)
+    - .upload.grayscale.depends_XXX → .depends_XXX.grayscale (grayscale moved after depends)
     - .file.depends_XXX → .depends_XXX
     - Any pattern where .depends_ is not first after base ID
 
@@ -86,12 +86,14 @@ def fix_svg_element_ids(svg_content: str) -> Tuple[str, int]:
             # Forbidden prefixes when depends_ is present
             forbidden_prefixes = ("text", "upload", "file", "textarea", "number", "email", "tel", "gen", "sign", "status")
             
-            # Filter extensions: keep only track_ after depends_ (grayscale is now inherited from source, not explicit)
-            fixed_extensions = []
+            # Keep grayscale and track_ after depends_; grayscale can be an explicit override
+            grayscale_val = next((e for e in extensions if e == 'grayscale' or e.startswith('grayscale_')), None)
             track_val = next((e for e in extensions if e.startswith('track_')), None)
-            
-            # Re-assemble: [depends, ...fixed..., track]
-            final_extensions = [depends_val] + fixed_extensions
+
+            # Re-assemble: [depends, grayscale?, track?]
+            final_extensions = [depends_val]
+            if grayscale_val:
+                final_extensions.append(grayscale_val)
             if track_val:
                 final_extensions.append(track_val)
                 
@@ -573,7 +575,8 @@ def process_element_to_field(element: ET.Element, fields_list: List[Dict[str, An
     # Parse all extensions
     extensions = parse_field_extensions(parts)
 
-    if extensions.get("requires_grayscale") and extensions["field_type"] not in {"upload", "file"}:
+    has_depends = any(p.startswith("depends_") for p in parts[1:])
+    if extensions.get("requires_grayscale") and extensions["field_type"] not in {"upload", "file"} and not has_depends:
         logger.warning(
             "Grayscale extension on non-upload field '%s' (element ID: %s)",
             base_id,

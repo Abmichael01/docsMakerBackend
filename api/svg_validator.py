@@ -6,13 +6,13 @@ Contains the DSL grammar rules and validation logic.
 Synced with the frontend (idExtensions.ts / svgIdValidator.ts).
 
 DSL Structure:
-  [base_id].[depends_FIELD].[track_ROLE]                 ← depends replaces type
+  [base_id].[depends_FIELD].[grayscale?].[track_ROLE]    ← depends replaces type
   [base_id].[type].[modifiers...].[track_ROLE]           ← normal field
 
 IMPORTANT RULES:
   - .depends_FIELD must come FIRST (position 1) after base ID
   - .depends_ REPLACES the need for a field type — no .text/.upload etc. alongside it
-  - After .depends_, only .track_ROLE is allowed (grayscale is inherited from the source field)
+  - After .depends_, .grayscale (or .grayscale_N) and .track_ROLE are allowed
   - .track_ROLE must always be LAST
   - Field types (.text, .upload etc.) must come at position 1 (unless .depends_ is there)
 """
@@ -63,7 +63,7 @@ ALLOWED_AFTER = {
     "date_format":  ["date"],
     "gen_rule":     ["gen"],
     "mode":         ["gen"],
-    "grayscale":    ["upload", "file"],  # grayscale only on upload/file fields; depends_ inherits it automatically from source
+    "grayscale":    ["upload", "file", "depends"],
     "hide_checked": ["text", "textarea", "gen", "email", "number", "date", "checkbox",
                      "upload", "tel", "password", "range", "color", "file", "status", "sign",
                      "editable", "max", "min", "tracking_id", "link", "date_format", "gen_rule"],
