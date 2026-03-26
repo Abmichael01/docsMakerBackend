@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET
 import logging
-import re
 from typing import Optional, Dict, List, Any, Tuple
+
 
 logger = logging.getLogger(__name__)
 
@@ -37,78 +37,99 @@ FLAG_EXTENSIONS = [
 # HELPER FUNCTIONS
 # ============================================================================
 
+def _fix_id_value(element_id: str) -> str | None:
+    """
+    Given a raw id string, return a fixed version or None if no fix is needed.
+    Specifically handles cases where .depends_ is not the first extension.
+    """
+    if '.' not in element_id:
+        return None
+
+    parts = element_id.split('.')
+    base_id = parts[0]
+    extensions = parts[1:]
+
+    raw_depends = next((e for e in extensions if e.startswith('depends_') or e.startswith('depend_')), None)
+
+    if not raw_depends:
+        return None
+
+    # Canonicalize typo 'depend_' → 'depends_'
+    if raw_depends.startswith('depend_') and not raw_depends.startswith('depends_'):
+        depends_val = f"depends_{raw_depends[7:]}"
+    else:
+        depends_val = raw_depends
+
+    grayscale_val = next((e for e in extensions if e == 'grayscale' or e.startswith('grayscale_')), None)
+    track_val = next((e for e in extensions if e.startswith('track_')), None)
+
+    final_extensions = [depends_val]
+    if grayscale_val:
+        final_extensions.append(grayscale_val)
+    if track_val:
+        final_extensions.append(track_val)
+
+    new_id = f"{base_id}.{'.'.join(final_extensions)}"
+    return new_id if new_id != element_id else None
+
+
 def fix_svg_element_ids(svg_content: str) -> Tuple[str, int]:
     """
     Fix invalid element IDs where extensions are in wrong order.
 
-    Specifically fixes:
-    - .upload.grayscale.depends_XXX → .depends_XXX.grayscale (grayscale moved after depends)
-    - .file.depends_XXX → .depends_XXX
-    - Any pattern where .depends_ is not first after base ID
+    Uses an XML-parser-based approach: parses the SVG with ElementTree and
+    walks only the actual XML element 'id' attributes to apply fixes.
+    This is safe for files with embedded base64 image data because the fix
+    only touches real element attributes, never raw string content.
 
     Returns:
         tuple: (fixed_svg_content, number_of_fixes_made)
     """
-    print("[SVG-ID-Fixer] Starting ID fix scan...")
-    fixes_info = [0]
+    logger.info("[SVG-ID-Fixer] Starting ID fix scan...")
+    fix_count = 0
 
-    # Pattern to match element IDs with attributes
-    # Matches: id="something.something" or id='something.something'
-    id_pattern = r'(id\s*=\s*["\'])([^"\']+)(["\'])'
+    try:
+        # Parse SVG — register all namespaces from the document first so they
+        # are not rewritten (e.g. xlink, svg, etc.)
+        namespaces: dict[str, str] = {}
+        for event, elem in ET.iterparse(
+            __import__('io').StringIO(svg_content), events=['start-ns']
+        ):
+            prefix, uri = elem
+            if prefix not in namespaces:
+                namespaces[prefix] = uri
+                ET.register_namespace(prefix, uri)
 
-    def fix_id(match):
-        prefix = match.group(1)
-        element_id = match.group(2)
-        suffix = match.group(3)
+        # Also register the default SVG namespace
+        ET.register_namespace('', 'http://www.w3.org/2000/svg')
+        ET.register_namespace('xlink', 'http://www.w3.org/1999/xlink')
 
-        # Skip if no dots (no extensions)
-        if '.' not in element_id:
-            return match.group(0)
+        root = ET.fromstring(svg_content)
 
-        parts = element_id.split('.')
-        base_id = parts[0]
-        extensions = parts[1:]
+        for elem in root.iter():
+            elem_id = elem.get('id')
+            if not elem_id:
+                continue
+            fixed = _fix_id_value(elem_id)
+            if fixed is not None:
+                logger.info(f"[SVG-ID-Fixer] Fixed: {elem_id} → {fixed}")
+                elem.set('id', fixed)
+                fix_count += 1
 
-        # Check if we have a depends_ extension (catch typos like depend_)
-        raw_depends = next((e for e in extensions if e.startswith('depends_') or e.startswith('depend_')), None)
-        
-        if raw_depends:
-            # Canonicalize to "depends_"
-            if raw_depends.startswith('depend_') and not raw_depends.startswith('depends_'):
-                depends_val = f"depends_{raw_depends[7:]}" # Fix typo
-            else:
-                depends_val = raw_depends
+        logger.info(f"[SVG-ID-Fixer] Completed. Fixed {fix_count} IDs.")
 
-            # RULE: When depends_ is present, it REPLACES the field type.
-            # We must remove .upload, .text, .file, .textarea, etc.
-            # and any other modifiers that are forbidden with depends_ (except grayscale/track_)
-            
-            # Forbidden prefixes when depends_ is present
-            forbidden_prefixes = ("text", "upload", "file", "textarea", "number", "email", "tel", "gen", "sign", "status")
-            
-            # Keep grayscale and track_ after depends_; grayscale can be an explicit override
-            grayscale_val = next((e for e in extensions if e == 'grayscale' or e.startswith('grayscale_')), None)
-            track_val = next((e for e in extensions if e.startswith('track_')), None)
+        if fix_count == 0:
+            # Nothing changed — return original string untouched
+            return svg_content, 0
 
-            # Re-assemble: [depends, grayscale?, track?]
-            final_extensions = [depends_val]
-            if grayscale_val:
-                final_extensions.append(grayscale_val)
-            if track_val:
-                final_extensions.append(track_val)
-                
-            new_id = f"{base_id}.{'.'.join(final_extensions)}"
-            
-            if new_id != element_id:
-                print(f"[SVG-ID-Fixer] Fixed: {element_id} → {new_id}")
-                fixes_info[0] += 1
-                return f'{prefix}{new_id}{suffix}'
-            return match.group(0)
+        fixed_svg = ET.tostring(root, encoding='unicode', xml_declaration=False)
+        return fixed_svg, fix_count
 
-    fixed_svg = re.sub(id_pattern, fix_id, svg_content)
-    print(f"[SVG-ID-Fixer] Completed. Fixed {fixes_info[0]} IDs.")
-
-    return fixed_svg, fixes_info[0]
+    except ET.ParseError as e:
+        # SVG is not valid XML — skip fixing and return as-is so the next step
+        # can produce a proper error message.
+        logger.warning(f"[SVG-ID-Fixer] Skipped (SVG not well-formed): {e}")
+        return svg_content, 0
 
 
 def extract_link_url(element_id: str) -> tuple[str, Optional[str]]:
@@ -193,19 +214,27 @@ def get_field_name(base_id: str) -> str:
 def create_select_option(element_id: str, element: ET.Element, parts: List[str], option_text: str = "") -> Dict[str, Any]:
     """
     Create a select option dictionary from element data.
+
+    Convention:
+      - label  = the part after .select_ (e.g. "Black" from .select_Black)
+                 This is the human-readable text shown in the form dropdown.
+      - value  = the SVG element's text content (e.g. "BLK")
+                 This is what gets stored, sent to the backend, and inserted/shown
+                 in the document. For image-bearing elements it would be image data.
     """
     select_part = next(p for p in parts if p.startswith("select_"))
-    # Technical value is the extension value (e.g., 'usa' from '.select_usa')
-    value = get_extension_value(select_part, "select_")
-    # Label is the element text (e.g., 'United States'), fallback to formatted key
-    label = option_text.strip() or value.replace("_", " ").title()
-    
+    # Label is the human-readable key after select_ (e.g. "Black" from select_Black)
+    label = get_extension_value(select_part, "select_").replace("_", " ")
+    # Value is the SVG element's text content (e.g. "BLK"), fallback to label
+    value = option_text.strip() or label
+
     return {
         "value": value,
         "label": label,
         "svgElementId": element_id,
-        "displayText": option_text.strip() or label
+        "displayText": value,
     }
+
 
 
 def extract_select_modifiers(parts: List[str]) -> Dict[str, Any]:
