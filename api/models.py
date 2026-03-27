@@ -310,7 +310,11 @@ class SiteSettings(models.Model):
     manual_purchase_text = models.TextField(blank=True)
     dev_name_obfuscated = models.TextField(blank=True)
     owner_name_obfuscated = models.TextField(blank=True)
+    # Cache Versioning (Signatures)
+    template_cache_version = models.BigIntegerField(default=0, help_text="Global version for template cache busting")
+
     updated_at = models.DateTimeField(auto_now=True)
+
 
     @classmethod
     def get_settings(cls):

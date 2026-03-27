@@ -35,13 +35,22 @@ class TemplateSerializer(serializers.ModelSerializer):
     svg_url = serializers.SerializerMethodField()
     tool_price = serializers.SerializerMethodField()
     
+    version = serializers.SerializerMethodField()
+    
     # Temporary field for initial SVG ingestion or full overwrites
     svg = serializers.CharField(write_only=True, required=False)
 
     
     class Meta:
         model = Template
-        fields = '__all__'
+        fields = [
+            'id', 'name', 'banner', 'form_fields', 'type', 'tool', 'is_active', 
+            'created_at', 'updated_at', 'hot', 'keywords', 'fonts', 
+            'tutorial', 'svg_url', 'tool_price', 'version'
+        ]
+    
+    def get_version(self, obj):
+        return int(obj.updated_at.timestamp())
     
     def get_svg_url(self, obj):
         if obj.svg_file:

@@ -8,7 +8,10 @@ from django.views.decorators.cache import cache_page
 from django.views.decorators.vary import vary_on_headers
 from functools import wraps
 import hashlib
+import logging
 import json
+
+logger = logging.getLogger(__name__)
 
 
 def get_cache_key(prefix, **kwargs):
@@ -86,6 +89,8 @@ def cache_template_detail(timeout=600):
             user_id = request.user.id if request.user.is_authenticated else 'anonymous'
             is_admin = request.user.is_staff if request.user.is_authenticated else False
             
+            logger.info(f"[Cache-Detail] Decorator hit for id={template_id}, user={user_id}")
+            
             cache_key = get_cache_key(
                 'template_detail',
                 id=template_id,
@@ -97,7 +102,12 @@ def cache_template_detail(timeout=600):
             cached_data = cache.get(cache_key)
             if cached_data is not None:
                 from rest_framework.response import Response
-                return Response(cached_data)
+                response = Response(cached_data)
+                # Ensure browser always revalidates with server
+                response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                response["Pragma"] = "no-cache"
+                response["Expires"] = "0"
+                return response
             
             # Call the view
             response = view_func(self, request, *args, **kwargs)
@@ -106,6 +116,11 @@ def cache_template_detail(timeout=600):
             if request.method == 'GET' and response.status_code == 200:
                 if hasattr(response, 'data'):
                     cache.set(cache_key, response.data, timeout)
+                
+                # Add freshness headers to live response too
+                response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                response["Pragma"] = "no-cache"
+                response["Expires"] = "0"
             
             return response
         return wrapper
@@ -136,7 +151,12 @@ def cache_template_svg(timeout=1800):
             cached_data = cache.get(cache_key)
             if cached_data is not None:
                 from rest_framework.response import Response
-                return Response(cached_data)
+                response = Response(cached_data)
+                # Ensure browser always revalidates with server
+                response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                response["Pragma"] = "no-cache"
+                response["Expires"] = "0"
+                return response
             
             # Call the view
             response = view_func(self, request, *args, **kwargs)
@@ -145,6 +165,11 @@ def cache_template_svg(timeout=1800):
             if request.method == 'GET' and response.status_code == 200:
                 if hasattr(response, 'data'):
                     cache.set(cache_key, response.data, timeout)
+                
+                # Add freshness headers to live response too
+                response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                response["Pragma"] = "no-cache"
+                response["Expires"] = "0"
             
             return response
         return wrapper
@@ -191,17 +216,14 @@ def invalidate_template_cache(template_id=None):
                 if cursor == 0:
                     break
                     
-    except ImportError:
-        # Fallback for LocMemCache: clear the entire cache since pattern matching isn't supported
-        print("[Cache] LocMemCache detected, clearing all caches for invalidation.")
-        cache.clear()
-    except Exception as e:
-        print(f"[Cache] Invalidation failed: {e}")
-        # If it's a Redis error or other, try a clear as last resort
+    except (ImportError, Exception) as e:
+        # Fallback: clear the entire cache if Redis pattern matching fails or isn't available
+        logger.warning(f"[Cache] Pattern invalidation failed ({type(e).__name__}: {e}), falling back to full cache clear")
         try:
             cache.clear()
-        except:
-            pass
+            logger.info("[Cache] Full cache cleared successfully")
+        except Exception as clear_err:
+            logger.error(f"[Cache] Fatal: Full cache clear also failed: {clear_err}")
 
 
 def invalidate_all_template_caches():

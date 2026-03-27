@@ -38,4 +38,5 @@ class SiteSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = SiteSettings
         fields = '__all__'
-        read_only_fields = ['id', 'updated_at']
+        read_only_fields = ['id', 'updated_at', 'template_cache_version']
+
