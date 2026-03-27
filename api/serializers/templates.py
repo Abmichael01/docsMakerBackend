@@ -44,9 +44,10 @@ class TemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Template
         fields = [
-            'id', 'name', 'banner', 'form_fields', 'type', 'tool', 'is_active', 
-            'created_at', 'updated_at', 'hot', 'keywords', 'fonts', 
-            'tutorial', 'svg_url', 'tool_price', 'version'
+            'id', 'name', 'banner', 'svg_file', 'svg_patches', 'form_fields', 
+            'type', 'tool', 'is_active', 'created_at', 'updated_at', 'hot', 
+            'keywords', 'fonts', 'font_ids', 'tutorial', 'svg_url', 'tool_price', 
+            'version', 'svg'
         ]
     
     def get_version(self, obj):
@@ -164,10 +165,20 @@ class AdminTemplateSerializer(serializers.ModelSerializer):
     # Flexible field to accept both JSON string (FormData) and list (JSON request)
     svg_patch = serializers.JSONField(write_only=True, required=False)
 
+    version = serializers.SerializerMethodField()
+
     class Meta:
         model = Template
-        fields = '__all__'
+        fields = [
+            'id', 'name', 'banner', 'svg_file', 'svg_patches', 'form_fields', 
+            'type', 'tool', 'is_active', 'created_at', 'updated_at', 'hot', 
+            'keywords', 'fonts', 'font_ids', 'svg_url', 'tool_price', 
+            'version', 'svg', 'svg_patch'
+        ]
         read_only_fields = ('id', 'created_at', 'updated_at', 'form_fields', 'tool_price')
+    
+    def get_version(self, obj):
+        return int(obj.updated_at.timestamp())
 
     def get_svg_url(self, obj):
         if obj.svg_file:
