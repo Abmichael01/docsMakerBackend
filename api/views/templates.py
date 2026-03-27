@@ -186,7 +186,7 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
             print(f"[Template.reparse] Save completed. Form fields count: {len(template.form_fields) if template.form_fields else 0}")
 
             # Invalidate cache
-            invalidate_template_cache(template_id=template.id)
+            invalidate_template_cache()
             print(f"[Template.reparse] Cache invalidated")
 
             return Response({

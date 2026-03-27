@@ -108,10 +108,61 @@ def sync_form_fields_with_patches(instance, patches: List[Dict[str, Any]]) -> Tu
             was_select_option = isinstance(orig_match, tuple)
 
             if was_select_option:
-                # Select option ID changes cannot be handled incrementally —
-                # the parent select field's options list needs a full reparse.
-                print(f"[SVG-Sync]   Skipping select-option ID change (needs full reparse): "
-                      f"'{old_id}' → '{new_id}'")
+                field_id, old_opt_val = orig_match # Note: old_opt_val is the 'value' (text content)
+                new_parts = new_id.split('.')
+                
+                # Extract new base ID and new option label
+                new_base_id = new_parts[0]
+                new_opt_ext = next((p for p in new_parts if p.startswith("select_")), None)
+                new_opt_label = new_opt_ext[7:].replace("_", " ") if new_opt_ext else None
+
+                if not new_opt_label:
+                    print(f"[SVG-Sync]   WARNING: New ID '{new_id}' is not a valid select option. Skipping.")
+                    continue
+
+                print(f"[SVG-Sync]   Select option update: field='{field_id}', ID: '{old_id}' → '{new_id}', New Label: '{new_opt_label}'")
+                
+                old_field = fields_by_id.get(field_id)
+                if old_field and old_field.get('type') == 'select':
+                    # Find and update the option in the old field
+                    found = False
+                    for opt in old_field.get('options', []):
+                        if opt.get('svgElementId') == old_id:
+                            # Update metadata
+                            opt['svgElementId'] = new_id
+                            
+                            # If value/displayText was exactly the old label (auto-generated), 
+                            # then update them to the new label too.
+                            # Otherwise, keep them (they represent the text content)
+                            old_label = opt.get('label', '')
+                            if opt.get('value') == old_label or opt.get('value') == old_id.split('.')[-1].replace('select_', ''):
+                                opt['value'] = new_opt_label
+                            if opt.get('displayText') == old_label:
+                                opt['displayText'] = new_opt_label
+                            
+                            opt['label'] = new_opt_label
+                            found = True
+                            modified = True
+                            print(f"[SVG-Sync]   Updated option '{old_label}' → '{new_opt_label}'")
+                            break
+                    
+                    if found and new_base_id != field_id:
+                        # Move option to a different parent field if base ID changed
+                        new_field = fields_by_id.get(new_base_id)
+                        if new_field and new_field.get('type') == 'select':
+                            # Extract the option we just updated from the old field
+                            moved_opt = None
+                            options = old_field.get('options', [])
+                            for i, o in enumerate(options):
+                                if o.get('svgElementId') == new_id:
+                                    moved_opt = options.pop(i)
+                                    break
+                            
+                            if moved_opt:
+                                if 'options' not in new_field: new_field['options'] = []
+                                new_field['options'].append(moved_opt)
+                                print(f"[SVG-Sync]   Moved option to new parent field: '{new_base_id}'")
+                
                 continue
 
             orig_field_id = orig_match if not was_select_option else None  # str or None
