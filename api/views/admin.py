@@ -100,7 +100,12 @@ class AdminOverview(APIView):
         # Cache for 5 minutes
         cache.set(cache_key, data, 300)
         
-        return Response(data, status=status.HTTP_200_OK)
+        response = Response(data, status=status.HTTP_200_OK)
+        # Prevent caching of admin stats in browser/CDN
+        response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response["Pragma"] = "no-cache"
+        response["Expires"] = "0"
+        return response
 
 
 class AdminUsers(APIView):
@@ -180,11 +185,16 @@ class AdminUsers(APIView):
                 'total_pages': paginator.page.paginator.num_pages,
             }
             
-            return Response({
+            response = Response({
                 **stats_data,
                 'users': users_list_data,
                 'search_term': search,
             }, status=status.HTTP_200_OK)
+            # Prevent caching of admin users list
+            response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response["Pragma"] = "no-cache"
+            response["Expires"] = "0"
+            return response
             
         except Exception as e:
             return Response(
@@ -256,13 +266,18 @@ class AdminUserDetails(APIView):
                 'days_since_joined': (timezone.now() - user.date_joined).days,
             }
             
-            return Response({
+            response = Response({
                 'user': user_serializer.data,
                 'wallet': wallet_data,
                 'purchase_history': purchase_history,
                 'transaction_history': transaction_history,
                 'stats': stats,
             }, status=status.HTTP_200_OK)
+            # Prevent caching of admin user details
+            response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response["Pragma"] = "no-cache"
+            response["Expires"] = "0"
+            return response
             
         except Exception as e:
             return Response(
@@ -419,7 +434,7 @@ class AdminDocuments(APIView):
                 for doc in paginated_qs
             ]
 
-            return Response({
+            response = Response({
                 'results': results,
                 'count': paginator.page.paginator.count,
                 'total_pages': paginator.page.paginator.num_pages,
@@ -428,6 +443,11 @@ class AdminDocuments(APIView):
                 'previous': paginator.get_previous_link(),
                 'stats': stats,
             }, status=status.HTTP_200_OK)
+            # Prevent caching of admin documents list
+            response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response["Pragma"] = "no-cache"
+            response["Expires"] = "0"
+            return response
 
         except Exception as e:
             return Response(

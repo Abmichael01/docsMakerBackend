@@ -137,6 +137,14 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
         response = super().update(request, *args, **kwargs)
         invalidate_template_cache(template_id=instance.id)
         return response
+
+    def retrieve(self, request, *args, **kwargs):
+        response = super().retrieve(request, *args, **kwargs)
+        # Ensure admin never gets cached detail view
+        response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response["Pragma"] = "no-cache"
+        response["Expires"] = "0"
+        return response
     
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -160,7 +168,12 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
             # Note: For S3/B2, this might stream or download to memory
             template.svg_file.open()
             content = template.svg_file.read()
-            return HttpResponse(content, content_type="image/svg+xml")
+            response = HttpResponse(content, content_type="image/svg+xml")
+            # Force no-cache for admin SVG proxy to avoid Cloudflare/browser staleness
+            response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response["Pragma"] = "no-cache"
+            response["Expires"] = "0"
+            return response
         except Exception as e:
             return Response({"error": f"Failed to read SVG: {str(e)}"}, status=500)
 
