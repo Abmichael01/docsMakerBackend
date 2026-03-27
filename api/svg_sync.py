@@ -105,10 +105,18 @@ def sync_form_fields_with_patches(instance, patches: List[Dict[str, Any]]) -> Tu
             print(f"[SVG-Sync]   ID change: '{old_id}' → '{new_id}'")
 
             orig_match = element_id_map.get(old_id)
-            was_select_option = isinstance(orig_match, tuple)
+            # Robust detection: check map AND string pattern
+            is_select_pattern = ".select_" in old_id or ".select_" in new_id
+            was_select_option = isinstance(orig_match, tuple) or is_select_pattern
 
             if was_select_option:
-                field_id, old_opt_val = orig_match # Note: old_opt_val is the 'value' (text content)
+                if isinstance(orig_match, tuple):
+                    field_id, old_opt_val = orig_match
+                else:
+                    # Fallback: extract field_id from ID string
+                    field_id = old_id.split('.')[0]
+                    old_opt_val = None # Will find it by svgElementId
+                
                 new_parts = new_id.split('.')
                 
                 # Extract new base ID and new option label
