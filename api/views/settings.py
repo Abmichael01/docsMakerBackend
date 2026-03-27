@@ -22,12 +22,7 @@ class SiteSettingsViewSet(viewsets.ViewSet):
     def list(self, request):
         settings_obj = self.get_object()
         serializer = SiteSettingsSerializer(settings_obj)
-        response = Response(serializer.data)
-        # Ensure site settings are never cached for admin
-        response["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        response["Pragma"] = "no-cache"
-        response["Expires"] = "0"
-        return response
+        return Response(serializer.data)
 
     @action(detail=False, methods=['post'], url_path='request-code')
     def request_code(self, request):

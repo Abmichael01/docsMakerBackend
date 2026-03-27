@@ -9,7 +9,6 @@ from datetime import timedelta
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 
-from django.core.cache import cache
 from ..models import PurchasedTemplate
 from wallet.models import Wallet
 from ..serializers import AdminOverviewSerializer
@@ -23,14 +22,9 @@ class AdminOverview(APIView):
     
     def get(self, request):
         """
-        Get admin overview statistics with optimized queries and caching.
+        Get admin overview statistics with optimized queries.
+        No caching to ensure real-time data.
         """
-        # Try to get from cache first
-        cache_key = "admin_overview_stats"
-        cached_data = cache.get(cache_key)
-        if cached_data:
-            return Response(cached_data, status=status.HTTP_200_OK)
-            
         serializer = AdminOverviewSerializer()
         now = timezone.now()
         thirty_days_ago = now.date() - timedelta(days=30)
@@ -40,11 +34,10 @@ class AdminOverview(APIView):
             PurchasedTemplate.objects
             .filter(created_at__date__gte=thirty_days_ago)
             .annotate(date=TruncDate('created_at'))
-            .values('date')
+            .values('date', 'test')
             .annotate(
                 total=Count('id'),
-                paid=Count('id', filter=Q(test=False)),
-                test=Count('id', filter=Q(test=True))
+                paid=Count('id', filter=Q(test=False))
             )
             .order_by('date')
         )
@@ -97,9 +90,6 @@ class AdminOverview(APIView):
             'revenue_chart': revenue_chart,
         }
         
-        # Cache for 5 minutes
-        cache.set(cache_key, data, 300)
-        
         response = Response(data, status=status.HTTP_200_OK)
         # Prevent caching of admin stats in browser/CDN
         response["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -129,43 +119,37 @@ class AdminUsers(APIView):
                     Q(email__icontains=search)
                 )
             
-            # Statistics Caching (stats don't need to be recalculated on every page change)
-            stats_cache_key = f"admin_user_stats_{hash(search)}"
-            stats_data = cache.get(stats_cache_key)
+            # Statistics (recalculated on every request)
+            now = timezone.now()
+            today = now.date()
+            intervals = {
+                'today': today,
+                'past_7_days': today - timedelta(days=7),
+                'past_14_days': today - timedelta(days=14),
+                'past_30_days': today - timedelta(days=30),
+            }
             
-            if not stats_data:
-                now = timezone.now()
-                today = now.date()
-                intervals = {
-                    'today': today,
-                    'past_7_days': today - timedelta(days=7),
-                    'past_14_days': today - timedelta(days=14),
-                    'past_30_days': today - timedelta(days=30),
-                }
-                
-                # Optimized stats aggregation
-                new_users = User.objects.aggregate(
-                    today=Count('id', filter=Q(date_joined__date=intervals['today'])),
-                    past_7_days=Count('id', filter=Q(date_joined__date__gte=intervals['past_7_days'])),
-                    past_14_days=Count('id', filter=Q(date_joined__date__gte=intervals['past_14_days'])),
-                    past_30_days=Count('id', filter=Q(date_joined__date__gte=intervals['past_30_days'])),
-                )
-                
-                # Fetch purchase stats - combined query
-                from ..models import PurchasedTemplate
-                purchases_stats = PurchasedTemplate.objects.filter(test=False).aggregate(
-                    today=Count('buyer_id', filter=Q(created_at__date=intervals['today']), distinct=True),
-                    past_7_days=Count('buyer_id', filter=Q(created_at__date__gte=intervals['past_7_days']), distinct=True),
-                    past_14_days=Count('buyer_id', filter=Q(created_at__date__gte=intervals['past_14_days']), distinct=True),
-                    past_30_days=Count('buyer_id', filter=Q(created_at__date__gte=intervals['past_30_days']), distinct=True),
-                )
-                
-                stats_data = {
-                    'all_users': User.objects.count() if not search else users_queryset.count(),
-                    'new_users': new_users,
-                    'total_purchases_users': purchases_stats,
-                }
-                cache.set(stats_cache_key, stats_data, 300) # Cache for 5 mins
+            # Optimized stats aggregation
+            new_users = User.objects.aggregate(
+                today=Count('id', filter=Q(date_joined__date=intervals['today'])),
+                past_7_days=Count('id', filter=Q(date_joined__date__gte=intervals['past_7_days'])),
+                past_14_days=Count('id', filter=Q(date_joined__date__gte=intervals['past_14_days'])),
+                past_30_days=Count('id', filter=Q(date_joined__date__gte=intervals['past_30_days'])),
+            )
+            
+            # Fetch purchase stats - combined query
+            purchases_stats = PurchasedTemplate.objects.filter(test=False).aggregate(
+                today=Count('buyer_id', filter=Q(created_at__date=intervals['today']), distinct=True),
+                past_7_days=Count('buyer_id', filter=Q(created_at__date__gte=intervals['past_7_days']), distinct=True),
+                past_14_days=Count('buyer_id', filter=Q(created_at__date__gte=intervals['past_14_days']), distinct=True),
+                past_30_days=Count('buyer_id', filter=Q(created_at__date__gte=intervals['past_30_days']), distinct=True),
+            )
+            
+            stats_data = {
+                'all_users': User.objects.count() if not search else users_queryset.count(),
+                'new_users': new_users,
+                'total_purchases_users': purchases_stats,
+            }
 
             # Pagination
             paginator = PageNumberPagination()
@@ -190,13 +174,17 @@ class AdminUsers(APIView):
                 'users': users_list_data,
                 'search_term': search,
             }, status=status.HTTP_200_OK)
-            # Prevent caching of admin users list
+            
+            # Prevent caching of admin stats in browser/CDN
             response["Cache-Control"] = "no-cache, no-store, must-revalidate"
             response["Pragma"] = "no-cache"
             response["Expires"] = "0"
             return response
             
         except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in AdminUsers.get: {str(e)}")
             return Response(
                 {'error': 'Internal server error', 'details': str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -273,7 +261,7 @@ class AdminUserDetails(APIView):
                 'transaction_history': transaction_history,
                 'stats': stats,
             }, status=status.HTTP_200_OK)
-            # Prevent caching of admin user details
+            # Ensure no caching
             response["Cache-Control"] = "no-cache, no-store, must-revalidate"
             response["Pragma"] = "no-cache"
             response["Expires"] = "0"
@@ -383,7 +371,7 @@ class AdminDocuments(APIView):
             now = timezone.now()
             seven_days_ago = now - timedelta(days=7)
             
-            # Get total revenue from paid templates (price comes from Tool)
+            # Get total revenue from paid templates
             total_revenue_data = (
                 PurchasedTemplate.objects
                 .filter(test=False, template__isnull=False)
@@ -443,7 +431,7 @@ class AdminDocuments(APIView):
                 'previous': paginator.get_previous_link(),
                 'stats': stats,
             }, status=status.HTTP_200_OK)
-            # Prevent caching of admin documents list
+            # Prevent caching
             response["Cache-Control"] = "no-cache, no-store, must-revalidate"
             response["Pragma"] = "no-cache"
             response["Expires"] = "0"

@@ -43,18 +43,11 @@ class TemplateViewSet(viewsets.ModelViewSet):
         
         return queryset.order_by('-created_at')
 
-    @cache_template_list()
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
 
-    @cache_template_detail()
     def retrieve(self, request, *args, **kwargs):
-        response = super().retrieve(request, *args, **kwargs)
-        # Force browser/Cloudflare to revalidate public tool view
-        response["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        response["Pragma"] = "no-cache"
-        response["Expires"] = "0"
-        return response
+        return super().retrieve(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
@@ -73,7 +66,7 @@ class TemplateViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         response = super().update(request, *args, **kwargs)
-        invalidate_template_cache(template_id=instance.id)
+        invalidate_template_cache()
         
         from analytics.utils import log_action
         log_action(
@@ -89,7 +82,7 @@ class TemplateViewSet(viewsets.ModelViewSet):
         template_id = instance.id
         template_name = instance.name
         response = super().destroy(request, *args, **kwargs)
-        invalidate_template_cache(template_id=template_id)
+        invalidate_template_cache()
         
         from analytics.utils import log_action
         log_action(
@@ -140,22 +133,17 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         response = super().update(request, *args, **kwargs)
-        invalidate_template_cache(template_id=instance.id)
+        invalidate_template_cache()
         return response
 
     def retrieve(self, request, *args, **kwargs):
-        response = super().retrieve(request, *args, **kwargs)
-        # Ensure admin never gets cached detail view
-        response["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        response["Pragma"] = "no-cache"
-        response["Expires"] = "0"
-        return response
+        return super().retrieve(request, *args, **kwargs)
     
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         template_id = instance.id
         response = super().destroy(request, *args, **kwargs)
-        invalidate_template_cache(template_id=template_id)
+        invalidate_template_cache()
         return response
 
     @action(detail=True, methods=['get'], url_path='svg')
