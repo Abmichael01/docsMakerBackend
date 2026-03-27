@@ -30,7 +30,14 @@ def get_cache_key(prefix, **kwargs):
         if value is not None:
             key_parts.append(f"{key}:{value}")
     key_string = "_".join(key_parts)
-    return f"sharptoolz:{hashlib.md5(key_string.encode()).hexdigest()}"
+    
+    # Include prefix and optional ID in plain text for pattern-based invalidation
+    # Example: sharptoolz:template_detail:id:4b0db544...:hash
+    plain_prefix = f"{prefix}"
+    if 'id' in kwargs and kwargs['id']:
+        plain_prefix += f":id:{kwargs['id']}"
+    
+    return f"sharptoolz:{plain_prefix}:{hashlib.md5(key_string.encode()).hexdigest()}"
 
 
 def cache_template_list(timeout=300):
@@ -197,6 +204,7 @@ def invalidate_template_cache(template_id=None):
             patterns = [
                 f"sharptoolz:*template_detail*id:{template_id}*",
                 f"sharptoolz:*template_svg*id:{template_id}*",
+                "sharptoolz:*template_list*", # Also clear list cache to ensure order/meta updates
             ]
         else:
             # Invalidate all template caches

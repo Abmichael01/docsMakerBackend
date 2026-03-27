@@ -13,8 +13,8 @@ def invalidate_cache_on_save(sender, instance, **kwargs):
     Invalidate all template-related caches when a template is saved.
     Also increments the global cache signature in SiteSettings.
     """
-    logger.info(f"Signal: Template {instance.id} saved. Invalidating all template caches.")
-    invalidate_template_cache()
+    logger.info(f"Signal: Template {instance.id} saved. Invalidating relevant template caches.")
+    invalidate_template_cache(template_id=instance.id)
     
     # Increment global signature
     from .models import SiteSettings
@@ -28,8 +28,8 @@ def invalidate_cache_on_delete(sender, instance, **kwargs):
     """
     Invalidate all template-related caches when a template is deleted.
     """
-    logger.info(f"Signal: Template {instance.id} deleted. Invalidating all template caches.")
-    invalidate_template_cache()
+    logger.info(f"Signal: Template {instance.id} deleted. Invalidating relevant template caches.")
+    invalidate_template_cache(template_id=instance.id)
     
     # Increment global signature
     from .models import SiteSettings
