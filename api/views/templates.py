@@ -49,7 +49,12 @@ class TemplateViewSet(viewsets.ModelViewSet):
 
     @cache_template_detail()
     def retrieve(self, request, *args, **kwargs):
-        return super().retrieve(request, *args, **kwargs)
+        response = super().retrieve(request, *args, **kwargs)
+        # Force browser/Cloudflare to revalidate public tool view
+        response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response["Pragma"] = "no-cache"
+        response["Expires"] = "0"
+        return response
 
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
