@@ -9,7 +9,7 @@ DSL Structure:
   [base_id].[depends_FIELD].[grayscale?].[track_ROLE]    ← depends replaces type
   [base_id].[type].[modifiers...].[track_ROLE]           ← normal field
 
-Modifier prefixes: max_, min_, depends_, select_, link_, date_, gen_, grayscale_, show_if_
+Modifier prefixes: max_, min_, depends_, select_, link_, date_, gen_, grayscale_, showIf_
 Flags (exact match): editable, tracking_id, grayscale, hide_checked, hide_unchecked
 
 IMPORTANT RULES:
@@ -18,8 +18,8 @@ IMPORTANT RULES:
   - After .depends_, .grayscale (or .grayscale_N) and .track_ROLE are allowed
   - .track_ROLE must always be LAST
   - Field types (.text, .upload etc.) must come at position 1 (unless .depends_ is there)
-  - .show_if_FIELDID[VALUE] — hides the form field until another field matches the value
-    e.g. Error_Message.textarea.editable.show_if_Status[Error]
+  - .showIf_FIELDID[VALUE] — hides the form field until another field matches the value
+    e.g. Error_Message.textarea.editable.showIf_Status[Error]
 """
 
 from typing import Optional, List
@@ -48,7 +48,7 @@ FLAG_EXTENSIONS = [
 
 # Modifier prefixes (matched by startswith)
 VALID_MODIFIER_PREFIXES = [
-    "max_", "depends_", "select_", "link_", "date_", "gen_", "grayscale_", "show_if_",
+    "max_", "depends_", "select_", "link_", "date_", "gen_", "grayscale_", "showIf_",
 ]
 
 # ============================================================================
@@ -77,7 +77,7 @@ ALLOWED_AFTER = {
                        "upload", "tel", "password", "range", "color", "file", "status", "sign",
                        "editable", "max", "min", "tracking_id", "link", "date_format", "gen_rule"],
     "select":       ["editable"],  # track_ is checked separately
-    "show_if":      ["text", "textarea", "gen", "email", "number", "date", "checkbox",
+    "showIf":       ["text", "textarea", "gen", "email", "number", "date", "checkbox",
                      "upload", "tel", "password", "range", "color", "file", "status", "sign",
                      "editable", "max", "min", "tracking_id", "date_format", "gen_rule", "select"],
 }
@@ -151,29 +151,29 @@ def validate_svg_id(element_id: str) -> tuple[bool, Optional[str]]:
             last_part_base = "depends"
             continue
 
-        # ── SPECIAL: .show_if_ — conditional form field visibility ──────────
-        if part.startswith("show_if_"):
-            suffix = part[len("show_if_"):]  # e.g. "Status[Error]"
+        # ── SPECIAL: .showIf_ — conditional form field visibility ──────────
+        if part.startswith("showIf_"):
+            suffix = part[len("showIf_"):]  # e.g. "Status[Error]"
             if not suffix or suffix == "[":
-                return False, "✍️ Add a field name after '.show_if_' (e.g., .show_if_Status[Error])."
+                return False, "✍️ Add a field name after '.showIf_' (e.g., .showIf_Status[Error])."
             if "[" not in suffix or not suffix.endswith("]"):
-                return False, "✍️ Use bracket syntax for show_if: .show_if_FieldId[Value] (e.g., .show_if_Status[Error])."
+                return False, "✍️ Use bracket syntax: .showIf_FieldId[Value] (e.g., .showIf_Status[Error])."
             bracket_pos = suffix.index("[")
             field_id_part = suffix[:bracket_pos]
             value_part = suffix[bracket_pos + 1:-1]
             if not field_id_part:
-                return False, "✍️ Missing field name in '.show_if_': use .show_if_FieldId[Value]."
+                return False, "✍️ Missing field name in '.showIf_': use .showIf_FieldId[Value]."
             if not value_part:
-                return False, "✍️ Missing value in '.show_if_': use .show_if_FieldId[Value]."
+                return False, "✍️ Missing value in '.showIf_': use .showIf_FieldId[Value]."
             # Duplicate check
-            if any(p.startswith("show_if_") for p in parts[1:i]):
-                return False, "❌ Duplicate '.show_if_' not allowed."
-            # Check allowedAfter for show_if
-            if last_part_base and "show_if" in ALLOWED_AFTER:
-                if last_part_base not in ALLOWED_AFTER["show_if"]:
+            if any(p.startswith("showIf_") for p in parts[1:i]):
+                return False, "❌ Duplicate '.showIf_' not allowed."
+            # Check allowedAfter
+            if last_part_base and "showIf" in ALLOWED_AFTER:
+                if last_part_base not in ALLOWED_AFTER["showIf"]:
                     return (False,
-                            f"❌ Extension '.show_if_...' is not allowed after '.{last_part_base}'.")
-            last_part_base = "show_if"
+                            f"❌ Extension '.showIf_...' is not allowed after '.{last_part_base}'.")
+            last_part_base = "showIf"
             continue
 
         # ── Check modifiers BEFORE field types ─────────────────────────────

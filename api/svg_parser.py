@@ -370,9 +370,9 @@ def parse_field_extensions(parts: List[str]) -> Dict[str, Any]:
         elif part == "editable":
             result["editable"] = True
 
-        elif part.startswith("show_if_"):
-            # Format: show_if_FieldId[Value]  e.g. show_if_Status[Error]
-            suffix = part[len("show_if_"):]
+        elif part.startswith("showIf_"):
+            # Format: showIf_FieldId[Value]  e.g. showIf_Status[Error]
+            suffix = part[len("showIf_"):]
             if "[" in suffix and suffix.endswith("]"):
                 bracket_pos = suffix.index("[")
                 field_id = suffix[:bracket_pos]
