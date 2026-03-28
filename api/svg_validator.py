@@ -9,12 +9,17 @@ DSL Structure:
   [base_id].[depends_FIELD].[grayscale?].[track_ROLE]    ← depends replaces type
   [base_id].[type].[modifiers...].[track_ROLE]           ← normal field
 
+Modifier prefixes: max_, min_, depends_, select_, link_, date_, gen_, grayscale_, show_if_
+Flags (exact match): editable, tracking_id, grayscale, hide_checked, hide_unchecked
+
 IMPORTANT RULES:
   - .depends_FIELD must come FIRST (position 1) after base ID
   - .depends_ REPLACES the need for a field type — no .text/.upload etc. alongside it
   - After .depends_, .grayscale (or .grayscale_N) and .track_ROLE are allowed
   - .track_ROLE must always be LAST
   - Field types (.text, .upload etc.) must come at position 1 (unless .depends_ is there)
+  - .show_if_FIELDID[VALUE] — hides the form field until another field matches the value
+    e.g. Error_Message.textarea.editable.show_if_Status[Error]
 """
 
 from typing import Optional, List
