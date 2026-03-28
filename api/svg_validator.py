@@ -43,7 +43,7 @@ FLAG_EXTENSIONS = [
 
 # Modifier prefixes (matched by startswith)
 VALID_MODIFIER_PREFIXES = [
-    "max_", "depends_", "select_", "link_", "date_", "gen_", "grayscale_",
+    "max_", "depends_", "select_", "link_", "date_", "gen_", "grayscale_", "show_if_",
 ]
 
 # ============================================================================
@@ -57,7 +57,8 @@ ALLOWED_AFTER = {
     "max":          ["text", "textarea", "gen", "number", "range", "min"],
     "min":          ["text", "textarea", "gen", "number", "range", "max"],
     "editable":     ["text", "textarea", "gen", "email", "number", "date", "checkbox",
-                     "upload", "tel", "password", "range", "color", "file", "status", "sign"],
+                     "upload", "tel", "password", "range", "color", "file", "status", "sign",
+                     "select", "depends"],
     "tracking_id":  ["gen", "max", "min", "text", "number"],
     "link":         ["tracking_id"],
     "date_format":  ["date"],
@@ -71,6 +72,9 @@ ALLOWED_AFTER = {
                        "upload", "tel", "password", "range", "color", "file", "status", "sign",
                        "editable", "max", "min", "tracking_id", "link", "date_format", "gen_rule"],
     "select":       ["editable"],  # track_ is checked separately
+    "show_if":      ["text", "textarea", "gen", "email", "number", "date", "checkbox",
+                     "upload", "tel", "password", "range", "color", "file", "status", "sign",
+                     "editable", "max", "min", "tracking_id", "date_format", "gen_rule", "select"],
 }
 
 # ============================================================================
@@ -140,6 +144,31 @@ def validate_svg_id(element_id: str) -> tuple[bool, Optional[str]]:
                 return False, "✍️ Add a field name after '.depends_' (e.g., .depends_Email)."
             is_whitelisted = True
             last_part_base = "depends"
+            continue
+
+        # ── SPECIAL: .show_if_ — conditional form field visibility ──────────
+        if part.startswith("show_if_"):
+            suffix = part[len("show_if_"):]  # e.g. "Status[Error]"
+            if not suffix or suffix == "[":
+                return False, "✍️ Add a field name after '.show_if_' (e.g., .show_if_Status[Error])."
+            if "[" not in suffix or not suffix.endswith("]"):
+                return False, "✍️ Use bracket syntax for show_if: .show_if_FieldId[Value] (e.g., .show_if_Status[Error])."
+            bracket_pos = suffix.index("[")
+            field_id_part = suffix[:bracket_pos]
+            value_part = suffix[bracket_pos + 1:-1]
+            if not field_id_part:
+                return False, "✍️ Missing field name in '.show_if_': use .show_if_FieldId[Value]."
+            if not value_part:
+                return False, "✍️ Missing value in '.show_if_': use .show_if_FieldId[Value]."
+            # Duplicate check
+            if any(p.startswith("show_if_") for p in parts[1:i]):
+                return False, "❌ Duplicate '.show_if_' not allowed."
+            # Check allowedAfter for show_if
+            if last_part_base and "show_if" in ALLOWED_AFTER:
+                if last_part_base not in ALLOWED_AFTER["show_if"]:
+                    return (False,
+                            f"❌ Extension '.show_if_...' is not allowed after '.{last_part_base}'.")
+            last_part_base = "show_if"
             continue
 
         # ── Check modifiers BEFORE field types ─────────────────────────────

@@ -318,6 +318,7 @@ def parse_field_extensions(parts: List[str]) -> Dict[str, Any]:
         "is_tracking_id": False,
         "requires_grayscale": False,
         "grayscale_intensity": None,
+        "show_if": None,  # {"fieldId": str, "value": str} — conditional form field visibility
     }
     
     for part in parts[1:]:
@@ -368,6 +369,16 @@ def parse_field_extensions(parts: List[str]) -> Dict[str, Any]:
         
         elif part == "editable":
             result["editable"] = True
+
+        elif part.startswith("show_if_"):
+            # Format: show_if_FieldId[Value]  e.g. show_if_Status[Error]
+            suffix = part[len("show_if_"):]
+            if "[" in suffix and suffix.endswith("]"):
+                bracket_pos = suffix.index("[")
+                field_id = suffix[:bracket_pos]
+                value = suffix[bracket_pos + 1:-1]
+                if field_id and value:
+                    result["show_if"] = {"fieldId": field_id, "value": value}
 
         if part == "grayscale":
             result["requires_grayscale"] = True
@@ -456,7 +467,10 @@ def create_regular_field(base_id: str, element_id: str, extensions: Dict[str, An
     if extensions.get("requires_grayscale"):
         field["requiresGrayscale"] = True
         field["grayscaleIntensity"] = extensions.get("grayscale_intensity", 100)
-    
+
+    if extensions.get("show_if"):
+        field["showIf"] = extensions["show_if"]
+
     return field
 
 
