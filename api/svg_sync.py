@@ -138,8 +138,8 @@ def sync_form_fields_with_patches(instance, patches: List[Dict[str, Any]]) -> Tu
                         if opt.get('svgElementId') == old_id:
                             # Update metadata
                             opt['svgElementId'] = new_id
-                            
-                            # If value/displayText was exactly the old label (auto-generated), 
+
+                            # If value/displayText was exactly the old label (auto-generated),
                             # then update them to the new label too.
                             # Otherwise, keep them (they represent the text content)
                             old_label = opt.get('label', '')
@@ -147,12 +147,24 @@ def sync_form_fields_with_patches(instance, patches: List[Dict[str, Any]]) -> Tu
                                 opt['value'] = new_opt_label
                             if opt.get('displayText') == old_label:
                                 opt['displayText'] = new_opt_label
-                            
+
                             opt['label'] = new_opt_label
                             found = True
                             modified = True
                             print(f"[SVG-Sync]   Updated option '{old_label}' → '{new_opt_label}'")
                             break
+
+                    # Propagate modifiers from the new option ID to the parent select field.
+                    # Any option can carry .editable or .track_ROLE — these belong to the whole field.
+                    if found:
+                        if 'editable' in new_parts:
+                            old_field['editable'] = True
+                            print(f"[SVG-Sync]   Propagated editable=True to select field '{field_id}'")
+                        track_part = next((p for p in new_parts if p.startswith('track_')), None)
+                        if track_part:
+                            tracking_role = track_part[6:]  # strip 'track_'
+                            old_field['trackingRole'] = tracking_role
+                            print(f"[SVG-Sync]   Propagated trackingRole='{tracking_role}' to select field '{field_id}'")
                     
                     if found and new_base_id != field_id:
                         # Move option to a different parent field if base ID changed

@@ -690,17 +690,36 @@ def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
                 # Transfer options and modifiers if moving from regular to select
                 new_field["currentValue"] = existing_field.get("currentValue") or new_field.get("currentValue")
                 new_field["touched"] = existing_field.get("touched") or new_field.get("touched")
+                # Preserve editable/trackingRole accumulated from prior options
+                if existing_field.get("editable"):
+                    new_field["editable"] = True
+                if existing_field.get("trackingRole"):
+                    new_field.setdefault("trackingRole", existing_field["trackingRole"])
                 fields_map[base_id] = new_field
             elif existing_field["type"] == "select":
                 # Keep select but maybe update current/default value if this new element is visible
                 # update_select_field already handles some of this via select_options_map indirectly
                 pass
-            
-            # Additional merging (editable, trackingRole, etc.)
+
+            # Additional merging (editable, trackingRole, etc.) — always target the live map entry
+            live_field = fields_map[base_id]
             if new_field.get("editable"):
-                existing_field["editable"] = True
+                live_field["editable"] = True
             if new_field.get("trackingRole"):
-                existing_field["trackingRole"] = new_field["trackingRole"]
+                live_field["trackingRole"] = new_field["trackingRole"]
     
+    # Post-process select fields: accumulate editable/trackingRole from ALL option IDs.
+    # process_element_to_field uses a fresh temp_list per call, so only the FIRST option's
+    # modifiers get applied inline. This pass covers 2nd+ options.
+    for field in fields_map.values():
+        if field.get('type') == 'select':
+            for opt in field.get('options', []):
+                opt_parts = opt.get('svgElementId', '').split('.')
+                if 'editable' in opt_parts:
+                    field['editable'] = True
+                track_part = next((p for p in opt_parts if p.startswith('track_')), None)
+                if track_part:
+                    field['trackingRole'] = track_part[6:]  # strip 'track_'
+
     return list(fields_map.values())
 

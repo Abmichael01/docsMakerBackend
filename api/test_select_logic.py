@@ -19,15 +19,15 @@ class SelectLogicTest(unittest.TestCase):
         self.assertEqual(status_field['type'], 'select')
         self.assertEqual(len(status_field['options']), 3)
         
-        # Check values and labels
+        # value = SVG text content, label = the select_ suffix
         options = status_field['options']
-        self.assertEqual(options[0]['value'], 'proc')
-        self.assertEqual(options[0]['label'], 'Processing')
-        self.assertEqual(options[1]['value'], 'ship')
-        self.assertEqual(options[1]['label'], 'Shipped')
+        self.assertEqual(options[0]['value'], 'Processing')
+        self.assertEqual(options[0]['label'], 'proc')
+        self.assertEqual(options[1]['value'], 'Shipped')
+        self.assertEqual(options[1]['label'], 'ship')
         
-        # Check initial value (should be 'proc' because it's visible)
-        self.assertEqual(status_field['currentValue'], 'proc')
+        # currentValue = text content of the visible option ('Processing')
+        self.assertEqual(status_field['currentValue'], 'Processing')
 
     def test_select_update(self):
         form_fields = [{
@@ -64,6 +64,67 @@ class SelectLogicTest(unittest.TestCase):
         
         # Verify text injection (uses Label/DisplayText)
         self.assertEqual(text_el.text, 'Shipped')
+
+class SelectEditableTrackTest(unittest.TestCase):
+    """Regression tests: .editable and .track_ROLE on select options must propagate to the parent field."""
+
+    def _parse(self, svg):
+        fields = parse_svg_to_form_fields(svg)
+        return next((f for f in fields if f['id'] == 'Status'), None)
+
+    def test_editable_on_first_option(self):
+        svg = '''<svg xmlns="http://www.w3.org/2000/svg">
+          <text id="Status.select_In_Transit.editable">In Transit</text>
+          <text id="Status.select_Delivered">Delivered</text>
+          <text id="Status.select_Error">Error</text>
+        </svg>'''
+        f = self._parse(svg)
+        self.assertTrue(f.get('editable'), "editable must propagate from first option")
+
+    def test_editable_on_last_option(self):
+        svg = '''<svg xmlns="http://www.w3.org/2000/svg">
+          <text id="Status.select_In_Transit">In Transit</text>
+          <text id="Status.select_Delivered">Delivered</text>
+          <text id="Status.select_Error.editable">Error</text>
+        </svg>'''
+        f = self._parse(svg)
+        self.assertTrue(f.get('editable'), "editable must propagate from last option")
+
+    def test_track_on_any_option(self):
+        svg = '''<svg xmlns="http://www.w3.org/2000/svg">
+          <text id="Status.select_In_Transit">In Transit</text>
+          <text id="Status.select_Error.track_status">Error</text>
+        </svg>'''
+        f = self._parse(svg)
+        self.assertEqual(f.get('trackingRole'), 'status', "trackingRole must propagate from option with .track_status")
+
+    def test_editable_and_track_on_different_options(self):
+        svg = '''<svg xmlns="http://www.w3.org/2000/svg">
+          <text id="Status.select_In_Transit.editable">In Transit</text>
+          <text id="Status.select_Delivered">Delivered</text>
+          <text id="Status.select_Error.track_status">Error</text>
+        </svg>'''
+        f = self._parse(svg)
+        self.assertTrue(f.get('editable'), "editable must survive when track_ is on a different option")
+        self.assertEqual(f.get('trackingRole'), 'status', "trackingRole must survive when editable is on a different option")
+
+    def test_no_modifiers_stays_not_editable(self):
+        svg = '''<svg xmlns="http://www.w3.org/2000/svg">
+          <text id="Status.select_In_Transit">In Transit</text>
+          <text id="Status.select_Error">Error</text>
+        </svg>'''
+        f = self._parse(svg)
+        self.assertFalse(f.get('editable'), "editable must stay False when no option carries it")
+
+    def test_editable_and_track_on_same_option(self):
+        svg = '''<svg xmlns="http://www.w3.org/2000/svg">
+          <text id="Status.select_In_Transit">In Transit</text>
+          <text id="Status.select_Error.editable.track_status">Error</text>
+        </svg>'''
+        f = self._parse(svg)
+        self.assertTrue(f.get('editable'), "editable must propagate when combined with track_ on same option")
+        self.assertEqual(f.get('trackingRole'), 'status', "trackingRole must propagate when combined with editable on same option")
+
 
 if __name__ == '__main__':
     unittest.main()

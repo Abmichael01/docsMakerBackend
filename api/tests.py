@@ -163,6 +163,94 @@ class SvgSyncIdChangeTest(TestCase):
         self.assertEqual(field.get('currentValue'), 'Alice',
                          "currentValue must be preserved through a metadata-only ID change")
 
+    def test_select_option_id_change_propagates_editable(self):
+        """
+        Regression: adding .editable to a select option's ID must set editable=True
+        on the parent select field, not just update the option's svgElementId.
+        """
+        form_fields = [{
+            'id': 'Status',
+            'type': 'select',
+            'svgElementId': 'Status.select_In_Transit',
+            'editable': False,
+            'options': [
+                {'value': 'In Transit', 'label': 'In Transit', 'svgElementId': 'Status.select_In_Transit', 'displayText': 'In Transit'},
+                {'value': 'Error', 'label': 'Error', 'svgElementId': 'Status.select_Error', 'displayText': 'Error'},
+            ],
+            'currentValue': 'In Transit',
+            'defaultValue': 'In Transit',
+            'name': 'Status',
+        }]
+        instance = self._make_instance(form_fields)
+        patches = [{
+            'id': 'Status.select_Error',
+            'attribute': 'id',
+            'value': 'Status.select_Error.editable',
+        }]
+        updated_fields, modified = sync_form_fields_with_patches(instance, patches)
+        self.assertTrue(modified)
+        status_field = next(f for f in updated_fields if f['id'] == 'Status')
+        self.assertTrue(status_field.get('editable'),
+                        "editable must be propagated to parent select field when option ID gains .editable")
+
+    def test_select_option_id_change_propagates_track_role(self):
+        """
+        Regression: adding .track_status to a select option's ID must set
+        trackingRole='status' on the parent select field.
+        """
+        form_fields = [{
+            'id': 'Status',
+            'type': 'select',
+            'svgElementId': 'Status.select_In_Transit',
+            'options': [
+                {'value': 'In Transit', 'label': 'In Transit', 'svgElementId': 'Status.select_In_Transit', 'displayText': 'In Transit'},
+                {'value': 'Error', 'label': 'Error', 'svgElementId': 'Status.select_Error', 'displayText': 'Error'},
+            ],
+            'currentValue': 'In Transit',
+            'defaultValue': 'In Transit',
+            'name': 'Status',
+        }]
+        instance = self._make_instance(form_fields)
+        patches = [{
+            'id': 'Status.select_Error',
+            'attribute': 'id',
+            'value': 'Status.select_Error.track_status',
+        }]
+        updated_fields, modified = sync_form_fields_with_patches(instance, patches)
+        self.assertTrue(modified)
+        status_field = next(f for f in updated_fields if f['id'] == 'Status')
+        self.assertEqual(status_field.get('trackingRole'), 'status',
+                         "trackingRole must be propagated to parent select field when option ID gains .track_ROLE")
+
+    def test_select_option_id_change_propagates_editable_and_track(self):
+        """
+        Regression: .editable and .track_status added to different options in separate patches
+        must both propagate to the parent field.
+        """
+        form_fields = [{
+            'id': 'Status',
+            'type': 'select',
+            'svgElementId': 'Status.select_In_Transit',
+            'editable': False,
+            'options': [
+                {'value': 'In Transit', 'label': 'In Transit', 'svgElementId': 'Status.select_In_Transit', 'displayText': 'In Transit'},
+                {'value': 'Error', 'label': 'Error', 'svgElementId': 'Status.select_Error', 'displayText': 'Error'},
+            ],
+            'currentValue': 'In Transit',
+            'defaultValue': 'In Transit',
+            'name': 'Status',
+        }]
+        instance = self._make_instance(form_fields)
+        patches = [
+            {'id': 'Status.select_In_Transit', 'attribute': 'id', 'value': 'Status.select_In_Transit.editable'},
+            {'id': 'Status.select_Error', 'attribute': 'id', 'value': 'Status.select_Error.track_status'},
+        ]
+        updated_fields, modified = sync_form_fields_with_patches(instance, patches)
+        self.assertTrue(modified)
+        status_field = next(f for f in updated_fields if f['id'] == 'Status')
+        self.assertTrue(status_field.get('editable'), "editable must propagate from first patch")
+        self.assertEqual(status_field.get('trackingRole'), 'status', "trackingRole must propagate from second patch")
+
     def test_innertext_patch_updates_default_value(self):
         """innerText patches update defaultValue and currentValue correctly."""
         form_fields = [{
