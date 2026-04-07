@@ -1,5 +1,5 @@
 from rest_framework import viewsets, status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.core.cache import cache
@@ -8,20 +8,29 @@ from django.conf import settings
 import random
 
 from ..models import SiteSettings
-from ..serializers import SiteSettingsSerializer
+from ..serializers import SiteSettingsSerializer, PublicSiteSettingsSerializer
 
 class SiteSettingsViewSet(viewsets.ViewSet):
     """
     ViewSet for site configuration protected by email OTP (5-minute expiry).
     """
-    permission_classes = [IsAuthenticated]
+    def get_permissions(self):
+        if self.action == 'list':
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def get_serializer_class(self):
+        if self.request.user and self.request.user.is_authenticated:
+            return SiteSettingsSerializer
+        return PublicSiteSettingsSerializer
 
     def get_object(self):
         return SiteSettings.get_settings()
 
     def list(self, request):
         settings_obj = self.get_object()
-        serializer = SiteSettingsSerializer(settings_obj)
+        serializer_class = self.get_serializer_class()
+        serializer = serializer_class(settings_obj)
         return Response(serializer.data)
 
     @action(detail=False, methods=['post'], url_path='request-code')

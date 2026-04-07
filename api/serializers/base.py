@@ -40,3 +40,18 @@ class SiteSettingsSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['id', 'updated_at', 'template_cache_version']
 
+
+class PublicSiteSettingsSerializer(serializers.ModelSerializer):
+    """Serializer for guest users only showing non-sensitive configuration."""
+    class Meta:
+        model = SiteSettings
+        fields = [
+            'whatsapp_number', 'whatsapp_community_link', 'support_email',
+            'telegram_link', 'twitter_link', 'instagram_link', 'tiktok_link',
+            'min_topup_amount', 'funding_whatsapp_number', 'exchange_rate_override',
+            'maintenance_mode', 'disable_new_signups', 'disable_deposits',
+            'global_announcement_text', 'global_announcement_link', 'enable_global_announcement',
+            'dev_name_obfuscated', 'owner_name_obfuscated', 'template_cache_version'
+        ]
+        read_only_fields = fields
+

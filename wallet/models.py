@@ -50,13 +50,21 @@ class Wallet(models.Model):
         return f"{self.user.username}'s Wallet"
 
     @transaction.atomic
-    def credit(self, amount: Decimal):
+    def credit(self, amount: Decimal, *, description='Deposit'):
         amount = Decimal(amount)
         if amount <= 0:
             raise ValueError("Credit amount must be positive")
 
         self.balance += amount
         self.save(update_fields=['balance'])
+
+        return Transaction.objects.create(
+            wallet=self,
+            type=Transaction.Type.DEPOSIT,
+            amount=amount,
+            status=Transaction.Status.COMPLETED,
+            description=description
+        )
 
     @transaction.atomic
     def debit(self, amount: Decimal, *, description=''):
