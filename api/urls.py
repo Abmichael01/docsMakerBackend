@@ -4,7 +4,8 @@ from .views import (
     PurchasedTemplateViewSet, ToolViewSet, FontViewSet, SiteSettingsViewSet,
     TutorialViewSet, TransformVariableViewSet,
     DownloadDoc, RemoveBackgroundView, AdminOverview, AdminUsers, AdminUserDetails, AdminDocuments,
-    WalletStatsView, WalletListView, WalletAdjustView, PendingRequestsView, ApproveRequestView, RejectRequestView, TransactionHistoryView
+    WalletStatsView, WalletListView, WalletAdjustView, PendingRequestsView, ApproveRequestView, RejectRequestView, TransactionHistoryView,
+    AiChatView,
 )
 from django.urls import path
 
@@ -22,6 +23,7 @@ urlpatterns = [
     path("track/<str:tracking_id>/", PublicTemplateTrackingView.as_view(), name="track-template"),
     path("download-doc/", DownloadDoc.as_view(), name="download-doc"),
     path("remove-background/", RemoveBackgroundView.as_view(), name="remove-background"),
+    path("ai-chat/", AiChatView.as_view(), name="ai-chat"),
 
     # Admin views
     path("admin/overview/", AdminOverview.as_view(), name="admin-overview"),

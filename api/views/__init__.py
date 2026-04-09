@@ -8,3 +8,4 @@ from .admin import AdminOverview, AdminUsers, AdminUserDetails, AdminDocuments
 from .variables import TransformVariableViewSet
 from .settings import SiteSettingsViewSet
 from .wallet import WalletStatsView, WalletListView, WalletAdjustView, PendingRequestsView, ApproveRequestView, RejectRequestView, TransactionHistoryView
+from .ai_chat import AiChatView

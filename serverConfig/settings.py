@@ -397,3 +397,8 @@ DEFAULT_FROM_EMAIL = os.getenv('EMAIL_HOST_USER')
 
 # Security Settings
 SECURITY_CODE = os.getenv('SECURITY_CODE', '123456')
+
+# AI Chat
+AI_API_KEY = os.getenv("AI_API_KEY")
+AI_BASE_URL = os.getenv("AI_BASE_URL", "https://openrouter.ai/api/v1")
+AI_MODEL = os.getenv("AI_MODEL", "openai/gpt-4o")
