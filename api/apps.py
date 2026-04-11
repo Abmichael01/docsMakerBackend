@@ -16,15 +16,7 @@ class ApiConfig(AppConfig):
         os.makedirs(models_dir, exist_ok=True)
         os.environ['U2NET_HOME'] = os.path.join(models_dir, '.u2net')
         
-        # Background download of AI models for rembg
-        import threading
-        try:
-            from scripts.download_models import download_models
-            threading.Thread(target=download_models, daemon=True).start()
-        except ImportError:
-            # Fallback for different import environments
-            try:
-                from .scripts.download_models import download_models
-                threading.Thread(target=download_models, daemon=True).start()
-            except (ImportError, ValueError):
-                print("[ApiConfig] Warning: Could not import download_models script")
+        
+        # NOTE: Automatic model download disabled as per optimization plan.
+        # Models should be pre-provisioned in media/models/.u2net
+        pass

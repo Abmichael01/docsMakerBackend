@@ -26,13 +26,6 @@ from wallet.views import send_wallet_update
 
 logger = logging.getLogger(__name__)
 
-# Try to import Playwright renderer
-try:
-    from ..playwright_renderer import render_svg_with_playwright
-    PLAYWRIGHT_AVAILABLE = True
-except ImportError:
-    PLAYWRIGHT_AVAILABLE = False
-    render_svg_with_playwright = None
 
 
 class DownloadDoc(APIView):
@@ -164,17 +157,9 @@ class DownloadDoc(APIView):
                 svg_content = WaterMark().add_watermark(svg_content)
 
             if output_type == "pdf":
-                if PLAYWRIGHT_AVAILABLE:
-                    print("Using Playwright for PDF rendering...")
-                    output = render_svg_with_playwright(svg_content, "pdf")
-                else:
-                    raise Exception("Backend SVG rendering is disabled. This is now handled by the frontend.")
+                raise Exception("Backend SVG rendering is disabled. This is now handled by the frontend.")
             else:  # PNG
-                if PLAYWRIGHT_AVAILABLE:
-                    print("Using Playwright for PNG rendering...")
-                    output = render_svg_with_playwright(svg_content, "png")
-                else:
-                    raise Exception("Backend SVG rendering is disabled. This is now handled by the frontend.")
+                raise Exception("Backend SVG rendering is disabled. This is now handled by the frontend.")
             
             if output_type == "pdf":
                 content_type = "application/pdf"

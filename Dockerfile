@@ -50,17 +50,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxslt1-dev \
     libgl1-mesa-glx \
     libglib2.0-0 \
-    # Playwright dependencies
-    libnss3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    libgbm1 \
     libasound2 \
     curl \
     && rm -rf /var/lib/apt/lists/*
@@ -73,9 +62,6 @@ COPY . .
 
 # Ensure scripts are executable
 RUN chmod +x docker-entrypoint.sh
-
-# Install Playwright browser (Chromium)
-RUN playwright install chromium
 
 # Create directories for volumes
 RUN mkdir -p /app/staticfiles /app/media /app/temp_uploads
