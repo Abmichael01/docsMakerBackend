@@ -4,7 +4,8 @@ from .views import (
     PurchasedTemplateViewSet, ToolViewSet, FontViewSet, SiteSettingsViewSet,
     TutorialViewSet, TransformVariableViewSet,
     DownloadDoc, RemoveBackgroundView, AdminOverview, AdminUsers, AdminUserDetails, AdminDocuments,
-    WalletStatsView, WalletListView, WalletAdjustView, PendingRequestsView, ApproveRequestView, RejectRequestView, TransactionHistoryView
+    WalletStatsView, WalletListView, WalletAdjustView, PendingRequestsView, ApproveRequestView, RejectRequestView, TransactionHistoryView,
+    AiChatView, AiChatSessionViewSet,
 )
 from django.urls import path
 from django.http import HttpResponse
@@ -21,11 +22,13 @@ router.register(r'tutorials', TutorialViewSet, basename='tutorial')
 router.register(r'fonts', FontViewSet, basename='font')
 router.register(r'settings', SiteSettingsViewSet, basename='settings')
 router.register(r'transform-variables', TransformVariableViewSet, basename='transform-variable')
+router.register(r'ai-chat/sessions', AiChatSessionViewSet, basename='ai-chat-session')
 
 urlpatterns = [
     path("track/<str:tracking_id>/", PublicTemplateTrackingView.as_view(), name="track-template"),
     path("download-doc/", DownloadDoc.as_view(), name="download-doc"),
     path("remove-background/", RemoveBackgroundView.as_view(), name="remove-background"),
+    path("ai-chat/", AiChatView.as_view(), name="ai-chat"),
 
     # Admin views
     path("admin/overview/", AdminOverview.as_view(), name="admin-overview"),

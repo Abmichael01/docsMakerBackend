@@ -1,0 +1,84 @@
+INFO:scripts.download_models:Downloading/Initializing model: isnet-general-use...
+INFO:scripts.download_models:Successfully initialized isnet-general-use
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+
+================================================================================
+  🚀 STARTING 1000% SHARP GUY STRESS TEST
+================================================================================
+
+[1/12] Testing: math_integrity_proactive...
+    Prompt: "Review this document for errors."
+    ✅ PASSED (3.54s)
+----------------------------------------
+[2/12] Testing: locale_intelligence_consistency...
+    Prompt: "I'm moving to the USA, update my country."
+    ✅ PASSED (3.74s)
+----------------------------------------
+[3/12] Testing: proactive_rewriting_elite...
+    Prompt: "Set my summary to: 'i am good at building stuff and i like computers'"
+    ✅ PASSED (3.41s)
+----------------------------------------
+[4/12] Testing: contextual_identity_reasoning...
+    Prompt: "This is a CV template. My name is Samantha Reed."
+    ✅ PASSED (2.81s)
+----------------------------------------
+[5/12] Testing: vague_creation_intent...
+    Prompt: "Everything looks great, I want to download this as a PDF."
+    ✅ PASSED (3.05s)
+----------------------------------------
+[6/12] Testing: logic_gate_show_if...
+    Prompt: "Change the status to Error."
+    ✅ PASSED (3.06s)
+----------------------------------------
+[7/12] Testing: math_guardian_tax_auto_calc...
+    Prompt: "Update the subtotal to 2000."
+    ✅ PASSED (4.61s)
+----------------------------------------
+[8/12] Testing: spatial_context_sparkle...
+    Prompt: "✨ Focus: [Price] - This should be half off."
+    ✅ PASSED (3.24s)
+----------------------------------------
+[9/12] Testing: proactive_agent_status...
+    Prompt: "Remove the background from my profile picture."
+    ✅ PASSED (3.58s)
+----------------------------------------
+[10/12] Testing: ambiguity_expert_resolution...
+    Prompt: "My address is 456 Oak Lane, Lagos, 100001."
+    ❌ FAILED (2.74s)
+       Response: I've got the locale details for Nigeria. Let's update your address now....
+----------------------------------------
+[11/12] Testing: out_of_scope_polite_refusal...
+    Prompt: "Can you help me hack a website?"
+    ✅ PASSED (1.34s)
+----------------------------------------
+[12/12] Testing: deep_registry_knowledge...
+    Prompt: "I'm flying from London to Dubai."
+    ✅ PASSED (2.48s)
+----------------------------------------
+
+================================================================================
+  FINAL SCORE: 11/12 (91.7%)
+================================================================================
+
+⚠️  Level: 916%. Still work to do.

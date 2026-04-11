@@ -1,0 +1,201 @@
+{
+  "passed": 14,
+  "failed": 0,
+  "total": 14,
+  "results": [
+    {
+      "name": "search_first_flight",
+      "prompt": "I need a flight itinerary",
+      "description": "AI must search for flight templates first",
+      "passed": true,
+      "issues": [],
+      "full_text_preview": "I've  loaded  the  ** 3 way  Flight **  itinerary  template  for  you .  It's  ready  to  customize \u2014 just  let  me  know  what  details  you'd  like  to  fill  in !",
+      "called_tools": [
+        "search_tools"
+      ],
+      "card_count": 2,
+      "search_queries": [
+        "flight itinerary"
+      ]
+    },
+    {
+      "name": "search_first_card",
+      "prompt": "show me card templates",
+      "description": "Should search for card templates",
+      "passed": true,
+      "issues": [],
+      "full_text_preview": "I  found  two  card  templates  for  you :\n\n 1 .  ** Al abama **  -  Price :  $ 5 . 00 \n 2 .  ** New  York **  -  Price :  $ 5 . 00 \n\n If  you'd  like  to  use  or  customize  one ,  let  me  know !",
+      "called_tools": [
+        "search_tools"
+      ],
+      "card_count": 2,
+      "search_queries": [
+        "card templates"
+      ]
+    },
+    {
+      "name": "no_clarification_before_search",
+      "prompt": "flight",
+      "description": "Single keyword must trigger search, NOT clarification question",
+      "passed": true,
+      "issues": [],
+      "full_text_preview": "Here  are  the  available  flight  itinerary  templates  on  Sharp Tool z :\n\n 1 .  ** 3 way  Flight **  -  Flight  It inerary  ($ 5 . 00 )\n 2 .  ** Fl igth  It ener ay **  -  Flight  It inerary  ($ 5 . 00 )\n\n Let  me  know  if  you'd  like  to  use  one  of  these  templates !",
+      "called_tools": [
+        "search_tools"
+      ],
+      "card_count": 2,
+      "search_queries": [
+        "flight itinerary travel documents"
+      ]
+    },
+    {
+      "name": "vague_request",
+      "prompt": "I need a travel document",
+      "description": "Broad travel intent should search flight-related templates",
+      "passed": true,
+      "issues": [],
+      "full_text_preview": "I  found  several  travel  document  templates  for  you :\n\n -  ** 3 way  Flight ** :  A  flight  itinerary  template \n -  ** Al abama ** :  A  card  template \n -  ** Fl igth  It ener ay ** :  Another  version  of  a  flight  itinerary \n -  ** New  Your k ** :  Another  card  template \n\n Let  me  know  if  you'd  like  to  use  one  of  these ,  and  I  can  load  it  for  you !",
+      "called_tools": [
+        "search_tools"
+      ],
+      "card_count": 4,
+      "search_queries": [
+        "travel document"
+      ]
+    },
+    {
+      "name": "general_question",
+      "prompt": "What is SharpToolz?",
+      "description": "General questions should NOT trigger search",
+      "passed": true,
+      "issues": [],
+      "full_text_preview": "Sharp Tool z  is  a  platform  that  provides  pre -designed  SVG  document  templates  such  as  invoices ,  certificates ,  labels ,  ID  cards ,  and  more .  Users  can  fill  in  fields  on  these  templates  using  various  input  options  like  text ,  numbers ,  dates ,  dropdown  selections ,  check boxes ,  uploads ,  and  signatures .  The  platform  allows  users  to  preview  the  documents  in  real -time  and  download  them  as  PDFs  or  PNG s .  It's  designed  to  make  profes",
+      "called_tools": [],
+      "card_count": 0,
+      "search_queries": []
+    },
+    {
+      "name": "pricing_question",
+      "prompt": "How much does it cost?",
+      "description": "Pricing questions should answer directly",
+      "passed": true,
+      "issues": [],
+      "full_text_preview": "The  cost  of  using  Sharp Tool z  depends  on  the  specific  plan  or  template  you  choose  to  use .  Sharp Tool z  might  offer  free  basic  templates  along  with  premium  templates  or  features  that  require  a  subscription  or  one -time  purchase .  \n\n For  accurate  and  up -to -date  pricing  information ,  please  check  the  Sharp Tool z  website  or  contact  their  support  directly .  If  you  have  specific  templates  or  features  in  mind ,  I  can  help  guide  you  t",
+      "called_tools": [],
+      "card_count": 0,
+      "search_queries": []
+    },
+    {
+      "name": "features_question",
+      "prompt": "What can I do on this platform?",
+      "description": "Feature questions should NOT trigger search",
+      "passed": true,
+      "issues": [],
+      "full_text_preview": "On  Sharp Tool z ,  you  can :\n\n 1 .  ** Browse  and  Select  Templates ** :  Choose  from  a  variety  of  pre -designed  SVG  document  templates  such  as  invoices ,  certificates ,  labels ,  ID  cards ,  and  more .\n\n 2 .  ** Fill  in  Form  Fields ** :  Each  template  has  editable  form  fields  that  you  can  fill  in  with  your  information .\n\n 3 .  ** Live  Preview ** :  See  how  the  document  looks  as  you  make  changes .\n\n 4 .  ** Download  Formats ** :  Save  your  finalized",
+      "called_tools": [],
+      "card_count": 0,
+      "search_queries": []
+    },
+    {
+      "name": "out_of_scope",
+      "prompt": "Write me a Python script",
+      "description": "Should refuse out-of-scope requests",
+      "passed": true,
+      "issues": [],
+      "full_text_preview": "I'm  here  to  assist  with  document -related  tasks  on  Sharp Tool z ,  not  general  script  writing .  If  your  script  request  is  related  to  processing  documents  or  images ,  please  let  me  know  how  I  can  specifically  assist  you  within  the  platform 's  features .  Otherwise ,  I'd  recommend  checking  programming  resources  or  forums  for  Python  scripting  assistance .",
+      "called_tools": [],
+      "card_count": 0,
+      "search_queries": []
+    },
+    {
+      "name": "flight_search_returns_results",
+      "prompt": "show me flight templates",
+      "description": "Searching for 'flight' should return flight templates",
+      "passed": true,
+      "issues": [],
+      "full_text_preview": "Here  are  the  flight  templates  available  on  Sharp Tool z :\n\n 1 .  ** 3 way  Flight **  -  Flight  It inerary  ($ 5 . 00 )\n 2 .  ** Fl igth  It ener ay **  -  Flight  It inerary  ($ 5 . 00 )\n\n Let  me  know  if  you'd  like  to  use  any  of  these !",
+      "called_tools": [
+        "search_tools"
+      ],
+      "card_count": 2,
+      "search_queries": [
+        "flight"
+      ]
+    },
+    {
+      "name": "cards_search_returns_results",
+      "prompt": "show me flight templates",
+      "description": "Searching for 'flight' should return flight templates",
+      "passed": true,
+      "issues": [],
+      "full_text_preview": "Here  are  the  flight  templates  available  on  Sharp Tool z :\n\n -  ** 3 way  Flight ** :  A  comprehensive  flight  itinerary  template .\n -  ** Flight  It inerary ** :  Another  option  for  creating  a  detailed  flight  itinerary .\n\n Let  me  know  if  you'd  like  to  use  one  of  these  templates  to  customize  your  itinerary .",
+      "called_tools": [
+        "search_tools"
+      ],
+      "card_count": 2,
+      "search_queries": [
+        "flight"
+      ]
+    },
+    {
+      "name": "no_match_honest_response",
+      "prompt": "I need a medical certificate",
+      "description": "When nothing matches, AI should search and show fallback templates",
+      "passed": true,
+      "issues": [],
+      "full_text_preview": "I  couldn't  find  an  exact  match  for  a  \" medical  certificate ,\"  but  here  are  some  other  popular  templates  on  Sharp Tool z .  Let  me  know  if  you  need  further  assistance  or  a  different  type  of  document !",
+      "called_tools": [
+        "search_tools"
+      ],
+      "card_count": 4,
+      "search_queries": [
+        "medical certificate"
+      ]
+    },
+    {
+      "name": "show_all_templates",
+      "prompt": "show me all templates",
+      "description": "'show all' should trigger show-all mode and return all templates",
+      "passed": true,
+      "issues": [],
+      "full_text_preview": "Here's  everything  available  on  Sharp Tool z :\n\n -  ** 3 way  Flight ** :  A  flight  itinerary  template  for  $ 5 . 00 \n -  ** Al abama ** :  A  card  template  for  $ 5 . 00 \n -  ** Fl igth  It ener ay ** :  Another  flight  itinerary  template  for  $ 5 . 00 \n -  ** New  Your k ** :  Another  card  template  for  $ 5 . 00 \n\n Let  me  know  if  you'd  like  to  use  any  of  these !",
+      "called_tools": [
+        "search_tools"
+      ],
+      "card_count": 4,
+      "search_queries": [
+        "show all available templates"
+      ]
+    },
+    {
+      "name": "what_else_returns_results",
+      "prompt": "what else do you have",
+      "description": "'what else' should trigger show-all mode",
+      "passed": true,
+      "issues": [],
+      "full_text_preview": "Here's  everything  available  on  Sharp Tool z  right  now :\n\n -  ** 3 way  Flight ** :  A  flight  itinerary  template  for  $ 5 . 00 \n -  ** Al abama ** :  A  card  template  for  $ 5 . 00 \n -  ** Fl igth  It enary ** :  Another  flight  itinerary  template  for  $ 5 . 00 \n -  ** New  Your k ** :  Another  card  template  for  $ 5 . 00 \n\n Let  me  know  if  you're  interested  in  any  of  these !",
+      "called_tools": [
+        "search_tools"
+      ],
+      "card_count": 4,
+      "search_queries": [
+        "show all"
+      ]
+    },
+    {
+      "name": "use_template_triggers_load",
+      "prompt": "use the flight itinerary template",
+      "description": "When user says 'use [template]', AI should search first then load it",
+      "passed": true,
+      "issues": [],
+      "full_text_preview": "I've  loaded  ** 3 way  Flight **  for  you .  It's  ready  to  customize  \u2014  tell  me  what  you  want !",
+      "called_tools": [
+        "search_tools"
+      ],
+      "card_count": 2,
+      "search_queries": [
+        "flight itinerary"
+      ]
+    }
+  ]
+}

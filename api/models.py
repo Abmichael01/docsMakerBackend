@@ -336,6 +336,41 @@ class TransformVariable(models.Model):
     class Meta:
         unique_together = ['name', 'category']
 
+class AiChatSession(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="chat_sessions")
+    title = models.CharField(max_length=255, default="New Chat")
+    template = models.ForeignKey(Template, on_delete=models.SET_NULL, null=True, blank=True)
+    purchased_template = models.ForeignKey(PurchasedTemplate, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.title}"
+
+class AiChatMessage(models.Model):
+    ROLE_CHOICES = [
+        ('user', 'User'),
+        ('assistant', 'Assistant'),
+        ('tool', 'Tool'),
+        ('system', 'System'),
+    ]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session = models.ForeignKey(AiChatSession, on_delete=models.CASCADE, related_name="messages")
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    content = models.TextField(blank=True, null=True)
+    metadata = models.JSONField(default=dict, blank=True, help_text="Stores tool results, cards, etc.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.session.id} - {self.role}"
+
 @receiver(post_delete, sender=Template)
 def auto_delete_file_on_delete_template(sender, instance, **kwargs):
     """Deletes base SVG file from storage when Template is deleted."""

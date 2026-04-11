@@ -36,6 +36,8 @@ dependencies = [
     "boto3 (>=1.42.44,<2.0.0)",
     "rembg (>=2.0.72,<3.0.0)",
     "onnxruntime (>=1.24.3,<2.0.0)",
+    "openai (>=2.30.0,<3.0.0)",
+    "duckduckgo-search (>=8.1.1,<9.0.0)",
 ]
 
 
