@@ -1,0 +1,13 @@
+# Custom Nginx CDN for Dokploy
+# This isolated container streams User Uploads (SVGs, PDFs) instantly to the internet
+# completely independent of the Django backend Python workers.
+FROM nginx:alpine
+
+# Remove default nginx placeholder page
+RUN rm -rf /usr/share/nginx/html/*
+
+# Ensure the media directory exists so Dokploy can smoothly bind the hard drive Volume here
+# The host volume (/root/dokploy_volumes/sharptoolz/media) maps directly onto this folder.
+RUN mkdir -p /usr/share/nginx/html/media
+
+EXPOSE 80
