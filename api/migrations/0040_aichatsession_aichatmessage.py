@@ -9,7 +9,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0038_sitesettings_template_cache_version'),
+        ('api', '0039_sitesettings_show_community_on_hover_and_more'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
