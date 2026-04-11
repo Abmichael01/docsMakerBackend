@@ -34,7 +34,7 @@ SECRET_KEY = 'django-insecure-+#ds1yk1fdrx$=3&yf+!q$r9sy!l$vjl8ea@_fhya_t3(okl!p
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', ".vercel.app", ".now.sh", ".vercel.sh", "127.0.0.1", "9bad-102-89-68-147.ngrok-free.app", "api.sharptoolz.com", "38.242.198.49"]
+ALLOWED_HOSTS = ['localhost', ".vercel.app", ".now.sh", ".vercel.sh", "127.0.0.1", "9bad-102-89-68-147.ngrok-free.app", "api.sharptoolz.com", "devapi.sharptoolz.com", "38.242.198.49"]
 
 # Application definition
 INSTALLED_APPS = [ 
@@ -304,6 +304,8 @@ CORS_ALLOWED_ORIGINS = [
     "https://myflightlookup.com",
     "https://api.sharptoolz.com",
     "https://cdn.sharptoolz.com",
+    "https://dev.sharptoolz.com",
+    "https://devapi.sharptoolz.com",
 ]
 
 CORS_ORIGIN_WHITELIST = [
@@ -331,7 +333,8 @@ CSRF_TRUSTED_ORIGINS = [
     "https://myflightlookup.com",
     "https://sharptoolz.com",
     "https://parcelfinda.com",
-    "https://myflightlookup.com",
+    "https://dev.sharptoolz.com",
+    "https://devapi.sharptoolz.com",
 ]
 
 JWT_COOKIE_SAMESITE = 'None'  # Allow cross-site cookies
