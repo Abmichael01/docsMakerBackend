@@ -6,8 +6,10 @@ FROM nginx:alpine
 # Remove default nginx placeholder page
 RUN rm -rf /usr/share/nginx/html/*
 
-# Ensure the media directory exists so Dokploy can smoothly bind the hard drive Volume here
-# The host volume (/root/dokploy_volumes/sharptoolz/media) maps directly onto this folder.
+# Ensure the media directory exists
 RUN mkdir -p /usr/share/nginx/html/media
+
+# Inject custom Nginx configuration for CORS and Large File support
+COPY nginx.cdn.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
