@@ -63,6 +63,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.gzip.GZipMiddleware',  # GZip must be high in the stack for API responses
     'django.middleware.http.ConditionalGetMiddleware',  # Adds ETag support
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -189,7 +190,7 @@ STORAGES = {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
     "staticfiles": {
-        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
 
@@ -302,6 +303,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://38.242.198.49",
     "https://myflightlookup.com",
     "https://api.sharptoolz.com",
+    "https://cdn.sharptoolz.com",
 ]
 
 CORS_ORIGIN_WHITELIST = [
@@ -325,6 +327,7 @@ CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 # CSRF Trusted Origins - Required for CSRF validation
 CSRF_TRUSTED_ORIGINS = [
     "https://api.sharptoolz.com",  # Add your API domain
+    "https://cdn.sharptoolz.com",
     "https://myflightlookup.com",
     "https://sharptoolz.com",
     "https://parcelfinda.com",
