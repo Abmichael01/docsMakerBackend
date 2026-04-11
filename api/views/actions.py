@@ -15,7 +15,7 @@ from django.http import HttpResponse
 
 import rembg
 
-import cairosvg
+
 
 from ..models import PurchasedTemplate
 from ..serializers import FieldUpdateSerializer
@@ -33,14 +33,6 @@ try:
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
     render_svg_with_playwright = None
-
-# Try to import WeasyPrint renderer
-try:
-    from ..weasyprint_renderer import render_svg_with_weasyprint
-    WEASYPRINT_AVAILABLE = True
-except ImportError:
-    WEASYPRINT_AVAILABLE = False
-    render_svg_with_weasyprint = None
 
 
 class DownloadDoc(APIView):
@@ -176,15 +168,13 @@ class DownloadDoc(APIView):
                     print("Using Playwright for PDF rendering...")
                     output = render_svg_with_playwright(svg_content, "pdf")
                 else:
-                    print("Using CairoSVG for PDF rendering (Playwright not available)...")
-                    output = cairosvg.svg2pdf(bytestring=svg_content.encode("utf-8"))
+                    raise Exception("Backend SVG rendering is disabled. This is now handled by the frontend.")
             else:  # PNG
                 if PLAYWRIGHT_AVAILABLE:
                     print("Using Playwright for PNG rendering...")
                     output = render_svg_with_playwright(svg_content, "png")
                 else:
-                    print("Using CairoSVG for PNG rendering (Playwright not available)...")
-                    output = cairosvg.svg2png(bytestring=svg_content.encode("utf-8"))
+                    raise Exception("Backend SVG rendering is disabled. This is now handled by the frontend.")
             
             if output_type == "pdf":
                 content_type = "application/pdf"
