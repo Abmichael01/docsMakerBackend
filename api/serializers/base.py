@@ -51,7 +51,9 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
             'min_topup_amount', 'funding_whatsapp_number', 'exchange_rate_override',
             'maintenance_mode', 'disable_new_signups', 'disable_deposits',
             'global_announcement_text', 'global_announcement_link', 'enable_global_announcement',
-            'dev_name_obfuscated', 'owner_name_obfuscated', 'template_cache_version'
+            'dev_name_obfuscated', 'owner_name_obfuscated', 'template_cache_version',
+            'show_whatsapp_on_hover', 'show_community_on_hover', 'show_telegram_on_hover',
+            'show_instagram_on_hover', 'show_twitter_on_hover', 'show_tiktok_on_hover'
         ]
         read_only_fields = fields
 
