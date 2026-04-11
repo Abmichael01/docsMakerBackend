@@ -30,7 +30,7 @@ RUN pip install poetry>=2.0.0
 COPY pyproject.toml poetry.lock* ./
 
 # Install dependencies (without dev)
-RUN poetry lock && poetry install --without dev --no-root && rm -rf $POETRY_CACHE_DIR
+RUN poetry lock && poetry install --no-root && rm -rf $POETRY_CACHE_DIR
 
 # -- Stage 2: Final Runtime --
 FROM python:3.11-slim-bullseye AS runtime
