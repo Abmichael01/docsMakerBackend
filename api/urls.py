@@ -5,7 +5,7 @@ from .views import (
     TutorialViewSet, TransformVariableViewSet,
     DownloadDoc, RemoveBackgroundView, AdminOverview, AdminUsers, AdminUserDetails, AdminDocuments,
     WalletStatsView, WalletListView, WalletAdjustView, PendingRequestsView, ApproveRequestView, RejectRequestView, TransactionHistoryView,
-    AiChatView,
+    AiChatView, AiChatSessionViewSet,
 )
 from django.urls import path
 
@@ -18,6 +18,7 @@ router.register(r'tutorials', TutorialViewSet, basename='tutorial')
 router.register(r'fonts', FontViewSet, basename='font')
 router.register(r'settings', SiteSettingsViewSet, basename='settings')
 router.register(r'transform-variables', TransformVariableViewSet, basename='transform-variable')
+router.register(r'ai-chat/sessions', AiChatSessionViewSet, basename='ai-chat-session')
 
 urlpatterns = [
     path("track/<str:tracking_id>/", PublicTemplateTrackingView.as_view(), name="track-template"),

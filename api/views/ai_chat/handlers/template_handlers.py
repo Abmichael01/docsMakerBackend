@@ -62,9 +62,38 @@ async def handle_download_document(args, user):
             return PurchasedTemplate.objects.filter(pk=pid, buyer=u).first()
         pt = await sync_to_async(_get_pt)(pt_id, user)
         if not pt: return {"events": events, "text": "Purchased document not found."}
-        from ....utils.generation import generate_document_file
-        file_url = await sync_to_async(generate_document_file)(pt, out_type)
-        events.append({"type": "document_ready", "file": {"url": file_url, "type": out_type}})
+        from ...actions import DownloadDoc
+        from django.test import RequestFactory
+        import base64
+        import json
+        
+        factory = RequestFactory()
+        req = factory.post('/api/download-doc/', 
+                          data=json.dumps({"purchased_template_id": str(pt_id), "type": out_type}),
+                          content_type='application/json')
+        req.user = user
+        
+        # We need async to sync wrapper for the view
+        def _get_doc():
+            response = DownloadDoc.as_view()(req)
+            if response.status_code == 200:
+                b64 = base64.b64encode(response.content).decode('utf-8')
+                mime = "application/pdf" if out_type == "pdf" else "image/png"
+                return f"data:{mime};base64,{b64}", None
+            return None, response.data.get("error", "Unknown error")
+            
+        file_data, error = await sync_to_async(_get_doc)()
+        if error:
+            return {"events": events, "text": f"Document compilation failed: {error}"}
+            
+        events.append({
+            "type": "document_ready", 
+            "file": {
+                "data": file_data, 
+                "filename": f"{pt.name or 'document'}.{out_type}",
+                "mime": "application/pdf" if out_type == "pdf" else "image/png"
+            }
+        })
         return {"events": events, "text": f"Your {out_type.upper()} is ready for download!"}
     except Exception as exc:
         return {"events": events, "text": f"Download failed: {exc}"}
@@ -85,3 +114,33 @@ async def handle_save_edits(args, user):
         return {"events": events, "text": "Document not found."}
     except Exception as exc:
         return {"events": events, "text": f"Save failed: {exc}"}
+
+async def handle_get_template_details(args):
+    events = []
+    template_id = args.get("template_id", "")
+    try:
+        def _get_details(tid):
+            tpl = Template.objects.filter(pk=tid, is_active=True).first()
+            if not tpl: return None
+            fields = []
+            for f in (tpl.form_fields or []):
+                fields.append({
+                    "name": f.get("name", f.get("id", "")),
+                    "type": f.get("type", "text"),
+                    "required": f.get("required", False)
+                })
+            return {
+                "id": str(tpl.id),
+                "name": tpl.name,
+                "fields": fields
+            }
+        details = await sync_to_async(_get_details)(template_id)
+        if details:
+            field_list = "\n".join([f"- {f['name']} ({f['type']})" for f in details['fields']])
+            return {
+                "events": events, 
+                "text": f"Required fields for '{details['name']}':\n{field_list}"
+            }
+        return {"events": events, "text": f"Template {template_id} not found."}
+    except Exception as exc:
+        return {"events": events, "text": f"Failed to get details: {exc}"}

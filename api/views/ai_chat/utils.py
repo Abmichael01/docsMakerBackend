@@ -18,19 +18,20 @@ def _is_writable(field: dict) -> bool:
         return False
     return True
 
-def _build_tools(fields: list, valid_field_ids: list, has_image: bool) -> list:
+def _build_tools(fields: list, valid_field_ids: list, has_image: bool, is_editor_mode: bool = False) -> list:
     """Construct the full OpenAI tools list for the current context."""
     tools = []
 
     # ── Single field update ───────────────────────────────────────────────────
-    if valid_field_ids:
+    if is_editor_mode and valid_field_ids:
         tools.append({
             "type": "function",
             "function": {
                 "name": "update_field",
                 "description": (
                     "Update a single document field value. "
-                    "Use batch_update_fields when changing 2 or more fields."
+                    "Use this for direct user requests like 'Change X to Y' or 'Set field Z'. "
+                    "Execute immediately if the value is clear."
                 ),
                 "parameters": {
                     "type": "object",
@@ -49,9 +50,9 @@ def _build_tools(fields: list, valid_field_ids: list, has_image: bool) -> list:
             "function": {
                 "name": "batch_update_fields",
                 "description": (
-                    "Update multiple document fields in a single operation. "
-                    "ALWAYS prefer this over multiple update_field calls. "
-                    "Use for: magic fill, data extraction, consistency fixes, or any 2+ field update."
+                    "Update multiple document fields simultaneously. "
+                    "Use this to apply comprehensive data sets (e.g. from an address or CV) "
+                    "directly to the document."
                 ),
                 "parameters": {
                     "type": "object",
@@ -71,6 +72,42 @@ def _build_tools(fields: list, valid_field_ids: list, has_image: bool) -> list:
                         }
                     },
                     "required": ["updates"],
+                },
+            },
+        })
+        
+        # ── Suggest field update ────────────────────────────────────────────────
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": "suggest_field_updates",
+                "description": (
+                    "Propose document field updates to the user for approval. "
+                    "Use for: complex logical changes, professional text rewrites, "
+                    "or when the value is a 'best guess' that needs verification."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "rationale": {
+                            "type": "string",
+                            "description": "A short, user-friendly explanation of why these updates are recommended."
+                        },
+                        "updates": {
+                            "type": "array",
+                            "description": "Array of {field_id, value} objects.",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "field_id": {"type": "string", "enum": valid_field_ids},
+                                    "value": {"type": "string"},
+                                },
+                                "required": ["field_id", "value"],
+                            },
+                            "minItems": 1,
+                        }
+                    },
+                    "required": ["rationale", "updates"],
                 },
             },
         })
@@ -101,7 +138,9 @@ def _build_tools(fields: list, valid_field_ids: list, has_image: bool) -> list:
             "description": (
                 "Search SharpToolz for available document templates. "
                 "ALWAYS call this before asking the user clarifying questions. "
-                "Set load_best_match=true when user wants to use/open/edit a template."
+                "MANDATORY: You must present the results to the user and never guess category names. "
+                "Set load_best_match=true only if the user explicitly wants to switch to a DIFFERENT template. "
+                "NEVER use this if the user is already in Editor Mode for a matching template."
             ),
             "parameters": {
                 "type": "object",
@@ -154,12 +193,72 @@ def _build_tools(fields: list, valid_field_ids: list, has_image: bool) -> list:
         },
     })
 
+    # ── Specialized document analysis ──────────────────────────────────────────
+    if is_editor_mode:
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": "analyze_document",
+                "description": (
+                    "Call this when the user asks for a review, check, or says 'looks good?'. "
+                    "Also call proactively if you detect potential math or locale issues. "
+                    "It verifies math, locale consistency, and professional quality."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        })
+
+        # ── Locale defaults ───────────────────────────────────────────────────────
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": "get_locale_defaults",
+                "description": "Get industry-standard defaults for VAT, date format, and currency for a specific country.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "country": {
+                            "type": "string", 
+                            "description": "Country name (e.g. 'Nigeria', 'USA', 'UK')."
+                        }
+                    },
+                    "required": ["country"],
+                },
+            },
+        })
+
+    # ── Get template details ──────────────────────────────────────────────────
+    tools.append({
+        "type": "function",
+        "function": {
+            "name": "get_template_details",
+            "description": (
+                "Fetch the exact list of required info (fields) for a specific template. "
+                "Call this whenever the user asks 'What do I need?' or 'What info is required?' "
+                "for a document. NEVER guess fields."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "template_id": {"type": "string", "description": "The UUID of the template."},
+                },
+                "required": ["template_id"],
+            },
+        },
+    })
+
     # ── Load template ─────────────────────────────────────────────────────────
     tools.append({
         "type": "function",
         "function": {
             "name": "load_template",
-            "description": "Load a specific template by ID into the inline editor.",
+            "description": (
+                "Load a specific template by ID into the inline editor. "
+                "MANDATORY: Never call this for the template you are currently editing in Editor Mode."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -171,79 +270,90 @@ def _build_tools(fields: list, valid_field_ids: list, has_image: bool) -> list:
     })
 
     # ── Purchase ──────────────────────────────────────────────────────────────
-    tools.append({
-        "type": "function",
-        "function": {
-            "name": "purchase_template",
-            "description": (
-                "Purchase a template the user has finished editing. "
-                "Deducts price from wallet and enables download. "
-                "Call after user confirms they want to finalize/download."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "template_id": {"type": "string"},
-                    "form_fields": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": {"type": "string"},
-                                "currentValue": {"type": "string"},
+    if is_editor_mode:
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": "purchase_template",
+                "description": (
+                    "Purchase a template the user has finished editing. "
+                    "Use the 'Active Template ID' from the system prompt metadata. "
+                    "Deducts price from wallet and enables download."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "template_id": {
+                            "type": "string",
+                            "description": "The UUID of the template to purchase (from Metadata)."
+                        },
+                        "form_fields": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {"type": "string"},
+                                    "currentValue": {"type": "string"},
+                                },
+                                "required": ["id", "currentValue"],
                             },
-                            "required": ["id", "currentValue"],
                         },
                     },
+                    "required": ["template_id", "form_fields"],
                 },
-                "required": ["template_id", "form_fields"],
             },
-        },
-    })
+        })
 
-    # ── Download ──────────────────────────────────────────────────────────────
-    tools.append({
-        "type": "function",
-        "function": {
-            "name": "download_document",
-            "description": "Download a purchased document as PDF or PNG.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "purchased_template_id": {"type": "string"},
-                    "output_type": {"type": "string", "enum": ["pdf", "png"]},
+        # ── Download ──────────────────────────────────────────────────────────────
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": "download_document",
+                "description": (
+                    "Download a PURCHASED document as PDF or PNG. "
+                    "ONLY call this if 'Purchased Document ID' exists in Metadata. "
+                    "If not purchased yet, you MUST call purchase_template first."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "purchased_template_id": {
+                            "type": "string",
+                            "description": "The UUID of the purchased document (from Metadata)."
+                        },
+                        "output_type": {"type": "string", "enum": ["pdf", "png"]},
+                    },
+                    "required": ["purchased_template_id", "output_type"],
                 },
-                "required": ["purchased_template_id", "output_type"],
             },
-        },
-    })
+        })
 
-    # ── Save edits ────────────────────────────────────────────────────────────
-    tools.append({
-        "type": "function",
-        "function": {
-            "name": "save_edits",
-            "description": "Save field edits to a purchased template so changes persist.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "purchased_template_id": {"type": "string"},
-                    "form_fields": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": {"type": "string"},
-                                "currentValue": {"type": "string"},
+        # ── Save edits ────────────────────────────────────────────────────────────
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": "save_edits",
+                "description": "Save field edits to a purchased template so changes persist.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "purchased_template_id": {"type": "string"},
+                        "form_fields": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {"type": "string"},
+                                    "currentValue": {"type": "string"},
+                                },
+                                "required": ["id", "currentValue"],
                             },
-                            "required": ["id", "currentValue"],
                         },
                     },
+                    "required": ["purchased_template_id", "form_fields"],
                 },
-                "required": ["purchased_template_id", "form_fields"],
             },
-        },
-    })
+        })
 
     # ── Image tools (only when an image is present) ───────────────────────────
     if has_image and valid_field_ids:
