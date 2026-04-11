@@ -7,6 +7,10 @@ from .views import (
     WalletStatsView, WalletListView, WalletAdjustView, PendingRequestsView, ApproveRequestView, RejectRequestView, TransactionHistoryView
 )
 from django.urls import path
+from django.http import HttpResponse
+
+def health_check(request):
+    return HttpResponse("OK")
 
 router = DefaultRouter()
 router.register(r'tools', ToolViewSet, basename='tool')
@@ -37,5 +41,6 @@ urlpatterns = [
     path("admin/wallet/approve/", ApproveRequestView.as_view(), name="admin-wallet-approve"),
     path("admin/wallet/reject/", RejectRequestView.as_view(), name="admin-wallet-reject"),
     path("admin/wallet/transactions/", TransactionHistoryView.as_view(), name="admin-wallet-transactions"),
+    path("health/", health_check, name="health-check"),
 ]
 urlpatterns += router.urls
