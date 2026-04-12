@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SharpToolz{% endblock %}</title>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f9;
+            color: #1a1a1a;
+        }
+        .container {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+        .header {
+            padding: 40px 20px;
+            text-align: center;
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+        }
+        .header img {
+            max-height: 50px;
+            width: auto;
+        }
+        .content {
+            padding: 40px 30px;
+            line-height: 1.6;
+        }
+        .footer {
+            padding: 30px;
+            text-align: center;
+            font-size: 14px;
+            color: #6b7280;
+            background-color: #f9fafb;
+            border-top: 1px solid #e5e7eb;
+        }
+        .button {
+            display: inline-block;
+            padding: 14px 28px;
+            background-color: #3b82f6;
+            color: #ffffff !important;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            margin: 20px 0;
+        }
+        .otp-code {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 32px;
+            font-weight: bold;
+            color: #1e3a8a;
+            letter-spacing: 5px;
+            padding: 20px;
+            background: #eff6ff;
+            border-radius: 8px;
+            display: inline-block;
+            margin: 20px 0;
+        }
+        .divider {
+            height: 1px;
+            background-color: #e5e7eb;
+            margin: 30px 0;
+        }
+        .social-links {
+            margin-top: 20px;
+        }
+        .social-links a {
+            margin: 0 10px;
+            color: #3b82f6;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <table width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+            <td align="center" style="padding: 20px 0;">
+                <div class="container">
+                    <div class="header">
+                        <a href="https://sharptoolz.com" target="_blank">
+                            <img src="https://sharptoolz.com/logo.png" alt="SharpToolz">
+                        </a>
+                    </div>
+                    <div class="content">
+                        {% block content %}{% endblock %}
+                    </div>
+                    <div class="footer">
+                        <p>&copy; {{ current_year|default:"2026" }} SharpToolz. All rights reserved.</p>
+                        <p>
+                            Need help? Contact us at 
+                            <a href="mailto:{{ support_email|default:'support@sharptoolz.com' }}" style="color: #3b82f6; text-decoration: none;">
+                                {{ support_email|default:'support@sharptoolz.com' }}
+                            </a>
+                        </p>
+                        {% if site_settings %}
+                        <div class="social-links">
+                            {% if site_settings.twitter_link %}<a href="{{ site_settings.twitter_link }}">Twitter</a>{% endif %}
+                            {% if site_settings.instagram_link %}<a href="{{ site_settings.instagram_link }}">Instagram</a>{% endif %}
+                            {% if site_settings.telegram_link %}<a href="{{ site_settings.telegram_link }}">Telegram</a>{% endif %}
+                        </div>
+                        {% endif %}
+                        <p style="margin-top: 20px; font-size: 12px; color: #9ca3af;">
+                            You are receiving this email because you have an account on SharpToolz.
+                        </p>
+                    </div>
+                </div>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

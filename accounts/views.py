@@ -26,6 +26,11 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
+            
+            # Send Welcome Email
+            from api.utils.email_service import EmailService
+            EmailService.send_welcome_email(user)
+
             return Response({
                 "detail": "Registration successful",
                 "email": user.email, # type: ignore
@@ -93,13 +98,8 @@ class ForgotPasswordView(APIView):
 
             reset_url = f"{settings.FRONTEND_URL}/auth/reset-password?uid={uid}&token={token}"
 
-            send_mail(
-                "Reset Your Password",
-                f"Click the link to reset your password: {reset_url}",
-                settings.DEFAULT_FROM_EMAIL,
-                [email],
-                fail_silently=False,
-            )
+            from api.utils.email_service import EmailService
+            EmailService.send_password_reset(email, reset_url)
 
         return Response({"detail": "If this email exists, a reset link will be sent."}, status=status.HTTP_200_OK)
 

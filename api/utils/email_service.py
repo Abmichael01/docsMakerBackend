@@ -1,0 +1,81 @@
+import logging
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
+from django.utils.html import strip_tags
+from django.conf import settings
+from django.utils import timezone
+from api.models import SiteSettings
+
+logger = logging.getLogger(__name__)
+
+class EmailService:
+    @staticmethod
+    def _send_email(subject, template_name, context, recipient_list):
+        """
+        Internal Helper to send HTML/Text emails.
+        """
+        try:
+            # Add global context
+            site_settings = SiteSettings.get_settings()
+            context.update({
+                'current_year': timezone.now().year,
+                'support_email': site_settings.support_email or settings.DEFAULT_FROM_EMAIL,
+                'site_settings': site_settings,
+                'frontend_url': settings.FRONTEND_URL,
+            })
+
+            # Render HTML content
+            html_content = render_to_string(template_name, context)
+            # Create plain text version
+            text_content = strip_tags(html_content)
+
+            msg = EmailMultiAlternatives(
+                subject=subject,
+                body=text_content,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=recipient_list
+            )
+            msg.attach_alternative(html_content, "text/html")
+            msg.send()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send email '{subject}' to {recipient_list}: {str(e)}")
+            return False
+
+    @classmethod
+    def send_password_reset(cls, email, reset_url):
+        subject = "Reset Your Password - SharpToolz"
+        context = {'reset_url': reset_url}
+        return cls._send_email(subject, 'emails/auth/password_reset.html', context, [email])
+
+    @classmethod
+    def send_admin_otp(cls, recipient_list, username, email, code):
+        subject = "SECURITY ALERT: Admin Settings Modification Attempt"
+        context = {
+            'username': username,
+            'email': email,
+            'code': code
+        }
+        return cls._send_email(subject, 'emails/admin/security_otp.html', context, recipient_list)
+
+    @classmethod
+    def send_welcome_email(cls, user):
+        subject = "Welcome to SharpToolz!"
+        context = {
+            'username': user.username,
+            'dashboard_url': f"{settings.FRONTEND_URL}/dashboard"
+        }
+        return cls._send_email(subject, 'emails/auth/welcome.html', context, [user.email])
+
+    @classmethod
+    def send_wallet_funded(cls, user, amount, balance, transaction_id, description):
+        subject = f"Wallet Funded: ${amount} - SharpToolz"
+        context = {
+            'username': user.username,
+            'amount': amount,
+            'balance': balance,
+            'transaction_id': transaction_id,
+            'description': description,
+            'dashboard_url': f"{settings.FRONTEND_URL}/dashboard/wallet"
+        }
+        return cls._send_email(subject, 'emails/wallet/funded.html', context, [user.email])

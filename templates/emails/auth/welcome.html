@@ -1,0 +1,24 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Welcome to SharpToolz!{% endblock %}
+
+{% block content %}
+<h2 style="color: #1e3a8a; margin-top: 0;">Welcome to SharpToolz!</h2>
+<p>Hello {{ username }},</p>
+<p>We're thrilled to have you on board! SharpToolz is your all-in-one platform for professional document tools and templates. You're now part of a community that values precision and efficiency.</p>
+
+<p>Here’s how to get started:</p>
+<ul style="padding-left: 20px;">
+    <li><strong>Explore Tools:</strong> Browse our collection of editing and design tools.</li>
+    <li><strong>Credit Your Wallet:</strong> Add funds to your wallet to start creating premium documents.</li>
+    <li><strong>24/7 Support:</strong> Reach out to us anytime if you have questions.</li>
+</ul>
+
+<div style="text-align: center;">
+    <a href="{{ dashboard_url }}" class="button">Go to Dashboard</a>
+</div>
+
+<p>If you have any questions, feel free to reply to this email or contact us via WhatsApp.</p>
+
+<p>Best regards,<br>The SharpToolz Team</p>
+{% endblock %}
