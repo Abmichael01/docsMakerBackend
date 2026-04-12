@@ -3,13 +3,13 @@
 {% block title %}Wallet Funded - SharpToolz{% endblock %}
 
 {% block content %}
-<h2 style="color: #059669; margin-top: 0;">Wallet Funded Successfully</h2>
-<p>Hello {{ username }},</p>
+<h2 style="color: #cee88c; margin-top: 0;">Wallet Funded Successfully</h2>
+<p>Hello {{ username|title }},</p>
 <p>Your wallet has been credited with <strong>${{ amount }}</strong>.</p>
 <p>Your new balance is <strong>${{ balance }}</strong>.</p>
 
 <div style="text-align: center;">
-    <p style="font-size: 18px; font-weight: bold; color: #1e3a8a;">Current Balance: ${{ balance }}</p>
+    <p style="font-size: 18px; font-weight: bold; color: #cee88c;">Current Balance: ${{ balance }}</p>
     <a href="{{ dashboard_url }}" class="button">Go to Dashboard</a>
 </div>
 
