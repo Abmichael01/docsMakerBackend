@@ -308,6 +308,7 @@ class SiteSettings(models.Model):
     maintenance_mode = models.BooleanField(default=False, help_text="Block non-admins with a maintenance screen")
     disable_new_signups = models.BooleanField(default=False, help_text="Temporarily block new users from creating accounts")
     disable_deposits = models.BooleanField(default=False, help_text="Lock the wallet top-up functionality temporarily")
+    enable_ai_features = models.BooleanField(default=True, help_text="Global kill-switch for AI Chat and assistant features")
 
     # 4. Branding Defaults
     global_announcement_text = models.TextField(blank=True, help_text="Text for global dashboard banner")

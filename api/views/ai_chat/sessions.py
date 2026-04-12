@@ -8,6 +8,12 @@ class AiChatSessionViewSet(viewsets.ModelViewSet):
     serializer_class = AiChatSessionSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def initial(self, request, *args, **kwargs):
+        from ...models import SiteSettings
+        if not SiteSettings.get_settings().enable_ai_features:
+            self.permission_denied(request, message="AI Features are currently disabled by Admin.")
+        super().initial(request, *args, **kwargs)
+
     def get_queryset(self):
         return AiChatSession.objects.filter(user=self.request.user)
 

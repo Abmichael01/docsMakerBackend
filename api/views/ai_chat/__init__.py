@@ -17,6 +17,11 @@ from .executor import execute_tool
 class AiChatView(View):
     async def post(self, request):
         def _get_initial_data():
+            from ...models import SiteSettings
+            settings_obj = SiteSettings.get_settings()
+            if not settings_obj.enable_ai_features:
+                return "AI_DISABLED", None, None, None, None
+
             user = request.user
             if not user or not user.is_authenticated:
                 from accounts.authentication import JWTAuthenticationFromCookies
@@ -100,6 +105,12 @@ class AiChatView(View):
             return fields, tool_price, body, user, session
 
         fields, tool_price, body, user, session = await sync_to_async(_get_initial_data)()
+        if fields == "AI_DISABLED":
+            return StreamingHttpResponse(
+                iter([f"data: {json.dumps({'type': 'error', 'message': 'AI Features are currently disabled by Admin.'})}\n\n"]),
+                status=403, content_type="text/event-stream"
+            )
+
         if fields is None:
             return StreamingHttpResponse(
                 iter([f"data: {json.dumps({'type': 'error', 'message': 'Unauthorized'})}\n\n"]),
