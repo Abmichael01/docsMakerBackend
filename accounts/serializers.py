@@ -77,6 +77,12 @@ class LoginSerializer(serializers.Serializer):
         password = data.get("password")
 
         if username and password:
+            # If username looks like an email, try to find the actual username
+            if "@" in username:
+                user_obj = User.objects.filter(email=username).first()
+                if user_obj:
+                    username = user_obj.username
+
             user = authenticate(request=self.context.get("request"), username=username, password=password)
             if not user:
                 raise serializers.ValidationError({"error": ("Invalid credentials")})
