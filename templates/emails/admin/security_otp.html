@@ -1,0 +1,24 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Security Verification - SharpToolz{% endblock %}
+
+{% block content %}
+<h2 style="color: #dc2626; margin-top: 0;">Security Alert</h2>
+<p>Hello Admin,</p>
+<p>
+    An attempt was made to modify the global **Site Settings** by user <strong>'{{ username }}'</strong> ({{ email }}).
+</p>
+<p>If this was you, please use the following verification code to authorize the changes:</p>
+
+<div style="text-align: center;">
+    <div class="otp-code">{{ code }}</div>
+</div>
+
+<p><strong>This code will expire in 5 minutes.</strong></p>
+
+<div class="divider"></div>
+
+<p style="color: #dc2626; font-size: 14px;">
+    <strong>Warning:</strong> If you did not authorize this change, please check your system logs and consider changing your administrative credentials immediately.
+</p>
+{% endblock %}

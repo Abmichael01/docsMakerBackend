@@ -58,13 +58,23 @@ class Wallet(models.Model):
         self.balance += amount
         self.save(update_fields=['balance'])
 
-        return Transaction.objects.create(
+        tx = Transaction.objects.create(
             wallet=self,
             type=Transaction.Type.DEPOSIT,
             amount=amount,
             status=Transaction.Status.COMPLETED,
             description=description
         )
+
+        # Send Email Notification
+        try:
+            from api.utils.email_service import EmailService
+            EmailService.send_wallet_funded(self.user, amount, self.balance, tx.tx_id, description)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to send wallet funding email: {e}")
+
+        return tx
 
     @transaction.atomic
     def debit(self, amount: Decimal, *, description=''):

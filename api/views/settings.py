@@ -66,16 +66,8 @@ class SiteSettingsViewSet(viewsets.ViewSet):
 
         # Send email
         try:
-            subject = "SECURITY ALERT: Admin Settings Modification Attempt"
-            message = (
-                f"Attention Admin,\n\n"
-                f"User '{request.user.username}' ({request.user.email}) is attempting to modify the global Site Settings.\n\n"
-                f"If this is authorized, here is the verification code: {code}\n"
-                f"This code will expire in 5 minutes.\n\n"
-                f"If you did not authorize this change, please check your system logs immediately."
-            )
-            from_email = settings.DEFAULT_FROM_EMAIL
-            send_mail(subject, message, from_email, recipient_list)
+            from api.utils.email_service import EmailService
+            EmailService.send_admin_otp(recipient_list, request.user.username, request.user.email, code)
             return Response({"message": "Verification code sent to email."})
         except Exception as e:
             import logging
