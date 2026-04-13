@@ -62,7 +62,7 @@ class SiteSettingsViewSet(viewsets.ViewSet):
             if hasattr(settings, 'EMAIL_HOST_USER') and settings.EMAIL_HOST_USER:
                 recipient_list = [settings.EMAIL_HOST_USER]
             else:
-                recipient_list = ["corehiseven@gmail.com"] # Original fallback
+                recipient_list = ["support@sharptoolz.com"] # Standard fallback
 
         # Send email
         try:

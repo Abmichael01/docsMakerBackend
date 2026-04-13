@@ -79,3 +79,18 @@ class EmailService:
             'dashboard_url': f"{settings.FRONTEND_URL}/dashboard/wallet"
         }
         return cls._send_email(subject, 'emails/wallet/funded.html', context, [user.email])
+
+    @classmethod
+    def send_contact_form(cls, name, email, subject, message):
+        site_settings = SiteSettings.get_settings()
+        dest_email = site_settings.support_email or "support@sharptoolz.com"
+        
+        email_subject = f"NEW CONTACT MESSAGE: {subject}"
+        context = {
+            'sender_name': name,
+            'sender_email': email,
+            'msg_subject': subject,
+            'message': message,
+        }
+        # We'll use a generic contact notification template
+        return cls._send_email(email_subject, 'emails/site/contact_notification.html', context, [dest_email])

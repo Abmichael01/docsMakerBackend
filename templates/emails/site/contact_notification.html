@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: 'Inter', sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px; }
+        .header { background: #0A0D11; color: #fff; padding: 20px; border-radius: 10px 10px 0 0; text-align: center; }
+        .content { padding: 20px; }
+        .field { margin-bottom: 20px; }
+        .label { font-weight: bold; color: #888; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em; }
+        .value { font-size: 16px; margin-top: 5px; }
+        .footer { text-align: center; font-size: 12px; color: #888; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="color: #FFB800;">SharpToolz</h1>
+            <p>New Contact Form Submission</p>
+        </div>
+        <div class="content">
+            <div class="field">
+                <div class="label">From</div>
+                <div class="value">{{ sender_name }} ({{ sender_email }})</div>
+            </div>
+            <div class="field">
+                <div class="label">Subject</div>
+                <div class="value">{{ msg_subject }}</div>
+            </div>
+            <div class="field">
+                <div class="label">Message</div>
+                <div class="value" style="background: #f9f9f9; padding: 15px; border-radius: 5px; white-space: pre-wrap;">{{ message }}</div>
+            </div>
+        </div>
+        <div class="footer">
+            <p>&copy; {{ current_year }} SharpToolz Systems. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

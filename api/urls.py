@@ -5,7 +5,7 @@ from .views import (
     TutorialViewSet, TransformVariableViewSet,
     DownloadDoc, RemoveBackgroundView, AdminOverview, AdminUsers, AdminUserDetails, AdminDocuments,
     WalletStatsView, WalletListView, WalletAdjustView, PendingRequestsView, ApproveRequestView, RejectRequestView, TransactionHistoryView,
-    AiChatView, AiChatSessionViewSet,
+    AiChatView, AiChatSessionViewSet, ContactView,
 )
 from django.urls import path
 from django.http import HttpResponse
@@ -29,6 +29,7 @@ urlpatterns = [
     path("download-doc/", DownloadDoc.as_view(), name="download-doc"),
     path("remove-background/", RemoveBackgroundView.as_view(), name="remove-background"),
     path("ai-chat/", AiChatView.as_view(), name="ai-chat"),
+    path("contact/", ContactView.as_view(), name="contact"),
 
     # Admin views
     path("admin/overview/", AdminOverview.as_view(), name="admin-overview"),

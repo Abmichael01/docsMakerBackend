@@ -10,3 +10,4 @@ from .settings import SiteSettingsViewSet
 from .wallet import WalletStatsView, WalletListView, WalletAdjustView, PendingRequestsView, ApproveRequestView, RejectRequestView, TransactionHistoryView
 from .ai_chat import AiChatView
 from .ai_chat.sessions import AiChatSessionViewSet
+from .contact import ContactView
