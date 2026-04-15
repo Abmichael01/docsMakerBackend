@@ -10,7 +10,6 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 
 from ..models import PurchasedTemplate
-from wallet.models import Wallet
 from ..serializers import AdminOverviewSerializer
 from ..permissions import IsAdminOrReadOnly, IsSuperUser
 from accounts.serializers import CustomUserDetailsSerializer
@@ -24,15 +23,20 @@ class AdminOverview(APIView):
         """
         Get admin overview statistics with optimized queries.
         No caching to ensure real-time data.
+        Accepts optional ?days= query param (default 30, max 365).
         """
         serializer = AdminOverviewSerializer()
         now = timezone.now()
-        thirty_days_ago = now.date() - timedelta(days=30)
-        
+        try:
+            days = min(int(request.GET.get('days', 30)), 365)
+        except (ValueError, TypeError):
+            days = 30
+        start_date = now.date() - timedelta(days=days)
+
         # 1. Get documents chart data - optimized with single query
         documents_data = (
             PurchasedTemplate.objects
-            .filter(created_at__date__gte=thirty_days_ago)
+            .filter(created_at__date__gte=start_date)
             .annotate(date=TruncDate('created_at'))
             .values('date', 'test')
             .annotate(
@@ -41,7 +45,7 @@ class AdminOverview(APIView):
             )
             .order_by('date')
         )
-        
+
         documents_chart = [
             {
                 'date': item['date'].isoformat(),
@@ -51,28 +55,28 @@ class AdminOverview(APIView):
             }
             for item in documents_data
         ]
-        
+
         # 2. Get user growth data - optimized (no loop)
         user_growth_data = (
             User.objects
-            .filter(date_joined__date__gte=thirty_days_ago)
+            .filter(date_joined__date__gte=start_date)
             .annotate(date=TruncDate('date_joined'))
             .values('date')
             .annotate(count=Count('id'))
             .order_by('date')
         )
-        
+
         # Calculate cumulative users
-        total_users_before_thirty_days = User.objects.filter(date_joined__date__lt=thirty_days_ago).count()
-        current_cumulative = total_users_before_thirty_days
-        
+        total_users_before_range = User.objects.filter(date_joined__date__lt=start_date).count()
+        current_cumulative = total_users_before_range
+
         growth_lookup = {item['date']: item['count'] for item in user_growth_data}
         revenue_chart = []
-        
+
         total_downloads = serializer.get_total_downloads()
-        
-        for i in range(30):
-            date = thirty_days_ago + timedelta(days=i+1)
+
+        for i in range(days):
+            date = start_date + timedelta(days=i+1)
             count_on_day = growth_lookup.get(date, 0)
             current_cumulative += count_on_day
             revenue_chart.append({
@@ -80,10 +84,12 @@ class AdminOverview(APIView):
                 'users': current_cumulative,
                 'downloads': total_downloads
             })
-        
+
         data = {
             'total_downloads': total_downloads,
             'total_users': serializer.get_total_users(),
+            'regular_users': serializer.get_regular_users(),
+            'staff_users': serializer.get_staff_users(),
             'total_purchased_docs': serializer.get_total_purchased_docs(),
             'total_wallet_balance': serializer.get_total_wallet_balance() if request.user.is_superuser else None,
             'documents_chart': documents_chart,
@@ -145,8 +151,13 @@ class AdminUsers(APIView):
                 past_30_days=Count('buyer_id', filter=Q(created_at__date__gte=intervals['past_30_days']), distinct=True),
             )
             
+            regular_users_count = User.objects.filter(is_staff=False, is_superuser=False).count()
+            staff_users_count = User.objects.filter(is_staff=True).count() + User.objects.filter(is_superuser=True, is_staff=False).count()
+
             stats_data = {
                 'all_users': User.objects.count() if not search else users_queryset.count(),
+                'regular_users': regular_users_count,
+                'staff_users': staff_users_count,
                 'new_users': new_users,
                 'total_purchases_users': purchases_stats,
             }

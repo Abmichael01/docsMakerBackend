@@ -40,7 +40,10 @@ class AnalyticsDashboardView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
-        days = 30
+        try:
+            days = min(int(request.GET.get('days', 30)), 365)
+        except (ValueError, TypeError):
+            days = 30
         start_date = timezone.now() - timedelta(days=days)
 
         # 1. Visitor Stats (Daily)
@@ -50,24 +53,24 @@ class AnalyticsDashboardView(APIView):
             date=TruncDate('timestamp')
         ).values('date').annotate(
             total_visits=Count('id'),
-            unique_visitors=Count('ip_address', distinct=True) # or session_key
+            unique_visitors=Count('ip_address', distinct=True)
         ).order_by('date')
 
         # 2. Wallet Inflow (Daily Revenue)
         revenue_stats = Transaction.objects.filter(
             created_at__gte=start_date,
-            type=Transaction.Type.PAYMENT, # Assuming this is a sale
+            type=Transaction.Type.PAYMENT,
             status=Transaction.Status.COMPLETED
         ).annotate(
             date=TruncDate('created_at')
         ).values('date').annotate(
             total_sales=Count('id'),
-            total_revenue=Sum('amount') 
+            total_revenue=Sum('amount')
         ).order_by('date')
 
         # Merge Data
         stats_map = {}
-        
+
         # Init map
         for i in range(days + 1):
             d = (timezone.now() - timedelta(days=days - i)).date()

@@ -14,8 +14,10 @@ class WalletStatsView(APIView):
     permission_classes = [IsAdminUser]
     
     def get(self, request):
-        # Total balance across all user wallets
-        total_balance = Wallet.objects.aggregate(total=Sum('balance'))['total'] or 0
+        # Total balance — regular users only (excludes admin/staff wallets)
+        total_balance = Wallet.objects.filter(
+            user__is_staff=False, user__is_superuser=False
+        ).aggregate(total=Sum('balance'))['total'] or 0
         
         # Pending funding requests (you'll need to create this model)
         pending_funds = 0  # TODO: Implement when FundingRequest model exists
@@ -47,7 +49,10 @@ class WalletListView(APIView):
     permission_classes = [IsAdminUser]
     
     def get(self, request):
-        wallets = Wallet.objects.select_related('user').all()
+        # Only list wallets of regular users (excludes admin/staff)
+        wallets = Wallet.objects.select_related('user').filter(
+            user__is_staff=False, user__is_superuser=False
+        )
         serializer = WalletSerializer(wallets, many=True)
         return Response(serializer.data)
 
