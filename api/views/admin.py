@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
+from django.core.cache import cache
 from django.db.models import Q, Count, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
@@ -367,6 +368,7 @@ class AdminDocuments(APIView):
             page_size = int(request.GET.get('page_size', 20))
             search = request.GET.get('search', '').strip()
             doc_type = request.GET.get('type', 'all').strip().lower()
+            page_size = max(10, min(page_size, 50))
 
             queryset = (
                 PurchasedTemplate.objects
@@ -389,35 +391,35 @@ class AdminDocuments(APIView):
             elif doc_type == 'test':
                 queryset = queryset.filter(test=True)
 
-            # Calculate stats
-            now = timezone.now()
-            seven_days_ago = now - timedelta(days=7)
-            
-            # Get total revenue from paid templates
-            total_revenue_data = (
-                PurchasedTemplate.objects
-                .filter(test=False, template__isnull=False)
-                .select_related('template__tool')
-                .aggregate(total=Sum('template__tool__price'))['total'] or 0
-            )
-            
-            # Get most popular template
-            popular_template_data = (
-                PurchasedTemplate.objects
-                .filter(template__isnull=False)
-                .values('template__name')
-                .annotate(count=Count('id'))
-                .order_by('-count')
-                .first()
-            )
-            popular_template = popular_template_data['template__name'] if popular_template_data else 'N/A'
-            
-            stats = {
-                'total_purchases': PurchasedTemplate.objects.count(),
-                'total_revenue': float(total_revenue_data),
-                'popular_template': popular_template,
-                'recent_count': PurchasedTemplate.objects.filter(created_at__gte=seven_days_ago).count(),
-            }
+            stats = cache.get('admin_documents_stats_v1')
+            if stats is None:
+                now = timezone.now()
+                seven_days_ago = now - timedelta(days=7)
+
+                total_revenue_data = (
+                    PurchasedTemplate.objects
+                    .filter(test=False, template__isnull=False)
+                    .select_related('template__tool')
+                    .aggregate(total=Sum('template__tool__price'))['total'] or 0
+                )
+
+                popular_template_data = (
+                    PurchasedTemplate.objects
+                    .filter(template__isnull=False)
+                    .values('template__name')
+                    .annotate(count=Count('id'))
+                    .order_by('-count')
+                    .first()
+                )
+                popular_template = popular_template_data['template__name'] if popular_template_data else 'N/A'
+
+                stats = {
+                    'total_purchases': PurchasedTemplate.objects.count(),
+                    'total_revenue': float(total_revenue_data),
+                    'popular_template': popular_template,
+                    'recent_count': PurchasedTemplate.objects.filter(created_at__gte=seven_days_ago).count(),
+                }
+                cache.set('admin_documents_stats_v1', stats, 60)
 
             paginator = PageNumberPagination()
             paginator.page_size = page_size
