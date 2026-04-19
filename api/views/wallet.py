@@ -2,11 +2,10 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser
 from rest_framework import status
-from django.db.models import Sum, Q
+from django.db.models import Sum, Count
 from django.utils import timezone
-from datetime import datetime, timedelta
-from api.models import PurchasedTemplate, Template
 from api.serializers.wallet import WalletSerializer, TransactionSerializer
+from api.utils.admin_ranges import get_date_window, get_range_label, parse_days_param
 from wallet.models import Wallet, Transaction
 
 class WalletStatsView(APIView):
@@ -14,34 +13,48 @@ class WalletStatsView(APIView):
     permission_classes = [IsAdminUser]
     
     def get(self, request):
+        days = parse_days_param(request.GET.get('days'), default=1)
+        _today, _start_date, start_datetime = get_date_window(days)
+
         # Total balance — regular users only (excludes admin/staff wallets)
         total_balance = Wallet.objects.filter(
             user__is_staff=False, user__is_superuser=False
         ).aggregate(total=Sum('balance'))['total'] or 0
-        
-        # Pending funding requests (you'll need to create this model)
-        pending_funds = 0  # TODO: Implement when FundingRequest model exists
-        
-        # This month's credits and debits
-        now = timezone.now()
-        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        
-        month_credit = Transaction.objects.filter(
-            created_at__gte=month_start,
-            type='deposit'
+
+        period_transactions = Transaction.objects.filter(
+            created_at__gte=start_datetime,
+            status=Transaction.Status.COMPLETED,
+            wallet__user__is_staff=False,
+            wallet__user__is_superuser=False,
+        )
+
+        total_inflow = period_transactions.filter(
+            type=Transaction.Type.DEPOSIT
         ).aggregate(total=Sum('amount'))['total'] or 0
-        
-        month_debit = Transaction.objects.filter(
-            created_at__gte=month_start,
-            type='payment'
+
+        total_outflow = period_transactions.filter(
+            type=Transaction.Type.PAYMENT
         ).aggregate(total=Sum('amount'))['total'] or 0
-        
-        return Response({
+
+        transaction_count = period_transactions.count()
+        funded_wallets = period_transactions.filter(
+            type=Transaction.Type.DEPOSIT
+        ).aggregate(total=Count('wallet_id', distinct=True))['total'] or 0
+
+        response = Response({
             'totalBalance': float(total_balance),
-            'pendingFunds': float(pending_funds),
-            'monthCredit': float(month_credit),
-            'monthDebit': float(month_debit),
+            'totalInflow': float(total_inflow),
+            'totalOutflow': abs(float(total_outflow)),
+            'netFlow': float(total_inflow) - abs(float(total_outflow)),
+            'transactionCount': transaction_count,
+            'fundedWallets': funded_wallets,
+            'rangeDays': days,
+            'rangeLabel': get_range_label(days),
         })
+        response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response["Pragma"] = "no-cache"
+        response["Expires"] = "0"
+        return response
 
 
 class WalletListView(APIView):

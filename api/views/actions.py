@@ -264,6 +264,16 @@ class DownloadDoc(APIView):
             return Response({"error": f"Failed to split document: {str(e)}", "traceback": error_traceback}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class IncrementDownloads(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        user.downloads += 1
+        user.save(update_fields=['downloads'])
+        return Response({'downloads': user.downloads}, status=status.HTTP_200_OK)
+
+
 class RemoveBackgroundView(APIView):
     permission_classes = [AllowAny] # Allow all users to access free feature
     

@@ -3,7 +3,7 @@ from .views import (
     TemplateViewSet, AdminTemplateViewSet, PublicTemplateTrackingView,
     PurchasedTemplateViewSet, ToolViewSet, FontViewSet, SiteSettingsViewSet,
     TutorialViewSet, TransformVariableViewSet,
-    DownloadDoc, RemoveBackgroundView, AdminOverview, AdminUsers, AdminUserDetails, AdminDocuments,
+    DownloadDoc, IncrementDownloads, RemoveBackgroundView, AdminOverview, AdminUsers, AdminUserDetails, AdminDocuments,
     WalletStatsView, WalletListView, WalletAdjustView, PendingRequestsView, ApproveRequestView, RejectRequestView, TransactionHistoryView,
     AiChatView, AiChatSessionViewSet, ContactView,
 )
@@ -27,6 +27,7 @@ router.register(r'ai-chat/sessions', AiChatSessionViewSet, basename='ai-chat-ses
 urlpatterns = [
     path("track/<str:tracking_id>/", PublicTemplateTrackingView.as_view(), name="track-template"),
     path("download-doc/", DownloadDoc.as_view(), name="download-doc"),
+    path("increment-downloads/", IncrementDownloads.as_view(), name="increment-downloads"),
     path("remove-background/", RemoveBackgroundView.as_view(), name="remove-background"),
     path("ai-chat/", AiChatView.as_view(), name="ai-chat"),
     path("contact/", ContactView.as_view(), name="contact"),

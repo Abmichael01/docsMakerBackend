@@ -12,6 +12,7 @@ from django.contrib.auth import get_user_model
 from ..models import PurchasedTemplate
 from ..serializers import AdminOverviewSerializer
 from ..permissions import IsAdminOrReadOnly, IsSuperUser
+from ..utils.admin_ranges import get_date_window, parse_days_param
 from accounts.serializers import CustomUserDetailsSerializer
 
 User = get_user_model()
@@ -23,15 +24,11 @@ class AdminOverview(APIView):
         """
         Get admin overview statistics with optimized queries.
         No caching to ensure real-time data.
-        Accepts optional ?days= query param (default 30, max 365).
+        Accepts optional ?days= query param (default 1, max 365).
         """
         serializer = AdminOverviewSerializer()
-        now = timezone.now()
-        try:
-            days = min(int(request.GET.get('days', 30)), 365)
-        except (ValueError, TypeError):
-            days = 30
-        start_date = now.date() - timedelta(days=days)
+        days = parse_days_param(request.GET.get('days'), default=1)
+        _today, start_date, _start_datetime = get_date_window(days)
 
         # 1. Get documents chart data - optimized with single query
         documents_data = (
@@ -51,7 +48,7 @@ class AdminOverview(APIView):
                 'date': item['date'].isoformat(),
                 'total': item['total'],
                 'paid': item['paid'],
-                'test': item['test']
+                'test': item['total'] if item['test'] else 0
             }
             for item in documents_data
         ]
@@ -76,7 +73,7 @@ class AdminOverview(APIView):
         total_downloads = serializer.get_total_downloads()
 
         for i in range(days):
-            date = start_date + timedelta(days=i+1)
+            date = start_date + timedelta(days=i)
             count_on_day = growth_lookup.get(date, 0)
             current_cumulative += count_on_day
             revenue_chart.append({
@@ -126,13 +123,12 @@ class AdminUsers(APIView):
                 )
             
             # Statistics (recalculated on every request)
-            now = timezone.now()
-            today = now.date()
+            today = timezone.localdate()
             intervals = {
                 'today': today,
-                'past_7_days': today - timedelta(days=7),
-                'past_14_days': today - timedelta(days=14),
-                'past_30_days': today - timedelta(days=30),
+                'past_7_days': today - timedelta(days=6),
+                'past_14_days': today - timedelta(days=13),
+                'past_30_days': today - timedelta(days=29),
             }
             
             # Optimized stats aggregation

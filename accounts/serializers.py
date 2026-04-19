@@ -21,14 +21,16 @@ class CustomUserDetailsSerializer(UserDetailsSerializer):
     wallet_balance = serializers.SerializerMethodField()
     total_purchases = serializers.SerializerMethodField()
     downloads = serializers.SerializerMethodField()
+    date_joined = serializers.DateTimeField(read_only=True)
 
     class Meta(UserDetailsSerializer.Meta):
-        fields = UserDetailsSerializer.Meta.fields + ( 
+        fields = UserDetailsSerializer.Meta.fields + (
             "email",
             "role",
             "wallet_balance",
             "total_purchases",
             "downloads",
+            "date_joined",
         )
 
     def get_role(self, user):
