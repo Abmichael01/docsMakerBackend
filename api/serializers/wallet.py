@@ -6,6 +6,7 @@ class WalletSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
     created_at = serializers.SerializerMethodField()
+    balance = serializers.SerializerMethodField()
 
     class Meta:
         model = Wallet
@@ -22,9 +23,17 @@ class WalletSerializer(serializers.ModelSerializer):
         # Wallet status is active by default (no blocked field in model yet)
         return 'active'
 
+    def get_balance(self, obj):
+        return float(obj.balance)
+
     def get_created_at(self, obj):
         # Use user's date_joined as wallet creation date
         return obj.user.date_joined.isoformat()
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['createdAt'] = data['created_at']
+        return data
 
 
 class TransactionSerializer(serializers.ModelSerializer):
@@ -49,6 +58,7 @@ class TransactionSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         # Map Django field names to frontend expected names
         data['type'] = 'credit' if instance.type == 'deposit' else 'debit'
+        data['amount'] = float(abs(instance.amount))
         data['balanceAfter'] = float(instance.wallet.balance)
         data['createdAt'] = instance.created_at.isoformat()
         data['status'] = instance.status

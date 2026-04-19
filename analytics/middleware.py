@@ -14,7 +14,7 @@ class VisitorTrackingMiddleware:
         # Let's log if it's not a static/media file.
         
         path = request.path_info
-        if not any(path.startswith(prefix) for prefix in ['/static/', '/media/', '/admin/']):
+        if not any(path.startswith(prefix) for prefix in ['/static/', '/media/', '/admin/', '/api/']):
             # Also maybe skip some internal API polling if it exists
             self.log_visit(request)
 

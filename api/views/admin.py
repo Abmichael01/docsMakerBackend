@@ -10,9 +10,9 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 
 from ..models import PurchasedTemplate
-from wallet.models import Wallet
 from ..serializers import AdminOverviewSerializer
 from ..permissions import IsAdminOrReadOnly, IsSuperUser
+from ..utils.admin_ranges import get_date_window, parse_days_param
 from accounts.serializers import CustomUserDetailsSerializer
 
 User = get_user_model()
@@ -24,15 +24,16 @@ class AdminOverview(APIView):
         """
         Get admin overview statistics with optimized queries.
         No caching to ensure real-time data.
+        Accepts optional ?days= query param (default 1, max 365).
         """
         serializer = AdminOverviewSerializer()
-        now = timezone.now()
-        thirty_days_ago = now.date() - timedelta(days=30)
-        
+        days = parse_days_param(request.GET.get('days'), default=1)
+        _today, start_date, _start_datetime = get_date_window(days)
+
         # 1. Get documents chart data - optimized with single query
         documents_data = (
             PurchasedTemplate.objects
-            .filter(created_at__date__gte=thirty_days_ago)
+            .filter(created_at__date__gte=start_date)
             .annotate(date=TruncDate('created_at'))
             .values('date', 'test')
             .annotate(
@@ -41,38 +42,38 @@ class AdminOverview(APIView):
             )
             .order_by('date')
         )
-        
+
         documents_chart = [
             {
                 'date': item['date'].isoformat(),
                 'total': item['total'],
                 'paid': item['paid'],
-                'test': item['test']
+                'test': item['total'] if item['test'] else 0
             }
             for item in documents_data
         ]
-        
+
         # 2. Get user growth data - optimized (no loop)
         user_growth_data = (
             User.objects
-            .filter(date_joined__date__gte=thirty_days_ago)
+            .filter(date_joined__date__gte=start_date)
             .annotate(date=TruncDate('date_joined'))
             .values('date')
             .annotate(count=Count('id'))
             .order_by('date')
         )
-        
+
         # Calculate cumulative users
-        total_users_before_thirty_days = User.objects.filter(date_joined__date__lt=thirty_days_ago).count()
-        current_cumulative = total_users_before_thirty_days
-        
+        total_users_before_range = User.objects.filter(date_joined__date__lt=start_date).count()
+        current_cumulative = total_users_before_range
+
         growth_lookup = {item['date']: item['count'] for item in user_growth_data}
         revenue_chart = []
-        
+
         total_downloads = serializer.get_total_downloads()
-        
-        for i in range(30):
-            date = thirty_days_ago + timedelta(days=i+1)
+
+        for i in range(days):
+            date = start_date + timedelta(days=i)
             count_on_day = growth_lookup.get(date, 0)
             current_cumulative += count_on_day
             revenue_chart.append({
@@ -80,10 +81,12 @@ class AdminOverview(APIView):
                 'users': current_cumulative,
                 'downloads': total_downloads
             })
-        
+
         data = {
             'total_downloads': total_downloads,
             'total_users': serializer.get_total_users(),
+            'regular_users': serializer.get_regular_users(),
+            'staff_users': serializer.get_staff_users(),
             'total_purchased_docs': serializer.get_total_purchased_docs(),
             'total_wallet_balance': serializer.get_total_wallet_balance() if request.user.is_superuser else None,
             'documents_chart': documents_chart,
@@ -110,6 +113,7 @@ class AdminUsers(APIView):
             page = int(request.GET.get('page', 1))
             page_size = int(request.GET.get('page_size', 10))
             search = request.GET.get('search', '').strip()
+            role = request.GET.get('role', 'all').strip().lower()
             
             # Base queryset for users list (pagination)
             users_queryset = User.objects.all()
@@ -118,15 +122,21 @@ class AdminUsers(APIView):
                     Q(username__icontains=search) | 
                     Q(email__icontains=search)
                 )
+
+            if role == 'admin':
+                users_queryset = users_queryset.filter(is_superuser=True)
+            elif role == 'staff':
+                users_queryset = users_queryset.filter(is_staff=True, is_superuser=False)
+            elif role == 'user':
+                users_queryset = users_queryset.filter(is_staff=False, is_superuser=False)
             
             # Statistics (recalculated on every request)
-            now = timezone.now()
-            today = now.date()
+            today = timezone.localdate()
             intervals = {
                 'today': today,
-                'past_7_days': today - timedelta(days=7),
-                'past_14_days': today - timedelta(days=14),
-                'past_30_days': today - timedelta(days=30),
+                'past_7_days': today - timedelta(days=6),
+                'past_14_days': today - timedelta(days=13),
+                'past_30_days': today - timedelta(days=29),
             }
             
             # Optimized stats aggregation
@@ -145,8 +155,13 @@ class AdminUsers(APIView):
                 past_30_days=Count('buyer_id', filter=Q(created_at__date__gte=intervals['past_30_days']), distinct=True),
             )
             
+            regular_users_count = User.objects.filter(is_staff=False, is_superuser=False).count()
+            staff_users_count = User.objects.filter(is_staff=True).count() + User.objects.filter(is_superuser=True, is_staff=False).count()
+
             stats_data = {
-                'all_users': User.objects.count() if not search else users_queryset.count(),
+                'all_users': users_queryset.count() if search or role != 'all' else User.objects.count(),
+                'regular_users': regular_users_count,
+                'staff_users': staff_users_count,
                 'new_users': new_users,
                 'total_purchases_users': purchases_stats,
             }
@@ -173,6 +188,7 @@ class AdminUsers(APIView):
                 **stats_data,
                 'users': users_list_data,
                 'search_term': search,
+                'role_filter': role,
             }, status=status.HTTP_200_OK)
             
             # Prevent caching of admin stats in browser/CDN
@@ -350,6 +366,7 @@ class AdminDocuments(APIView):
         try:
             page_size = int(request.GET.get('page_size', 20))
             search = request.GET.get('search', '').strip()
+            doc_type = request.GET.get('type', 'all').strip().lower()
 
             queryset = (
                 PurchasedTemplate.objects
@@ -366,6 +383,11 @@ class AdminDocuments(APIView):
                     Q(tracking_id__icontains=search) |
                     Q(template__name__icontains=search)
                 )
+
+            if doc_type == 'paid':
+                queryset = queryset.filter(test=False)
+            elif doc_type == 'test':
+                queryset = queryset.filter(test=True)
 
             # Calculate stats
             now = timezone.now()
@@ -430,6 +452,7 @@ class AdminDocuments(APIView):
                 'next': paginator.get_next_link(),
                 'previous': paginator.get_previous_link(),
                 'stats': stats,
+                'type_filter': doc_type,
             }, status=status.HTTP_200_OK)
             # Prevent caching
             response["Cache-Control"] = "no-cache, no-store, must-revalidate"

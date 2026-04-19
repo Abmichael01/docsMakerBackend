@@ -13,31 +13,42 @@ User = get_user_model()
 class AdminOverviewSerializer(serializers.Serializer):
     total_downloads = serializers.IntegerField()
     total_users = serializers.IntegerField()
+    regular_users = serializers.IntegerField()
+    staff_users = serializers.IntegerField()
     total_purchased_docs = serializers.IntegerField()
     total_wallet_balance = serializers.DecimalField(max_digits=12, decimal_places=2)
-    
+
     def get_total_downloads(self):
         """Get total downloads across all users"""
         return User.objects.aggregate(
             total=Sum('downloads')
         )['total'] or 0
-    
+
     def get_total_users(self):
-        """Get total number of users"""
+        """Get total number of all users (including staff/admin)"""
         return User.objects.count()
-    
+
+    def get_regular_users(self):
+        """Get count of regular users only (not staff or superuser)"""
+        return User.objects.filter(is_staff=False, is_superuser=False).count()
+
+    def get_staff_users(self):
+        """Get count of staff and admin users"""
+        return User.objects.filter(is_staff=True).count() + User.objects.filter(is_superuser=True, is_staff=False).count()
+
     def get_total_purchased_docs(self):
         """Get total number of paid documents (excluding test documents)"""
         from ..models import PurchasedTemplate
         return PurchasedTemplate.objects.filter(
-            test=False  # Only count paid documents, not test ones
+            test=False
         ).count()
-    
+
     def get_total_wallet_balance(self):
-        """Get total wallet balance across all users"""
-        return Wallet.objects.aggregate(
-            total=Sum('balance')
-        )['total'] or 0
+        """Get total wallet balance for regular users only (excludes admin/staff)"""
+        return Wallet.objects.filter(
+            user__is_staff=False,
+            user__is_superuser=False
+        ).aggregate(total=Sum('balance'))['total'] or 0
 
 
 class AdminUsersSerializer(serializers.Serializer):

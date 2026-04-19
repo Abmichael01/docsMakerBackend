@@ -2,11 +2,12 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser
 from rest_framework import status
-from django.db.models import Sum, Q
+from rest_framework.pagination import PageNumberPagination
+from django.db.models import Sum, Count, Q
 from django.utils import timezone
-from datetime import datetime, timedelta
-from api.models import PurchasedTemplate, Template
+from datetime import timedelta
 from api.serializers.wallet import WalletSerializer, TransactionSerializer
+from api.utils.admin_ranges import get_date_window, get_range_label, parse_days_param
 from wallet.models import Wallet, Transaction
 
 class WalletStatsView(APIView):
@@ -14,32 +15,48 @@ class WalletStatsView(APIView):
     permission_classes = [IsAdminUser]
     
     def get(self, request):
-        # Total balance across all user wallets
-        total_balance = Wallet.objects.aggregate(total=Sum('balance'))['total'] or 0
-        
-        # Pending funding requests (you'll need to create this model)
-        pending_funds = 0  # TODO: Implement when FundingRequest model exists
-        
-        # This month's credits and debits
-        now = timezone.now()
-        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        
-        month_credit = Transaction.objects.filter(
-            created_at__gte=month_start,
-            type='deposit'
+        days = parse_days_param(request.GET.get('days'), default=1)
+        _today, _start_date, start_datetime = get_date_window(days)
+
+        # Total balance — regular users only (excludes admin/staff wallets)
+        total_balance = Wallet.objects.filter(
+            user__is_staff=False, user__is_superuser=False
+        ).aggregate(total=Sum('balance'))['total'] or 0
+
+        period_transactions = Transaction.objects.filter(
+            created_at__gte=start_datetime,
+            status=Transaction.Status.COMPLETED,
+            wallet__user__is_staff=False,
+            wallet__user__is_superuser=False,
+        )
+
+        total_inflow = period_transactions.filter(
+            type=Transaction.Type.DEPOSIT
         ).aggregate(total=Sum('amount'))['total'] or 0
-        
-        month_debit = Transaction.objects.filter(
-            created_at__gte=month_start,
-            type='payment'
+
+        total_outflow = period_transactions.filter(
+            type=Transaction.Type.PAYMENT
         ).aggregate(total=Sum('amount'))['total'] or 0
-        
-        return Response({
+
+        transaction_count = period_transactions.count()
+        funded_wallets = period_transactions.filter(
+            type=Transaction.Type.DEPOSIT
+        ).aggregate(total=Count('wallet_id', distinct=True))['total'] or 0
+
+        response = Response({
             'totalBalance': float(total_balance),
-            'pendingFunds': float(pending_funds),
-            'monthCredit': float(month_credit),
-            'monthDebit': float(month_debit),
+            'totalInflow': float(total_inflow),
+            'totalOutflow': abs(float(total_outflow)),
+            'netFlow': float(total_inflow) - abs(float(total_outflow)),
+            'transactionCount': transaction_count,
+            'fundedWallets': funded_wallets,
+            'rangeDays': days,
+            'rangeLabel': get_range_label(days),
         })
+        response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response["Pragma"] = "no-cache"
+        response["Expires"] = "0"
+        return response
 
 
 class WalletListView(APIView):
@@ -47,9 +64,64 @@ class WalletListView(APIView):
     permission_classes = [IsAdminUser]
     
     def get(self, request):
-        wallets = Wallet.objects.select_related('user').all()
-        serializer = WalletSerializer(wallets, many=True)
-        return Response(serializer.data)
+        # Only list wallets of regular users (excludes admin/staff)
+        wallets = Wallet.objects.select_related('user').filter(
+            user__is_staff=False, user__is_superuser=False
+        )
+        search = request.GET.get('search', '').strip()
+        balance_filter = request.GET.get('balance', 'all').strip().lower()
+        joined_filter = request.GET.get('joined', 'all').strip().lower()
+        sort_by = request.GET.get('sort', 'balance-desc').strip().lower()
+        page_size = int(request.GET.get('page_size', 10))
+
+        if search:
+            wallets = wallets.filter(
+                Q(user__username__icontains=search) |
+                Q(user__email__icontains=search)
+            )
+
+        if balance_filter == 'positive':
+            wallets = wallets.filter(balance__gt=0)
+        elif balance_filter == 'zero':
+            wallets = wallets.filter(balance=0)
+        elif balance_filter == '100plus':
+            wallets = wallets.filter(balance__gte=100)
+        elif balance_filter == '1000plus':
+            wallets = wallets.filter(balance__gte=1000)
+
+        if joined_filter in {'7', '30', '180', '365'}:
+            joined_days = int(joined_filter)
+            joined_cutoff = timezone.now() - timedelta(days=joined_days)
+            wallets = wallets.filter(user__date_joined__gte=joined_cutoff)
+
+        ordering_map = {
+            'balance-desc': ['-balance', 'user__username'],
+            'balance-asc': ['balance', 'user__username'],
+            'recent': ['-user__date_joined', 'user__username'],
+            'oldest': ['user__date_joined', 'user__username'],
+            'name': ['user__username'],
+        }
+        wallets = wallets.order_by(*ordering_map.get(sort_by, ordering_map['balance-desc']))
+
+        paginator = PageNumberPagination()
+        paginator.page_size = page_size
+        paginated_wallets = paginator.paginate_queryset(wallets, request)
+        serializer = WalletSerializer(paginated_wallets, many=True)
+
+        return Response({
+            'results': serializer.data,
+            'count': paginator.page.paginator.count,
+            'next': paginator.get_next_link(),
+            'previous': paginator.get_previous_link(),
+            'current_page': paginator.page.number,
+            'total_pages': paginator.page.paginator.num_pages,
+            'filters': {
+                'search': search,
+                'balance': balance_filter,
+                'joined': joined_filter,
+                'sort': sort_by,
+            },
+        })
 
 
 class WalletAdjustView(APIView):
@@ -127,25 +199,82 @@ class TransactionHistoryView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
-        transactions = Transaction.objects.select_related('wallet__user').all().order_by('-created_at')
-        serializer = TransactionSerializer(transactions, many=True)
+        search = request.GET.get('search', '').strip()
+        type_filter = request.GET.get('type', 'all').strip().lower()
+        status_filter = request.GET.get('status', 'all').strip().lower()
+        page_size = int(request.GET.get('page_size', 20))
+
+        transactions = Transaction.objects.select_related('wallet__user').filter(
+            wallet__user__is_staff=False,
+            wallet__user__is_superuser=False,
+        )
+
+        if search:
+            transactions = transactions.filter(
+                Q(wallet__user__username__icontains=search) |
+                Q(wallet__user__email__icontains=search) |
+                Q(description__icontains=search) |
+                Q(tx_id__icontains=search)
+            )
+
+        if type_filter == 'credit':
+            transactions = transactions.filter(type=Transaction.Type.DEPOSIT)
+        elif type_filter == 'debit':
+            transactions = transactions.filter(type=Transaction.Type.PAYMENT)
+
+        if status_filter in {
+            Transaction.Status.COMPLETED,
+            Transaction.Status.PENDING,
+            Transaction.Status.FAILED,
+        }:
+            transactions = transactions.filter(status=status_filter)
+
+        transactions = transactions.order_by('-created_at')
+
+        paginator = PageNumberPagination()
+        paginator.page_size = page_size
+        paginated_transactions = paginator.paginate_queryset(transactions, request)
+        serializer = TransactionSerializer(paginated_transactions, many=True)
         
         # Calculate stats
         now = timezone.now()
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         
         total_volume = Transaction.objects.filter(
-            type='deposit'
+            type='deposit',
+            wallet__user__is_staff=False,
+            wallet__user__is_superuser=False,
         ).aggregate(total=Sum('amount'))['total'] or 0
         
         stats = {
-            'total_count': Transaction.objects.count(),
+            'total_count': Transaction.objects.filter(
+                wallet__user__is_staff=False,
+                wallet__user__is_superuser=False,
+            ).count(),
             'total_volume': float(total_volume),
-            'month_count': Transaction.objects.filter(created_at__gte=month_start).count(),
-            'pending_count': Transaction.objects.filter(status='pending').count(),
+            'month_count': Transaction.objects.filter(
+                created_at__gte=month_start,
+                wallet__user__is_staff=False,
+                wallet__user__is_superuser=False,
+            ).count(),
+            'pending_count': Transaction.objects.filter(
+                status='pending',
+                wallet__user__is_staff=False,
+                wallet__user__is_superuser=False,
+            ).count(),
         }
         
         return Response({
             'transactions': serializer.data,
+            'count': paginator.page.paginator.count,
+            'next': paginator.get_next_link(),
+            'previous': paginator.get_previous_link(),
+            'current_page': paginator.page.number,
+            'total_pages': paginator.page.paginator.num_pages,
             'stats': stats,
+            'filters': {
+                'search': search,
+                'type': type_filter,
+                'status': status_filter,
+            },
         })
