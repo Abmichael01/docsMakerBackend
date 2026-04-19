@@ -113,6 +113,7 @@ class AdminUsers(APIView):
             page = int(request.GET.get('page', 1))
             page_size = int(request.GET.get('page_size', 10))
             search = request.GET.get('search', '').strip()
+            role = request.GET.get('role', 'all').strip().lower()
             
             # Base queryset for users list (pagination)
             users_queryset = User.objects.all()
@@ -121,6 +122,13 @@ class AdminUsers(APIView):
                     Q(username__icontains=search) | 
                     Q(email__icontains=search)
                 )
+
+            if role == 'admin':
+                users_queryset = users_queryset.filter(is_superuser=True)
+            elif role == 'staff':
+                users_queryset = users_queryset.filter(is_staff=True, is_superuser=False)
+            elif role == 'user':
+                users_queryset = users_queryset.filter(is_staff=False, is_superuser=False)
             
             # Statistics (recalculated on every request)
             today = timezone.localdate()
@@ -151,7 +159,7 @@ class AdminUsers(APIView):
             staff_users_count = User.objects.filter(is_staff=True).count() + User.objects.filter(is_superuser=True, is_staff=False).count()
 
             stats_data = {
-                'all_users': User.objects.count() if not search else users_queryset.count(),
+                'all_users': users_queryset.count() if search or role != 'all' else User.objects.count(),
                 'regular_users': regular_users_count,
                 'staff_users': staff_users_count,
                 'new_users': new_users,
@@ -180,6 +188,7 @@ class AdminUsers(APIView):
                 **stats_data,
                 'users': users_list_data,
                 'search_term': search,
+                'role_filter': role,
             }, status=status.HTTP_200_OK)
             
             # Prevent caching of admin stats in browser/CDN
@@ -357,6 +366,7 @@ class AdminDocuments(APIView):
         try:
             page_size = int(request.GET.get('page_size', 20))
             search = request.GET.get('search', '').strip()
+            doc_type = request.GET.get('type', 'all').strip().lower()
 
             queryset = (
                 PurchasedTemplate.objects
@@ -373,6 +383,11 @@ class AdminDocuments(APIView):
                     Q(tracking_id__icontains=search) |
                     Q(template__name__icontains=search)
                 )
+
+            if doc_type == 'paid':
+                queryset = queryset.filter(test=False)
+            elif doc_type == 'test':
+                queryset = queryset.filter(test=True)
 
             # Calculate stats
             now = timezone.now()
@@ -437,6 +452,7 @@ class AdminDocuments(APIView):
                 'next': paginator.get_next_link(),
                 'previous': paginator.get_previous_link(),
                 'stats': stats,
+                'type_filter': doc_type,
             }, status=status.HTTP_200_OK)
             # Prevent caching
             response["Cache-Control"] = "no-cache, no-store, must-revalidate"
