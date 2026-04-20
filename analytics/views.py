@@ -3,7 +3,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser, AllowAny
 from django.db.models import Count, Sum, Q
 from django.db.models.functions import TruncDate
-from datetime import timedelta
+from django.utils import timezone
+from datetime import datetime, time, timedelta
 from api.utils.admin_ranges import get_date_window, get_range_label, parse_days_param
 from wallet.models import Transaction
 from .models import VisitorLog
@@ -40,12 +41,35 @@ class AnalyticsDashboardView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
+        date_str = request.GET.get('date')
         days = parse_days_param(request.GET.get('days'), default=1)
-        _today, start_date, start_datetime = get_date_window(days)
+        
+        # Calculate Time Window
+        if date_str:
+            try:
+                selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                start_date = selected_date
+                days = 1
+                current_tz = timezone.get_current_timezone()
+                start_datetime = timezone.make_aware(datetime.combine(start_date, time.min), current_tz)
+                end_datetime = timezone.make_aware(datetime.combine(start_date, time.max), current_tz)
+                range_label = selected_date.strftime('%b %d, %Y')
+            except ValueError:
+                _today, start_date, start_datetime = get_date_window(days)
+                end_datetime = timezone.now()
+                range_label = get_range_label(days)
+        else:
+            _today, start_date, start_datetime = get_date_window(days)
+            end_datetime = timezone.now()
+            range_label = get_range_label(days)
 
-        visit_queryset = VisitorLog.objects.filter(timestamp__gte=start_datetime)
+        # Real-time: Online Now (last 5 minutes)
+        five_mins_ago = timezone.now() - timedelta(minutes=5)
+        online_now = VisitorLog.objects.filter(timestamp__gte=five_mins_ago).values('ip_address', 'user_id').distinct().count()
+
+        visit_queryset = VisitorLog.objects.filter(timestamp__range=(start_datetime, end_datetime))
         completed_payments = Transaction.objects.filter(
-            created_at__gte=start_datetime,
+            created_at__range=(start_datetime, end_datetime),
             type=Transaction.Type.PAYMENT,
             status=Transaction.Status.COMPLETED,
         )
@@ -165,7 +189,10 @@ class AnalyticsDashboardView(APIView):
                 },
             ],
             "top_pages": top_pages,
+            "range_days": days,
+            "range_label": range_label,
             "summary": {
+                "online_now": online_now,
                 "total_visits": visitor_summary['total_visits'] or 0,
                 "unique_visitors": unique_count,
                 "authenticated_visits": visitor_summary['authenticated_visits'] or 0,
@@ -174,8 +201,6 @@ class AnalyticsDashboardView(APIView):
                 "total_revenue": abs(float(payment_summary['total_revenue'] or 0)),
                 "conversion_rate": round((sales_count / unique_count) * 100, 2) if unique_count else 0.0,
             },
-            "range_days": days,
-            "range_label": get_range_label(days),
         })
         response["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response["Pragma"] = "no-cache"
@@ -196,3 +221,45 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     
     def get_queryset(self):
         return AuditLog.objects.select_related('actor').order_by('-timestamp')
+
+from rest_framework.pagination import PageNumberPagination
+
+class ActivityLogPagination(PageNumberPagination):
+    page_size = 50
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+class UserActivityView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        date_str = request.GET.get('date')
+        user_id = request.GET.get('user_id')
+        search = request.GET.get('search')
+
+        queryset = VisitorLog.objects.select_related('user').order_by('-timestamp')
+
+        if date_str:
+            try:
+                selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                current_tz = timezone.get_current_timezone()
+                start_datetime = timezone.make_aware(datetime.combine(selected_date, time.min), current_tz)
+                end_datetime = timezone.make_aware(datetime.combine(selected_date, time.max), current_tz)
+                queryset = queryset.filter(timestamp__range=(start_datetime, end_datetime))
+            except ValueError:
+                pass
+
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
+        
+        if search:
+            queryset = queryset.filter(
+                Q(ip_address__icontains=search) | 
+                Q(path__icontains=search) | 
+                Q(user__username__icontains=search)
+            )
+
+        paginator = ActivityLogPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        serializer = VisitorLogSerializer(page, many=True)
+        return paginator.get_indicated_response(serializer.data) if hasattr(paginator, 'get_indicated_response') else paginator.get_paginated_response(serializer.data)
