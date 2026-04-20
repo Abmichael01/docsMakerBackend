@@ -8,6 +8,7 @@ from datetime import datetime, time, timedelta
 from api.utils.admin_ranges import get_date_window, get_range_label, parse_days_param
 from wallet.models import Transaction
 from .models import VisitorLog
+from .serializers import VisitorLogSerializer
 
 class LogVisitView(APIView):
     permission_classes = [AllowAny]
