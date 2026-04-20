@@ -55,11 +55,13 @@ class LoginView(BaseLoginView):
         user = CustomUserDetailsSerializer(self.user, many=False)
 
         # Get cookie settings from settings.py
+        max_age = 2 * 24 * 60 * 60  # 2 days in seconds
         cookie_settings = {
             'httponly': settings.JWT_COOKIE_HTTPONLY,
             'secure': settings.JWT_COOKIE_SECURE,
             'samesite': settings.JWT_COOKIE_SAMESITE,
             'path': settings.JWT_COOKIE_PATH,
+            'max_age': max_age,
         }
 
         if hasattr(settings, 'JWT_COOKIE_DOMAIN') and settings.JWT_COOKIE_DOMAIN:
@@ -186,11 +188,13 @@ class RefreshTokenView(APIView):
             )
 
         # Get cookie settings from settings.py (same as LoginView)
+        max_age = 2 * 24 * 60 * 60  # 2 days in seconds
         cookie_settings = {
             'httponly': settings.JWT_COOKIE_HTTPONLY,
             'secure': settings.JWT_COOKIE_SECURE,
             'samesite': settings.JWT_COOKIE_SAMESITE,
             'path': settings.JWT_COOKIE_PATH,
+            'max_age': max_age,
         }
 
         if hasattr(settings, 'JWT_COOKIE_DOMAIN') and settings.JWT_COOKIE_DOMAIN:
