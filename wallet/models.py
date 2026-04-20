@@ -50,7 +50,7 @@ class Wallet(models.Model):
         return f"{self.user.username}'s Wallet"
 
     @transaction.atomic
-    def credit(self, amount: Decimal, *, description='Deposit'):
+    def credit(self, amount: Decimal, *, description='Deposit', create_transaction=True):
         amount = Decimal(amount)
         if amount <= 0:
             raise ValueError("Credit amount must be positive")
@@ -58,23 +58,29 @@ class Wallet(models.Model):
         self.balance += amount
         self.save(update_fields=['balance'])
 
-        tx = Transaction.objects.create(
-            wallet=self,
-            type=Transaction.Type.DEPOSIT,
-            amount=amount,
-            status=Transaction.Status.COMPLETED,
-            description=description
-        )
+        tx_to_return = None
+        if create_transaction:
+            tx_to_return = Transaction.objects.create(
+                wallet=self,
+                type=Transaction.Type.DEPOSIT,
+                amount=amount,
+                status=Transaction.Status.COMPLETED,
+                description=description
+            )
+            # Use the newly created transaction ID for the email if possible
+            final_tx_id = tx_to_return.tx_id
+        else:
+            final_tx_id = "Auto-Credit"
 
         # Send Email Notification
         try:
             from api.utils.email_service import EmailService
-            EmailService.send_wallet_funded(self.user, amount, self.balance, tx.tx_id, description)
+            EmailService.send_wallet_funded(self.user, amount, self.balance, final_tx_id, description)
         except Exception as e:
             import logging
             logging.getLogger(__name__).error(f"Failed to send wallet funding email: {e}")
 
-        return tx
+        return tx_to_return
 
     @transaction.atomic
     def debit(self, amount: Decimal, *, description=''):

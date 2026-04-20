@@ -166,18 +166,23 @@ class CryptAPIWebhookView(APIView):
             return Response({"detail": "Transaction already confirmed."}, status=status.HTTP_200_OK)
 
         try:
-            credited_amount = Decimal(value_forwarded_coin)
-        except:
+            amount_decimal = Decimal(value_forwarded_coin)
+            # SMART ROUNDING: If fractional part >= 0.9, round up to the nearest whole number
+            # Examples: 6.90 -> 7, 6.99 -> 7, 6.89 -> 6.89
+            if amount_decimal % 1 >= Decimal('0.9'):
+                amount_decimal = amount_decimal.quantize(Decimal('1'), rounding='ROUND_CEILING')
+            credited_amount = amount_decimal
+        except Exception:
             return Response({"detail": "Invalid amount format."}, status=status.HTTP_400_BAD_REQUEST)
 
         tx.status = Transaction.Status.COMPLETED
         tx.tx_hash = txid_in
-        tx.amount = value_coin
+        tx.amount = credited_amount # Save the final credited amount (rounded) to the transaction
         tx.save()
-        print("done")
-        tx.wallet.credit(credited_amount)
+        
+        # Credit the wallet WITHOUT creating a duplicate transaction record
+        tx.wallet.credit(credited_amount, create_transaction=False)
         send_wallet_update(tx.wallet.user, True)
-        print("hey")
 
         return Response({"detail": "Wallet credited successfully."}, status=status.HTTP_200_OK)
    
