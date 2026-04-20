@@ -5,11 +5,13 @@ from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
 from django.contrib.staticfiles.handlers import ASGIStaticFilesHandler # type: ignore
-from wallet.routing import websocket_urlpatterns as wallet_ws
-from analytics.routing import websocket_urlpatterns as analytics_ws
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'serverConfig.settings')
 django.setup()
+
+# IMPORT ROUTING AFTER DJANGO.SETUP() to avoid ImproperlyConfigured errors
+from wallet.routing import websocket_urlpatterns as wallet_ws
+from analytics.routing import websocket_urlpatterns as analytics_ws
 
 # Create HTTP application with static files for dev
 http_app = get_asgi_application()
@@ -22,4 +24,3 @@ application = ProtocolTypeRouter({
         URLRouter(wallet_ws + analytics_ws)
     ),
 })
-

@@ -10,6 +10,7 @@ class VisitorLog(models.Model):
     method = models.CharField(max_length=10)
     user_agent = models.TextField(null=True, blank=True)
     referrer = models.TextField(null=True, blank=True)
+    status_code = models.PositiveSmallIntegerField(null=True, blank=True)
     timestamp = models.DateTimeField(default=timezone.now)
 
     class Meta:

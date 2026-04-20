@@ -6,7 +6,7 @@ class VisitorLogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = VisitorLog
-        fields = ['id', 'user', 'username', 'ip_address', 'session_key', 'path', 'method', 'user_agent', 'referrer', 'timestamp']
+        fields = ['id', 'user', 'username', 'ip_address', 'session_key', 'path', 'method', 'status_code', 'user_agent', 'referrer', 'timestamp']
 
 
 class AuditLogSerializer(serializers.ModelSerializer):
