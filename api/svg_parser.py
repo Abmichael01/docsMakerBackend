@@ -16,6 +16,7 @@ FIELD_TYPES = [
     "hide", "hide_checked", "hide_unchecked"
 ]
 
+
 EXTENSION_PREFIXES = {
     "max_": "max_value",       # Character/number limit
     "depends_": "dependency",   # Field synchronization with extraction support
@@ -393,6 +394,9 @@ def parse_field_extensions(parts: List[str]) -> Dict[str, Any]:
         # Handle field type extensions
         elif part.startswith("hide") or part in FIELD_TYPES:
             result["field_type"] = "hide" if part.startswith("hide") else part
+            # All hide variants use inverted logic: Checked (true) means Hidden (false visibility)
+            if result["field_type"] == "hide":
+                result["inverted"] = True
     
     if result["requires_grayscale"] and result["grayscale_intensity"] is None:
         result["grayscale_intensity"] = "100"
@@ -409,7 +413,9 @@ def get_default_value(field_type: str, text_content: str, parts: List[str]) -> A
     
     elif field_type == "hide":
         hide_part = next((p for p in parts if p.startswith("hide")), "hide")
-        return hide_part == "hide_checked"
+        # .hide and .hide_checked start CHECKED (True) -> Hidden
+        # .hide_unchecked starts UNCHECKED (False) -> Visible
+        return hide_part != "hide_unchecked"
     
     else:
         return text_content

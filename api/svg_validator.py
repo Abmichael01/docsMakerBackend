@@ -57,17 +57,17 @@ VALID_MODIFIER_PREFIXES = [
 # IMPORTANT: "depends" sets lastPartBase to "depends".
 # After depends, only track_ is allowed (grayscale is inherited from source — track_ checked separately).
 ALLOWED_AFTER = {
-    "max":          ["text", "textarea", "gen", "number", "range", "min"],
-    "min":          ["text", "textarea", "gen", "number", "range", "max"],
+    "max":          ["text", "textarea", "gen", "number", "range", "min", "hide", "hide_checked", "hide_unchecked"],
+    "min":          ["text", "textarea", "gen", "number", "range", "max", "hide", "hide_checked", "hide_unchecked"],
     "editable":     ["text", "textarea", "gen", "email", "number", "date", "checkbox",
                      "upload", "tel", "password", "range", "color", "file", "status", "sign",
                      "select", "depends", "hide", "hide_checked", "hide_unchecked"],
-    "tracking_id":  ["gen", "max", "min", "text", "number"],
+    "tracking_id":  ["gen", "max", "min", "text", "number", "hide", "hide_checked", "hide_unchecked"],
     "link":         ["tracking_id"],
-    "date_format":  ["date"],
-    "gen_rule":     ["gen"],
-    "mode":         ["gen"],
-    "grayscale":    ["upload", "file", "depends"],
+    "date_format":  ["date", "hide", "hide_checked", "hide_unchecked"],
+    "gen_rule":     ["gen", "hide", "hide_checked", "hide_unchecked"],
+    "mode":         ["gen", "hide", "hide_checked", "hide_unchecked"],
+    "grayscale":    ["upload", "file", "depends", "hide", "hide_checked", "hide_unchecked"],
     "select":       ["editable"],  # track_ is checked separately
     "showIf":       ["text", "textarea", "gen", "email", "number", "date", "checkbox",
                      "upload", "tel", "password", "range", "color", "file", "status", "sign",
