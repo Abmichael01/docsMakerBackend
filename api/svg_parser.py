@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 FIELD_TYPES = [
     "text", "textarea", "checkbox", "date", "upload",
     "number", "email", "tel", "gen", "password",
-    "range", "color", "file", "status", "sign"
+    "range", "color", "file", "status", "sign",
+    "hide", "hide_checked", "hide_unchecked"
 ]
 
 EXTENSION_PREFIXES = {
@@ -142,7 +143,7 @@ def extract_link_url(element_id: str) -> tuple[str, Optional[str]]:
         tuple: (cleaned_element_id, url)
     """
     if ".link_\"" in str(element_id):
-        # New syntax: .link_"URL"
+        # New correct syntax: .link_"URL"
         id_str = str(element_id)
         start = id_str.find(".link_\"")
         url_start = start + 7  # len(".link_\"")
@@ -154,16 +155,7 @@ def extract_link_url(element_id: str) -> tuple[str, Optional[str]]:
             cleaned_id = id_str[:start] + id_str[url_end + 1:]
             return cleaned_id, url
 
-    if ".link_" not in str(element_id):
-        return str(element_id), None
-    
-    id_str = str(element_id)
-    link_start = id_str.index(".link_")
-    url_start = link_start + 6  # 6 = len(".link_")
-    url = id_str[url_start:]
-    cleaned_id = id_str[:link_start]
-    
-    return cleaned_id, url
+    return str(element_id), None
 
 
 def is_element_visible(element: ET.Element) -> bool:

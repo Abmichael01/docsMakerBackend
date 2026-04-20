@@ -128,9 +128,23 @@ All elements with same base ID + `.select_` become one dropdown.
 
 **Examples:**
 ```xml
-<text id="country.select_usa">United States</text>
-<text id="country.select_canada">Canada</text>
 <text id="country.select_uk">United Kingdom</text>
+```
+
+### Toggle Visibility (.hide)
+```xml
+<text id="fieldname.hide">This text is hidden by default</text>
+<text id="fieldname.hide_unchecked">This text is hidden by default</text>
+<text id="fieldname.hide_checked">This text is visible by default</text>
+```
+Creates a toggle checkbox for the SVG element.
+- `.hide` / `.hide_unchecked` will be **un-checked** by default, hiding the element.
+- `.hide_checked` will be **checked** by default, showing the element.
+
+**Examples:**
+```xml
+<image id="Watermark.hide" href="watermark.png" />
+<text id="Special_Offer.hide_checked">30% OFF!</text>
 ```
 
 ### Field Sync (.depends)
@@ -149,16 +163,16 @@ After `.depends_`, only `.grayscale` / `.grayscale_N` and `.track_ROLE` are allo
 
 ### Tracking ID with Link (.tracking_id .link_)
 ```xml
-<text id="Order_Number.gen.max_10.tracking_id.link_https://example.com">Generated tracking code</text>
+<text id="Order_Number.gen.max_10.tracking_id.link_\"https://example.com\"">Generated tracking code</text>
 ```
 - Use `.tracking_id` to mark field as tracking ID
-- Use `.link_URL` to add clickable link
+- Use `.link_"URL"` to add clickable link (MUST use double quotes)
 - Generates random code with `.gen.max_N`
 
 **Examples:**
 ```xml
-<text id="Order_Number.gen.max_8.tracking_id.link_https://track.example.com">TRK12345</text>
-<text id="Booking_Ref.gen.max_12.tracking_id.link_https://orders.example.com">TRK123456789</text>
+<text id="Order_Number.gen.max_8.tracking_id.link_\"https://track.example.com\"">TRK12345</text>
+<text id="Booking_Ref.gen.max_12.tracking_id.link_\"https://orders.example.com\"">TRK123456789</text>
 ```
 
 ### Tracking Roles (.track_)

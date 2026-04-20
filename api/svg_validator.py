@@ -32,7 +32,7 @@ from typing import Optional, List
 VALID_TYPES = [
     "text", "textarea", "upload", "file", "sign", "date",
     "gen", "number", "checkbox", "range", "color", "email",
-    "tel", "status", "password"
+    "tel", "status", "password", "hide", "hide_checked", "hide_unchecked"
 ]
 # Note: "depends" is NOT in VALID_TYPES — it's an extension, not a field type.
 
@@ -41,8 +41,6 @@ FLAG_EXTENSIONS = [
     "editable",       # Editable after purchase
     "tracking_id",    # Mark as tracking ID field
     "grayscale",      # Full grayscale (100%)
-    "hide_checked",   # Toggle visibility (visible by default)
-    "hide_unchecked", # Toggle visibility (hidden by default)
     "mode",           # Generation mode
 ]
 
@@ -63,22 +61,17 @@ ALLOWED_AFTER = {
     "min":          ["text", "textarea", "gen", "number", "range", "max"],
     "editable":     ["text", "textarea", "gen", "email", "number", "date", "checkbox",
                      "upload", "tel", "password", "range", "color", "file", "status", "sign",
-                     "select", "depends"],
+                     "select", "depends", "hide", "hide_checked", "hide_unchecked"],
     "tracking_id":  ["gen", "max", "min", "text", "number"],
     "link":         ["tracking_id"],
     "date_format":  ["date"],
     "gen_rule":     ["gen"],
     "mode":         ["gen"],
     "grayscale":    ["upload", "file", "depends"],
-    "hide_checked": ["text", "textarea", "gen", "email", "number", "date", "checkbox",
-                     "upload", "tel", "password", "range", "color", "file", "status", "sign",
-                     "editable", "max", "min", "tracking_id", "link", "date_format", "gen_rule"],
-    "hide_unchecked": ["text", "textarea", "gen", "email", "number", "date", "checkbox",
-                       "upload", "tel", "password", "range", "color", "file", "status", "sign",
-                       "editable", "max", "min", "tracking_id", "link", "date_format", "gen_rule"],
     "select":       ["editable"],  # track_ is checked separately
     "showIf":       ["text", "textarea", "gen", "email", "number", "date", "checkbox",
                      "upload", "tel", "password", "range", "color", "file", "status", "sign",
+                     "hide", "hide_checked", "hide_unchecked",
                      "editable", "max", "min", "tracking_id", "date_format", "gen_rule", "select"],
 }
 
@@ -100,15 +93,23 @@ def validate_svg_id(element_id: str) -> tuple[bool, Optional[str]]:
     # Extract link URL BEFORE splitting (URLs contain dots)
     # Inlined to avoid circular imports with svg_parser
     cleaned_id = element_id
-    if ".link_\"" in element_id:
+    if ".link_" in element_id:
+        if ".link_\"" not in element_id:
+            return False, "❌ Use quotes for links: .link_\"https://...\""
+        
         link_index = element_id.index(".link_\"")
         url_start = link_index + 7
         url_end = element_id.find("\"", url_start)
-        if url_end != -1:
-            cleaned_id = element_id[:link_index] + element_id[url_end + 1:]
-    elif ".link_" in element_id:
-        link_index = element_id.index(".link_")
-        cleaned_id = element_id[:link_index]
+        
+        if url_end == -1:
+            return False, "❌ Missing closing quote for .link_\"...\""
+            
+        # Optional: Check if there's non-quote content between link_ and "
+        # In case someone does .link_SOMETHING"url"
+        if element_id[link_index + 6] != "\"":
+             return False, "❌ Use quotes immediately after .link_: .link_\"https://...\""
+
+        cleaned_id = element_id[:link_index] + element_id[url_end + 1:]
 
     # 1. Plain IDs (no dot) are valid SVG IDs but not form field IDs — not our concern
     if "." not in cleaned_id:
