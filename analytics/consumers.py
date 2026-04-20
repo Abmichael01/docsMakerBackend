@@ -53,6 +53,11 @@ class PresenceConsumer(AsyncWebsocketConsumer):
         online_set.add(self.session_key)
         cache.set(PRESENCE_CACHE_KEY, online_set, timeout=3600) # 1 hour rolling
         
+        # Extract real IP from headers for notification
+        headers = dict(self.scope.get('headers', []))
+        x_forwarded_for = headers.get(b'x-forwarded-for')
+        real_ip = x_forwarded_for.decode('utf-8').split(',')[0] if x_forwarded_for else self.scope['client'][0]
+
         # Notify admins that a user is online
         await self.channel_layer.group_send(
             self.admin_group,
@@ -62,7 +67,7 @@ class PresenceConsumer(AsyncWebsocketConsumer):
                     "status": "online",
                     "session_key": self.session_key,
                     "username": self.username,
-                    "ip_address": self.scope['client'][0]
+                    "ip_address": real_ip
                 }
             }
         )
