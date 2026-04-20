@@ -60,7 +60,7 @@ class EmailService:
 
     @classmethod
     def send_welcome_email(cls, user):
-        subject = "Welcome to SharpToolz!"
+        subject = "🚀 Welcome to SharpToolz - Your Creative Suite Awaits"
         context = {
             'username': user.username,
             'dashboard_url': f"{settings.FRONTEND_URL}/dashboard"
@@ -68,17 +68,55 @@ class EmailService:
         return cls._send_email(subject, 'emails/auth/welcome.html', context, [user.email])
 
     @classmethod
-    def send_wallet_funded(cls, user, amount, balance, transaction_id, description):
-        subject = f"Wallet Funded: ${amount} - SharpToolz"
+    def send_login_notification(cls, user, ip_address, user_agent):
+        subject = "🔒 Security Alert: New Login to your SharpToolz Account"
         context = {
             'username': user.username,
-            'amount': amount,
-            'balance': balance,
+            'ip_address': ip_address,
+            'user_agent': user_agent,
+            'timestamp': timezone.now().strftime('%b %d, %Y %H:%M:%S %Z'),
+            'reset_url': f"{settings.FRONTEND_URL}/auth/forgot-password"
+        }
+        return cls._send_email(subject, 'emails/auth/login_alert.html', context, [user.email])
+
+    @classmethod
+    def send_wallet_funded(cls, user, amount, balance, transaction_id, description):
+        subject = f"💰 Wallet Funded: ${amount} Successfully Credited"
+        context = {
+            'username': user.username,
+            'amount': f"{amount:,.2f}",
+            'balance': f"{balance:,.2f}",
             'transaction_id': transaction_id,
             'description': description,
             'dashboard_url': f"{settings.FRONTEND_URL}/dashboard/wallet"
         }
         return cls._send_email(subject, 'emails/wallet/funded.html', context, [user.email])
+
+    @classmethod
+    def send_payment_notification(cls, user, amount, balance, transaction_id, description):
+        subject = f"🧾 Payment Receipt: ${abs(amount)} - SharpToolz"
+        context = {
+            'username': user.username,
+            'amount': f"{abs(amount):,.2f}",
+            'balance': f"{balance:,.2f}",
+            'transaction_id': transaction_id,
+            'description': description,
+            'dashboard_url': f"{settings.FRONTEND_URL}/dashboard/wallet"
+        }
+        return cls._send_email(subject, 'emails/wallet/payment.html', context, [user.email])
+
+    @classmethod
+    def send_purchase_receipt(cls, user, template_name, amount, balance, transaction_id):
+        subject = f"🎨 Order Confirmed: {template_name}"
+        context = {
+            'username': user.username,
+            'template_name': template_name,
+            'amount': f"{amount:,.2f}",
+            'balance': f"{balance:,.2f}",
+            'transaction_id': transaction_id,
+            'dashboard_url': f"{settings.FRONTEND_URL}/dashboard/documents"
+        }
+        return cls._send_email(subject, 'emails/wallet/purchase_receipt.html', context, [user.email])
 
     @classmethod
     def send_contact_form(cls, name, email, subject, message):

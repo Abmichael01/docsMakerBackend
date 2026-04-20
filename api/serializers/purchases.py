@@ -37,7 +37,21 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
             if user.wallet.balance < charge_amount:
                 raise serializers.ValidationError(f"Insufficient funds. Required: {charge_amount}")
 
-            user.wallet.debit(charge_amount, description=f"Watermark removal: {instance.name}")
+            tx = user.wallet.debit(charge_amount, description=f"Watermark removal: {instance.name}")
+
+            # Send Purchase Receipt Email (keeping user engaged)
+            try:
+                from api.utils.email_service import EmailService
+                EmailService.send_purchase_receipt(
+                    user, 
+                    instance.name or instance.template.name, 
+                    charge_amount, 
+                    user.wallet.balance, 
+                    tx.tx_id
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Failed to send purchase receipt email: {e}")
 
     def create(self, validated_data):
         field_updates = validated_data.pop("field_updates", None)

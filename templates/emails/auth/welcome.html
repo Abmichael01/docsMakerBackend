@@ -3,22 +3,55 @@
 {% block title %}Welcome to SharpToolz!{% endblock %}
 
 {% block content %}
-<h2 style="color: #cee88c; margin-top: 0;">Welcome to SharpToolz!</h2>
-<p>Hello {{ username|title }},</p>
-<p>We're thrilled to have you on board! SharpToolz is your all-in-one platform for professional document tools and templates. You're now part of a community that values precision and efficiency.</p>
-
-<p>Here’s how to get started:</p>
-<ul style="padding-left: 20px;">
-    <li><strong>Explore Tools:</strong> Browse our collection of editing and design tools.</li>
-    <li><strong>Credit Your Wallet:</strong> Add funds to your wallet to start creating premium documents.</li>
-    <li><strong>24/7 Support:</strong> Reach out to us anytime if you have questions.</li>
-</ul>
-
-<div style="text-align: center;">
-    <a href="{{ dashboard_url }}" class="button">Go to Dashboard</a>
+<div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="margin: 0; font-size: 28px; color: #ffffff; letter-spacing: -0.5px;">Welcome to the <span style="color: #cee88c;">Next Level.</span></h1>
+    <p style="color: #9ca3af; margin-top: 10px; font-size: 16px;">We're thrilled to have you at SharpToolz, {{ username }}!</p>
 </div>
 
-<p>If you have any questions, feel free to reply to this email or contact us via WhatsApp.</p>
+<p style="font-size: 15px; color: #e5e7eb; line-height: 1.7;">
+    SharpToolz is your all-in-one suite for professional document automation, SVG editing, and AI-powered creator tools. Here's how to get started in 60 seconds:
+</p>
 
-<p>Best regards,<br>The SharpToolz Team</p>
+<div style="margin: 30px 0;">
+    <table width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+            <td width="50" valign="top" style="padding-bottom: 25px;">
+                <div style="width: 32px; height: 32px; background: #cee88c; color: #0f1620; border-radius: 50%; text-align: center; line-height: 32px; font-weight: bold;">1</div>
+            </td>
+            <td style="padding-bottom: 25px;">
+                <h4 style="margin: 0 0 5px 0; color: #ffffff;">Pick a Template</h4>
+                <p style="margin: 0; font-size: 13px; color: #9ca3af;">Browse our high-quality tool templates for any industry.</p>
+            </td>
+        </tr>
+        <tr>
+            <td width="50" valign="top" style="padding-bottom: 25px;">
+                <div style="width: 32px; height: 32px; background: #cee88c; color: #0f1620; border-radius: 50%; text-align: center; line-height: 32px; font-weight: bold;">2</div>
+            </td>
+            <td style="padding-bottom: 25px;">
+                <h4 style="margin: 0 0 5px 0; color: #ffffff;">Auto-Customize</h4>
+                <p style="margin: 0; font-size: 13px; color: #9ca3af;">Use our live editor or AI chat to instantly fill your document details.</p>
+            </td>
+        </tr>
+        <tr>
+            <td width="50" valign="top">
+                <div style="width: 32px; height: 32px; background: #cee88c; color: #0f1620; border-radius: 50%; text-align: center; line-height: 32px; font-weight: bold;">3</div>
+            </td>
+            <td>
+                <h4 style="margin: 0 0 5px 0; color: #ffffff;">Download & Track</h4>
+                <p style="margin: 0; font-size: 13px; color: #9ca3af;">Export watermark-free PDFs and track downloads in real-time.</p>
+            </td>
+        </tr>
+    </table>
+</div>
+
+<div style="text-align: center; margin-top: 20px;">
+    <a href="{{ dashboard_url }}" class="button">Launch Your Dashboard</a>
+</div>
+
+<div style="margin-top: 40px; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 25px;">
+    <p style="font-size: 13px; color: #9ca3af; line-height: 1.6;">
+        <strong>Quick Link:</strong> Need to add funds first? <br>
+        Head over to your <a href="{{ dashboard_url }}/wallet" style="color: #cee88c; text-decoration: none;">Wallet Settings</a> to get started.
+    </p>
+</div>
 {% endblock %}

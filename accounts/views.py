@@ -80,6 +80,19 @@ class LoginView(BaseLoginView):
             **cookie_settings
         )
 
+        # Get IP and User-Agent for login alert
+        x_forwarded_for = self.request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = self.request.META.get('REMOTE_ADDR')
+        
+        user_agent = self.request.META.get('HTTP_USER_AGENT', 'Unknown')
+
+        # Send Login notification
+        from api.utils.email_service import EmailService
+        EmailService.send_login_notification(self.user, ip, user_agent)
+
         return response
 
 class ForgotPasswordView(APIView):

@@ -95,10 +95,20 @@ class Wallet(models.Model):
         self.balance -= amount
         self.save(update_fields=['balance'])
 
-        return Transaction.objects.create(
+        tx = Transaction.objects.create(
             wallet=self,
             type=Transaction.Type.PAYMENT,
             amount=-amount,
             status=Transaction.Status.COMPLETED,
             description=description
         )
+
+        # Send Payment Email
+        try:
+            from api.utils.email_service import EmailService
+            EmailService.send_payment_notification(self.user, amount, self.balance, tx.tx_id, description)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to send payment receipt email: {e}")
+
+        return tx

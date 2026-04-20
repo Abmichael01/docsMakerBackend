@@ -1,0 +1,47 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Security Alert: New Login - SharpToolz{% endblock %}
+
+{% block content %}
+<div style="text-align: center; margin-bottom: 30px;">
+    <div style="display: inline-block; padding: 20px; background: rgba(206, 232, 140, 0.1); border-radius: 50%; margin-bottom: 20px;">
+        <img src="https://img.icons8.com/color/96/000000/shield.png" width="48" height="48" alt="Security">
+    </div>
+    <h1 style="margin: 0; font-size: 24px; color: #ffffff;">New Login Detected</h1>
+    <p style="color: #9ca3af; margin-top: 10px;">A new login was activity was detected on your account.</p>
+</div>
+
+<div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 25px; margin-bottom: 30px;">
+    <table width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+            <td style="padding-bottom: 15px; color: #9ca3af; font-size: 14px;">User</td>
+            <td style="padding-bottom: 15px; color: #ffffff; font-weight: 600; text-align: right;">{{ username }}</td>
+        </tr>
+        <tr>
+            <td style="padding-bottom: 15px; color: #9ca3af; font-size: 14px;">Time</td>
+            <td style="padding-bottom: 15px; color: #ffffff; font-weight: 600; text-align: right;">{{ timestamp }}</td>
+        </tr>
+        <tr>
+            <td style="padding-bottom: 15px; color: #9ca3af; font-size: 14px;">IP Address</td>
+            <td style="padding-bottom: 15px; color: #ffffff; font-weight: 600; text-align: right;">{{ ip_address }}</td>
+        </tr>
+        <tr>
+            <td style="color: #9ca3af; font-size: 14px;">Browser/Device</td>
+            <td style="color: #ffffff; font-weight: 600; text-align: right;">{{ user_agent|truncatechars:40 }}</td>
+        </tr>
+    </table>
+</div>
+
+<div style="text-align: center;">
+    <p style="font-size: 14px; color: #9ca3af; line-height: 1.6;">
+        If this was you, you can safely ignore this email. If you don't recognize this activity, please reset your password immediately to secure your account.
+    </p>
+    <a href="{{ reset_url }}" class="button">Reset Password</a>
+</div>
+
+<div style="margin-top: 30px; padding: 20px; background: rgba(255, 77, 77, 0.05); border-radius: 8px; border-left: 4px solid #ff4d4d;">
+    <p style="margin: 0; font-size: 13px; color: #e5e7eb;">
+        <strong>Safety Tip:</strong> SharpToolz will never ask for your password via email. Always ensure you are on <strong>sharptoolz.com</strong> before logging in.
+    </p>
+</div>
+{% endblock %}
