@@ -115,9 +115,12 @@ class AdminUsers(APIView):
             page_size = int(request.GET.get('page_size', 10))
             search = request.GET.get('search', '').strip()
             role = request.GET.get('role', 'all').strip().lower()
+            source = request.GET.get('source', '').strip()
             
             # Base queryset for users list (pagination)
             users_queryset = User.objects.all()
+            if source:
+                users_queryset = users_queryset.filter(source=source)
             if search:
                 users_queryset = users_queryset.filter(
                     Q(username__icontains=search) | 

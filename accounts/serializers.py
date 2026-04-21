@@ -31,6 +31,7 @@ class CustomUserDetailsSerializer(UserDetailsSerializer):
             "total_purchases",
             "downloads",
             "date_joined",
+            "is_active",
         )
 
     def get_role(self, user):
@@ -59,15 +60,32 @@ class RegisterSerializer(serializers.ModelSerializer):
         style={"input_type": "password"}
     )
     referred_by = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    source = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'referred_by']
+        fields = ['username', 'email', 'password', 'referred_by', 'source']
 
     def create(self, validated_data):
         referrer_username = validated_data.pop('referred_by', None)
+        source = validated_data.pop('source', None)
+        
+        # If source not in payload, try to get from cookies if request context is available
+        if not source:
+            request = self.context.get('request')
+            if request:
+                source = request.COOKIES.get('traffic_source')
+        
+        # If still no source but we have a referrer, hardcode to 'referral'
+        if not source and referrer_username:
+            source = 'referral'
+
         user = User.objects.create_user(**validated_data)
         
+        if source:
+            user.source = source
+            user.save(update_fields=['source'])
+
         if referrer_username:
             try:
                 referrer = User.objects.get(username=referrer_username)

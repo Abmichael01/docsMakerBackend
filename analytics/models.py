@@ -10,6 +10,7 @@ class VisitorLog(models.Model):
     method = models.CharField(max_length=10)
     user_agent = models.TextField(null=True, blank=True)
     referrer = models.TextField(null=True, blank=True)
+    source = models.CharField(max_length=100, null=True, blank=True, db_index=True)
     status_code = models.PositiveSmallIntegerField(null=True, blank=True)
     timestamp = models.DateTimeField(default=timezone.now)
 
@@ -24,6 +25,18 @@ class VisitorLog(models.Model):
     def __str__(self):
         return f"{self.ip_address} - {self.path} - {self.timestamp}"
 
+class Campaign(models.Model):
+    name = models.CharField(max_length=100, unique=True, help_text="The source/campaign name (used in ?source=)")
+    description = models.TextField(null=True, blank=True)
+    ref_code = models.CharField(max_length=100, null=True, blank=True, help_text="Optional referral code to attach")
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_visit_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name
 
 class AuditLog(models.Model):
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='audit_logs')

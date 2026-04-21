@@ -49,6 +49,38 @@ class VisitorTrackingMiddleware:
             ip = x_forwarded_for.split(',')[0]
         else:
             ip = request.META.get('REMOTE_ADDR')
+
+        # Capture source from query params
+        source = request.GET.get('source') or request.GET.get('utm_source')
+        
+        # If no campaign source, check for Organic Referrers (e.g. Google)
+        if not source:
+            referer = request.META.get('HTTP_REFERER', '')
+            if 'google.com' in referer:
+                source = 'Google Search'
+            elif 'bing.com' in referer:
+                source = 'Bing Search'
+            elif 't.me' in referer or 'telegram' in referer.lower():
+                source = 'Telegram'
+
+        # IP Persistence: If still no source, check if this IP has a known source in history
+        # (This handles users who clear cookies but come from the same IP)
+        if not source:
+            source = request.COOKIES.get('traffic_source')
+            if not source:
+                last_log_with_source = VisitorLog.objects.filter(
+                    ip_address=ip, 
+                    source__isnull=False
+                ).order_by('-timestamp').first()
+                if last_log_with_source:
+                    source = last_log_with_source.source
+
+        # If absolutely nothing found, default to Organic
+        if not source:
+            source = 'Organic'
+
+        # Persist to cookie for 30 days
+        response.set_cookie('traffic_source', source, max_age=30*24*60*60, httponly=True, samesite='Lax')
             
         # Use STANDARDIZED session key utility
         session_key = get_visitor_session_key(request=request)
@@ -71,6 +103,9 @@ class VisitorTrackingMiddleware:
             # Update user if they just logged in
             if not existing_log.user and request.user.is_authenticated:
                 existing_log.user = request.user
+            # Update source if new one came in or we didn't have one
+            if source:
+                existing_log.source = source
             existing_log.save()
         else:
             # Create a new interaction entry
@@ -82,5 +117,6 @@ class VisitorTrackingMiddleware:
                 method=request.method,
                 status_code=response.status_code,
                 user_agent=user_agent[:1000] if user_agent else '',
-                referrer=request.META.get('HTTP_REFERER', '')[:1000] if request.META.get('HTTP_REFERER') else ''
+                referrer=request.META.get('HTTP_REFERER', '')[:1000] if request.META.get('HTTP_REFERER') else '',
+                source=source[:100] if source else None
             )

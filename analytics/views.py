@@ -1,3 +1,4 @@
+from rest_framework.decorators import action
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser, AllowAny
@@ -7,8 +8,55 @@ from django.utils import timezone
 from datetime import datetime, time, timedelta
 from api.utils.admin_ranges import get_date_window, get_range_label, parse_days_param
 from wallet.models import Transaction
-from .models import VisitorLog
-from .serializers import VisitorLogSerializer
+from rest_framework import viewsets
+from .models import VisitorLog, Campaign
+from .serializers import VisitorLogSerializer, CampaignSerializer
+from accounts.models import User
+
+class CampaignViewSet(viewsets.ModelViewSet):
+    queryset = Campaign.objects.all()
+    serializer_class = CampaignSerializer
+    permission_classes = [IsAdminUser]
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """
+        Get aggregated stats for all campaigns.
+        """
+        total_sources = Campaign.objects.count()
+        
+        # Traffic from ALL tracked sources
+        total_traffic = VisitorLog.objects.filter(source__isnull=False).count()
+        
+        # Sources active today (at least one visit)
+        today = timezone.localdate()
+        active_today = VisitorLog.objects.filter(
+            source__isnull=False,
+            timestamp__date=today
+        ).values('source').distinct().count()
+
+        # Detailed breakdown per campaign
+        campaigns = Campaign.objects.all()
+        breakdown = []
+        for c in campaigns:
+            c_visits = VisitorLog.objects.filter(source=c.name).count()
+            c_users = User.objects.filter(source=c.name).count()
+            breakdown.append({
+                "id": c.id,
+                "name": c.name,
+                "description": c.description,
+                "ref_code": c.ref_code,
+                "visits": c_visits,
+                "users": c_users,
+                "created_at": c.created_at
+            })
+
+        return Response({
+            "total_sources": total_sources,
+            "total_traffic": total_traffic,
+            "active_today": active_today,
+            "campaigns": breakdown
+        })
 
 class LogVisitView(APIView):
     permission_classes = [AllowAny]
@@ -163,6 +211,17 @@ class AnalyticsDashboardView(APIView):
             total_revenue=Sum('amount'),
         )
 
+        source_stats = list(
+            visit_queryset
+            .filter(source__isnull=False)
+            .values('source')
+            .annotate(
+                visits=Count('id'),
+                unique_visitors=Count('ip_address', distinct=True)
+            )
+            .order_by('-visits')[:10]
+        )
+
         unique_count = visitor_summary['unique_visitors'] or 0
         sales_count = payment_summary['total_sales'] or 0
 
@@ -190,6 +249,7 @@ class AnalyticsDashboardView(APIView):
                 },
             ],
             "top_pages": top_pages,
+            "source_stats": source_stats,
             "range_days": days,
             "range_label": range_label,
             "summary": {
@@ -237,8 +297,12 @@ class UserActivityView(APIView):
         date_str = request.GET.get('date')
         user_id = request.GET.get('user_id')
         search = request.GET.get('search')
+        source = request.GET.get('source')
 
         queryset = VisitorLog.objects.select_related('user').order_by('-timestamp')
+
+        if source:
+            queryset = queryset.filter(source=source)
 
         if date_str:
             try:

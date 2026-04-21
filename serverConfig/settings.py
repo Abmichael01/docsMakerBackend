@@ -15,6 +15,19 @@ from datetime import timedelta
 import os
 from dotenv import load_dotenv
 import dj_database_url
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
+
+# Initialize Sentry
+sentry_sdk.init(
+    dsn=os.getenv("SENTRY_DSN", "https://1295c1d6e0e0b4c1162044587fe2ecae@o4511259828158464.ingest.us.sentry.io/4511259830255616"),
+    integrations=[DjangoIntegration()],
+    # Set traces_sample_rate to 1.0 to capture 100%
+    # of transactions for performance monitoring.
+    traces_sample_rate=1.0,
+    # If you wish to associate users to errors (optional)
+    send_default_pii=True,
+)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -34,7 +47,7 @@ SECRET_KEY = 'django-insecure-+#ds1yk1fdrx$=3&yf+!q$r9sy!l$vjl8ea@_fhya_t3(okl!p
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', ".vercel.app", ".now.sh", ".vercel.sh", "127.0.0.1", "9bad-102-89-68-147.ngrok-free.app", "api.sharptoolz.com", "devapi.sharptoolz.com", "38.242.198.49"]
+ALLOWED_HOSTS = ['localhost', ".vercel.app", ".now.sh", ".vercel.sh", "127.0.0.1", "9bad-102-89-68-147.ngrok-free.app", "api.sharptoolz.com", "devapi.sharptoolz.com", "38.242.198.49", "testserver"]
 
 # Application definition
 INSTALLED_APPS = [ 
@@ -58,6 +71,9 @@ INSTALLED_APPS = [
     "api",
     "wallet",
     "analytics",
+
+    # Debugging
+    "django_extensions",
 ]
 
 MIDDLEWARE = [
@@ -74,6 +90,14 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'analytics.middleware.VisitorTrackingMiddleware',
 ]
+
+if DEBUG:
+    INSTALLED_APPS.append('debug_toolbar')
+    # Should be after GZipMiddleware
+    MIDDLEWARE.insert(MIDDLEWARE.index('django.middleware.gzip.GZipMiddleware') + 1, 'debug_toolbar.middleware.DebugToolbarMiddleware')
+    INTERNAL_IPS = [
+        "127.0.0.1",
+    ]
 
 # Add custom middleware for media CORS in development
 if ENV == "development":
@@ -339,17 +363,17 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 JWT_COOKIE_SAMESITE = 'None'  # Allow cross-site cookies
-JWT_COOKIE_SECURE = True      # Must be True if using HTTPS
+JWT_COOKIE_SECURE = not DEBUG      # Must be True if using HTTPS
 JWT_COOKIE_HTTPONLY = True    # Prevent XSS
 JWT_COOKIE_PATH = '/'         # Available site-wide
 
 CSRF_COOKIE_SAMESITE = 'None'     # Allow cross-site cookies (for use with HTTPS)
-CSRF_COOKIE_SECURE = True         # Cookie only sent over HTTPS
+CSRF_COOKIE_SECURE = not DEBUG         # Cookie only sent over HTTPS
 CSRF_COOKIE_HTTPONLY = False      # CSRF cookie must be accessible via JavaScript
 CSRF_COOKIE_PATH = '/' 
 
 SESSION_COOKIE_SAMESITE = 'None'     # Allow cross-site cookies (for use with HTTPS)
-SESSION_COOKIE_SECURE = True         # Cookie only sent over HTTPS
+SESSION_COOKIE_SECURE = not DEBUG         # Cookie only sent over HTTPS
 SESSION_COOKIE_HTTPONLY = False      # CSRF cookie must be accessible via JavaScript
 SESSION_COOKIE_PATH = '/' 
 
