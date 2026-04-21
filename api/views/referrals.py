@@ -49,7 +49,7 @@ class ReferralViewSet(viewsets.ReadOnlyModelViewSet):
             'withdrawable_balance': wallet.referral_balance,
             'min_withdrawal': settings.min_withdrawal_threshold,
             'referral_code': user.username,
-            'referral_link': f"https://sharptoolz.com/register?ref={user.username}",
+            'referral_link': f"{settings.FRONTEND_URL}/auth/register?ref={user.username}",
             'reward_percentage': settings.referral_percentage,
             'min_deposit_threshold': settings.min_referral_deposit
         })
