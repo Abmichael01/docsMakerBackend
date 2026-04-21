@@ -54,6 +54,6 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
             'dev_name_obfuscated', 'owner_name_obfuscated', 'template_cache_version', 'enable_ai_features',
             'show_whatsapp_on_hover', 'show_community_on_hover', 'show_telegram_on_hover',
             'show_instagram_on_hover', 'show_twitter_on_hover', 'show_tiktok_on_hover',
-            'enable_referrals'
+            'enable_referrals', 'referral_percentage', 'min_referral_deposit', 'min_withdrawal_threshold'
         ]
         read_only_fields = fields
