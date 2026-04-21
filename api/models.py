@@ -300,6 +300,7 @@ class SiteSettings(models.Model):
 
     # 2. Wallet & Financial Constraints
     min_topup_amount = models.DecimalField(max_digits=10, decimal_places=2, default=5.00, help_text="Minimum top-up amount in USD")
+    min_withdrawal_threshold = models.DecimalField(max_digits=10, decimal_places=2, default=10.00, help_text="Minimum withdrawal amount for referral balance")
     crypto_address = models.CharField(max_length=255, blank=True, help_text="Fallback / Master BEP20 USDT Address")
     funding_whatsapp_number = models.CharField(max_length=50, blank=True, default="2349160914217", help_text="WhatsApp for manual deposits")
     exchange_rate_override = models.DecimalField(max_digits=10, decimal_places=2, default=1650.00, help_text="Flat Dollar-to-Naira Exchange Rate (e.g. 1650)")
@@ -314,6 +315,12 @@ class SiteSettings(models.Model):
     global_announcement_text = models.TextField(blank=True, help_text="Text for global dashboard banner")
     global_announcement_link = models.URLField(blank=True, help_text="Optional link for global banner")
     enable_global_announcement = models.BooleanField(default=False, help_text="Show the global banner to all users")
+    
+    # 5. Referral Program Configs
+    enable_referrals = models.BooleanField(default=True, help_text="Enable the referral program")
+    referral_reward_amount = models.DecimalField(max_digits=10, decimal_places=2, default=2.00, help_text="[Legacy] Static reward amount")
+    referral_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=10.00, help_text="Percentage of every deposit given to both referrer and invitee (e.g. 10.00)")
+    min_referral_deposit = models.DecimalField(max_digits=10, decimal_places=2, default=6.00, help_text="Minimum deposit required by the referred user to trigger reward")
 
     # Legacy / Other Fields
     manual_purchase_text = models.TextField(blank=True)
@@ -379,6 +386,19 @@ class AiChatMessage(models.Model):
 
     def __str__(self):
         return f"{self.session.id} - {self.role}"
+
+class Referral(models.Model):
+    referrer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='referral_records')
+    referred_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='registration_referral')
+    is_rewarded = models.BooleanField(default=True)
+    reward_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.referrer.username} -> {self.referred_user.username}"
 
 @receiver(post_delete, sender=Template)
 def auto_delete_file_on_delete_template(sender, instance, **kwargs):

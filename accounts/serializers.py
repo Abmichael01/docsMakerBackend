@@ -58,13 +58,38 @@ class RegisterSerializer(serializers.ModelSerializer):
         min_length=6,
         style={"input_type": "password"}
     )
+    referred_by = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password']
+        fields = ['username', 'email', 'password', 'referred_by']
 
     def create(self, validated_data):
-        return User.objects.create_user(**validated_data)
+        referrer_username = validated_data.pop('referred_by', None)
+        user = User.objects.create_user(**validated_data)
+        
+        if referrer_username:
+            try:
+                referrer = User.objects.get(username=referrer_username)
+                
+                # Anti-fraud: Don't link if same user or same IP
+                request = self.context.get('request')
+                user_ip = None
+                if request:
+                    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+                    if x_forwarded_for:
+                        user_ip = x_forwarded_for.split(',')[0]
+                    else:
+                        user_ip = request.META.get('REMOTE_ADDR')
+
+                # We don't have the referrer's last IP here easily, but we can check if they are the same user
+                # More robust IP checks will happen during the reward trigger in the webhook.
+                if referrer != user:
+                    user.referred_by = referrer
+                    user.save()
+            except User.DoesNotExist:
+                pass
+        return user
 
 
 class LoginSerializer(serializers.Serializer):

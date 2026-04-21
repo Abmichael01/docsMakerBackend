@@ -2,7 +2,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     TemplateViewSet, AdminTemplateViewSet, PublicTemplateTrackingView,
     PurchasedTemplateViewSet, ToolViewSet, FontViewSet, SiteSettingsViewSet,
-    TutorialViewSet, TransformVariableViewSet,
+    TutorialViewSet, TransformVariableViewSet, ReferralViewSet,
     DownloadDoc, IncrementDownloads, RemoveBackgroundView, AdminOverview, AdminUsers, AdminUserDetails, AdminDocuments,
     WalletStatsView, WalletListView, WalletAdjustView, PendingRequestsView, ApproveRequestView, RejectRequestView, TransactionHistoryView,
     AiChatView, AiChatSessionViewSet, ContactView,
@@ -23,6 +23,7 @@ router.register(r'fonts', FontViewSet, basename='font')
 router.register(r'settings', SiteSettingsViewSet, basename='settings')
 router.register(r'transform-variables', TransformVariableViewSet, basename='transform-variable')
 router.register(r'ai-chat/sessions', AiChatSessionViewSet, basename='ai-chat-session')
+router.register(r'referrals', ReferralViewSet, basename='referral')
 
 urlpatterns = [
     path("track/<str:tracking_id>/", PublicTemplateTrackingView.as_view(), name="track-template"),

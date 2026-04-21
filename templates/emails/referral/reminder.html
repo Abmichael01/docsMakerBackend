@@ -1,0 +1,42 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Your 10% Bonus is Waiting!{% endblock %}
+
+{% block content %}
+<div style="text-align: center; margin-bottom: 30px;">
+    <div style="display: inline-block; padding: 10px 20px; background: rgba(206, 232, 140, 0.1); border: 1px solid rgba(206, 232, 140, 0.2); border-radius: 50px; margin-bottom: 20px;">
+        <span style="color: #cee88c; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px;">Bonus Alert 💰</span>
+    </div>
+    <h1 style="margin: 0; font-size: 28px; color: #ffffff; letter-spacing: -0.5px;">Hey <span style="color: #cee88c;">{{ friend_name }}!</span></h1>
+    <p style="color: #9ca3af; margin-top: 10px; font-size: 16px;">Your friend <strong>{{ referrer_name }}</strong> wants you to claim your reward.</p>
+</div>
+
+<p style="font-size: 15px; color: #e5e7eb; line-height: 1.7; text-align: center;">
+    You're just one step away from unlocking your <strong>10% Cash Bonus</strong>. All you need to do is make your first deposit on SharpToolz!
+</p>
+
+<div style="margin: 30px 0; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 24px; padding: 30px; text-align: center;">
+    <h3 style="margin: 0 0 10px 0; color: #ffffff; font-size: 20px;">The Mutual Reward 🚀</h3>
+    <p style="margin: 0; font-size: 14px; color: #9ca3af;">When you deposit, you get <strong>10% back instantly</strong> in your referral balance, and {{ referrer_name }} gets 10% too!</p>
+    
+    <div style="margin-top: 25px; display: inline-block; padding: 15px 30px; background: #cee88c; border-radius: 50px;">
+        <a href="{{ deposit_url }}" style="color: #0f1620; text-decoration: none; font-weight: 900; text-transform: uppercase; font-size: 13px; letter-spacing: 1px;">Claim My 10% Bonus Now</a>
+    </div>
+</div>
+
+<div style="margin-top: 30px;">
+    <p style="font-size: 14px; color: #e5e7eb; font-weight: bold; margin-bottom: 15px;">Why SharpToolz?</p>
+    <ul style="color: #9ca3af; font-size: 13px; padding-left: 20px; line-height: 1.8;">
+        <li>Professional SVG Document Automation</li>
+        <li>AI-Powered "Sharp Guy" Assistant</li>
+        <li>High-Quality PDF & PNG Exports</li>
+        <li>Real-time Tracking & Customization</li>
+    </ul>
+</div>
+
+<div style="margin-top: 40px; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 25px; text-align: center;">
+    <p style="font-size: 12px; color: #6b7280;">
+        Need help? Reply to this email or visit our <a href="{{ frontend_url }}/contact" style="color: #cee88c; text-decoration: none;">Support Center</a>.
+    </p>
+</div>
+{% endblock %}

@@ -45,9 +45,18 @@ class Wallet(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='wallet')
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    referral_balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
 
     def __str__(self):
         return f"{self.user.username}'s Wallet"
+
+    @transaction.atomic
+    def credit_referral(self, amount: Decimal):
+        amount = Decimal(amount)
+        if amount <= 0:
+            raise ValueError("Credit amount must be positive")
+        self.referral_balance += amount
+        self.save(update_fields=['referral_balance'])
 
     @transaction.atomic
     def credit(self, amount: Decimal, *, description='Deposit', create_transaction=True):
@@ -84,7 +93,6 @@ class Wallet(models.Model):
 
     @transaction.atomic
     def debit(self, amount: Decimal, *, description=''):
-        print("isHere")
         amount = Decimal(amount)
         if amount <= 0:
             raise ValueError("Debit amount must be positive")
@@ -112,3 +120,23 @@ class Wallet(models.Model):
             logging.getLogger(__name__).error(f"Failed to send payment receipt email: {e}")
 
         return tx
+
+class WithdrawalRequest(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        COMPLETED = 'completed', 'Completed'
+        REJECTED = 'rejected', 'Rejected'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='withdrawal_requests')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    usdt_address = models.CharField(max_length=255)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.amount} ({self.status})"

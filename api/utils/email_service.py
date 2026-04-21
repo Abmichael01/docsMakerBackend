@@ -119,6 +119,16 @@ class EmailService:
         return cls._send_email(subject, 'emails/wallet/purchase_receipt.html', context, [user.email])
 
     @classmethod
+    def send_referral_reminder(cls, friend_email, friend_name, referrer_name):
+        subject = f"🎁 {referrer_name} sent you a 10% Cash Bonus!"
+        context = {
+            'friend_name': friend_name,
+            'referrer_name': referrer_name,
+            'deposit_url': f"{settings.FRONTEND_URL}/dashboard/wallet"
+        }
+        return cls._send_email(subject, 'emails/referral/reminder.html', context, [friend_email])
+
+    @classmethod
     def send_contact_form(cls, name, email, subject, message):
         site_settings = SiteSettings.get_settings()
         dest_email = site_settings.support_email or "support@sharptoolz.com"

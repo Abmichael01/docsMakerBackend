@@ -184,6 +184,31 @@ class CryptAPIWebhookView(APIView):
         tx.wallet.credit(credited_amount, create_transaction=False)
         send_wallet_update(tx.wallet.user, True)
 
+        # Referral Reward Logic
+        settings = SiteSettings.get_settings()
+        user = tx.wallet.user
+        if settings.enable_referrals and user.referred_by:
+            # Mutual Reward Calculation: (deposit * percentage / 100)
+            bonus_amount = (credited_amount * settings.referral_percentage) / Decimal('100.00')
+            
+            if bonus_amount > 0:
+                # Credit Referrer
+                user.referred_by.wallet.credit_referral(bonus_amount)
+                send_wallet_update(user.referred_by, True)
+
+                # Credit Invitee (the depositor)
+                user.wallet.credit_referral(bonus_amount)
+                send_wallet_update(user, True)
+
+                # Log the referral (one-to-many now, as it's recurring)
+                from api.models import Referral
+                Referral.objects.create(
+                    referrer=user.referred_by,
+                    referred_user=user,
+                    is_rewarded=True,
+                    reward_amount=bonus_amount
+                )
+
         return Response({"detail": "Wallet credited successfully."}, status=status.HTTP_200_OK)
    
     
