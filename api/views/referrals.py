@@ -5,6 +5,7 @@ from api.models import Referral, SiteSettings
 from api.serializers.referral import ReferralSerializer
 from django.db.models import Count, Sum
 from django.contrib.auth import get_user_model
+from django.conf import settings as django_settings
 
 User = get_user_model()
 
@@ -39,7 +40,7 @@ class ReferralViewSet(viewsets.ReadOnlyModelViewSet):
             total=Sum('reward_amount')
         )['total'] or 0
         
-        settings = SiteSettings.get_settings()
+        site_settings = SiteSettings.get_settings()
         
         return Response({
             'total_referrals': total_referrals,
@@ -47,11 +48,11 @@ class ReferralViewSet(viewsets.ReadOnlyModelViewSet):
             'pending_referrals': pending_referrals,
             'total_earned': total_earned,
             'withdrawable_balance': wallet.referral_balance,
-            'min_withdrawal': settings.min_withdrawal_threshold,
+            'min_withdrawal': site_settings.min_withdrawal_threshold,
             'referral_code': user.username,
-            'referral_link': f"{settings.FRONTEND_URL}/auth/register?ref={user.username}",
-            'reward_percentage': settings.referral_percentage,
-            'min_deposit_threshold': settings.min_referral_deposit
+            'referral_link': f"{django_settings.FRONTEND_URL}/auth/register?ref={user.username}",
+            'reward_percentage': site_settings.referral_percentage,
+            'min_deposit_threshold': site_settings.min_referral_deposit
         })
 
     @action(detail=False, methods=['post'])
