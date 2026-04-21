@@ -53,7 +53,7 @@ class PublicSiteSettingsSerializer(serializers.ModelSerializer):
             'global_announcement_text', 'global_announcement_link', 'enable_global_announcement',
             'dev_name_obfuscated', 'owner_name_obfuscated', 'template_cache_version', 'enable_ai_features',
             'show_whatsapp_on_hover', 'show_community_on_hover', 'show_telegram_on_hover',
-            'show_instagram_on_hover', 'show_twitter_on_hover', 'show_tiktok_on_hover'
+            'show_instagram_on_hover', 'show_twitter_on_hover', 'show_tiktok_on_hover',
+            'enable_referrals'
         ]
         read_only_fields = fields
-

@@ -52,7 +52,8 @@ class ReferralViewSet(viewsets.ReadOnlyModelViewSet):
             'referral_code': user.username,
             'referral_link': f"{django_settings.FRONTEND_URL}/auth/register?ref={user.username}",
             'reward_percentage': site_settings.referral_percentage,
-            'min_deposit_threshold': site_settings.min_referral_deposit
+            'min_deposit_threshold': site_settings.min_referral_deposit,
+            'enable_referrals': site_settings.enable_referrals
         })
 
     @action(detail=False, methods=['post'])
@@ -76,6 +77,9 @@ class ReferralViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"detail": "Invalid amount format."}, status=status.HTTP_400_BAD_REQUEST)
 
         settings = SiteSettings.get_settings()
+        if not settings.enable_referrals:
+            return Response({"detail": "The referral program is currently disabled."}, status=status.HTTP_403_FORBIDDEN)
+            
         if amount < settings.min_withdrawal_threshold:
             return Response({"detail": f"Minimum withdrawal amount is ${settings.min_withdrawal_threshold}."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -101,6 +105,10 @@ class ReferralViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Send a reminder email to all pending referrals.
         """
+        site_settings = SiteSettings.get_settings()
+        if not site_settings.enable_referrals:
+            return Response({"detail": "The referral program is currently disabled."}, status=status.HTTP_403_FORBIDDEN)
+
         from api.utils.email_service import EmailService
         user = request.user
         

@@ -318,7 +318,6 @@ class SiteSettings(models.Model):
     
     # 5. Referral Program Configs
     enable_referrals = models.BooleanField(default=True, help_text="Enable the referral program")
-    referral_reward_amount = models.DecimalField(max_digits=10, decimal_places=2, default=2.00, help_text="[Legacy] Static reward amount")
     referral_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=10.00, help_text="Percentage of every deposit given to both referrer and invitee (e.g. 10.00)")
     min_referral_deposit = models.DecimalField(max_digits=10, decimal_places=2, default=6.00, help_text="Minimum deposit required by the referred user to trigger reward")
 
