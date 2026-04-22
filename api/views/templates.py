@@ -1,5 +1,6 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.db.models import Prefetch
@@ -16,11 +17,18 @@ from ..cache_utils import (
     invalidate_template_cache
 )
 
+class ToolPagination(PageNumberPagination):
+    page_size = 12
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+
 class TemplateViewSet(viewsets.ModelViewSet):
     queryset = Template.objects.all().order_by('-created_at')
     serializer_class = TemplateSerializer
     permission_classes = [IsAdminOrReadOnly]
-    pagination_class = None
+    pagination_class = ToolPagination
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name', 'description', 'keywords']
 
     def get_queryset(self):
         queryset = Template.objects.select_related('tool', 'tutorial').prefetch_related('fonts')
@@ -101,7 +109,9 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
     queryset = Template.objects.all().order_by('-created_at')
     serializer_class = AdminTemplateSerializer
     permission_classes = [IsAdminOnly]
-    pagination_class = None
+    pagination_class = ToolPagination
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name', 'description', 'keywords']
     
     def get_queryset(self):
         queryset = Template.objects.select_related('tool', 'tutorial').prefetch_related('fonts')
