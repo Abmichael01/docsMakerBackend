@@ -63,6 +63,13 @@ COPY . .
 # Ensure scripts are executable
 RUN chmod +x docker-entrypoint.sh
 
+# Run collectstatic during build to avoid runtime delays
+# We provide dummy ENV vars to satisfy Django initialization requirements
+RUN SECRET_KEY=build-time-dummy-key \
+    DEBUG=False \
+    DATABASE_URL=sqlite:///:memory: \
+    python manage.py collectstatic --noinput
+
 # Create directories for volumes
 RUN mkdir -p /app/staticfiles /app/media /app/temp_uploads
 
