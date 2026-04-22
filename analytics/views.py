@@ -63,6 +63,8 @@ class LogVisitView(APIView):
 
     def post(self, request):
         path = request.data.get('path', '')
+        source = request.data.get('source')
+        
         # Only log if path is valid (simple check)
         if not path:
             return Response({"status": "ignored"})
@@ -73,17 +75,35 @@ class LogVisitView(APIView):
         else:
             ip = request.META.get('REMOTE_ADDR')
 
+        # If source not in payload, check cookies
+        if not source:
+            source = request.COOKIES.get('traffic_source')
+
+        # Fallback to Organic if still no source (consistent with middleware)
+        if not source:
+            source = 'Organic'
+
+        from .utils import get_visitor_session_key
+        session_key = get_visitor_session_key(request=request)
+
         # Create log
         VisitorLog.objects.create(
             user=request.user if request.user.is_authenticated else None,
             ip_address=ip,
-            session_key=request.session.session_key,
+            session_key=session_key,
             path=path[:255],
             method='VIEW', 
-            user_agent=request.META.get('HTTP_USER_AGENT', '')
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:1000] if request.META.get('HTTP_USER_AGENT') else '',
+            source=source[:100] if source else None
         )
         
-        return Response({"status": "ok"})
+        response = Response({"status": "ok"})
+        # Set cookie so it's available for subsequent requests (like registration)
+        if source:
+            response.set_cookie('traffic_source', source, max_age=30*24*60*60, httponly=True, samesite='Lax')
+            
+        return response
+
 
 
 class AnalyticsDashboardView(APIView):
@@ -171,8 +191,9 @@ class AnalyticsDashboardView(APIView):
             visit_queryset
             .select_related('user')
             .order_by('-timestamp')
-            .values('ip_address', 'session_key', 'path', 'timestamp', 'user__username', 'method')
+            .values('ip_address', 'session_key', 'path', 'timestamp', 'user__username', 'method', 'source')
         )[:1000]
+
 
         unique_visitors_map = {}
         for log in recent_logs:

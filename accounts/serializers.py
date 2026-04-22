@@ -32,7 +32,9 @@ class CustomUserDetailsSerializer(UserDetailsSerializer):
             "downloads",
             "date_joined",
             "is_active",
+            "source",
         )
+
 
     def get_role(self, user):
         if user.is_superuser:
@@ -85,6 +87,11 @@ class RegisterSerializer(serializers.ModelSerializer):
         if source:
             user.source = source
             user.save(update_fields=['source'])
+        elif not user.source:
+            # Final fallback if absolutely nothing was set
+            user.source = 'Direct'
+            user.save(update_fields=['source'])
+
 
         if referrer_username:
             from api.models import SiteSettings
