@@ -28,7 +28,7 @@ class TemplateViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = ToolPagination
     filter_backends = [filters.SearchFilter]
-    search_fields = ['name', 'description', 'keywords']
+    search_fields = ['name', 'keywords', 'tool__name', 'tool__description']
 
     def get_queryset(self):
         queryset = Template.objects.select_related('tool', 'tutorial').prefetch_related('fonts')
@@ -111,7 +111,7 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOnly]
     pagination_class = ToolPagination
     filter_backends = [filters.SearchFilter]
-    search_fields = ['name', 'description', 'keywords']
+    search_fields = ['name', 'keywords', 'tool__name', 'tool__description']
     
     def get_queryset(self):
         queryset = Template.objects.select_related('tool', 'tutorial').prefetch_related('fonts')
