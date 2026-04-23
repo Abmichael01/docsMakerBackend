@@ -66,8 +66,9 @@ class LogVisitView(APIView):
         path = request.data.get('path', '')
         source = request.data.get('source')
         
-        if not path:
+        if not path or path.startswith('/api/') or any(ext in path for ext in ['.ico', '.js', '.css', '.map']):
             return Response({"status": "ignored"})
+
             
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
         ip = x_forwarded_for.split(',')[0] if x_forwarded_for else request.META.get('REMOTE_ADDR')
