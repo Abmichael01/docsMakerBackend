@@ -36,7 +36,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     
     downloads = models.IntegerField(default=0)
     referred_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='referrals_sent')
-    source = models.CharField(max_length=100, default='Organic', null=True, blank=True, help_text="Traffic source (e.g. Facebook, Twitter, referral)")
+    source = models.CharField(max_length=100, default='Direct', null=True, blank=True, help_text="Traffic source (e.g. google, facebook, direct)")
+    medium = models.CharField(max_length=100, default='(none)', null=True, blank=True, help_text="Acquisition medium (e.g. organic, referral, cpc)")
+    campaign = models.CharField(max_length=150, null=True, blank=True, help_text="Acquisition campaign name")
 
 
     objects = UserManager()

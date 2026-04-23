@@ -33,6 +33,8 @@ class CustomUserDetailsSerializer(UserDetailsSerializer):
             "date_joined",
             "is_active",
             "source",
+            "medium",
+            "campaign",
         )
 
 
@@ -63,34 +65,63 @@ class RegisterSerializer(serializers.ModelSerializer):
     )
     referred_by = serializers.CharField(required=False, allow_blank=True, write_only=True)
     source = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    medium = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    campaign = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'referred_by', 'source']
+        fields = ['username', 'email', 'password', 'referred_by', 'source', 'medium', 'campaign']
 
     def create(self, validated_data):
         referrer_username = validated_data.pop('referred_by', None)
         source = validated_data.pop('source', None)
-        
-        # If source not in payload, try to get from cookies if request context is available
+        medium = validated_data.pop('medium', None)
+        campaign = validated_data.pop('campaign', None)
+
+        request = self.context.get('request')
+        attribution = {}
+
+        if request:
+            from analytics.utils import get_attribution_for_request
+
+            attribution = get_attribution_for_request(request)
+
         if not source:
-            request = self.context.get('request')
-            if request:
-                source = request.COOKIES.get('traffic_source')
-        
+            source = attribution.get('source')
+        if not medium:
+            medium = attribution.get('medium')
+        if not campaign:
+            campaign = attribution.get('campaign')
+
         # If still no source but we have a referrer, hardcode to 'referral'
         if not source and referrer_username:
             source = 'referral'
+        if not medium and source == 'referral':
+            medium = 'referral'
 
         user = User.objects.create_user(**validated_data)
-        
+
+        update_fields = []
         if source:
             user.source = source
-            user.save(update_fields=['source'])
+            update_fields.append('source')
         elif not user.source:
-            # Final fallback if absolutely nothing was set
             user.source = 'Direct'
-            user.save(update_fields=['source'])
+            update_fields.append('source')
+
+        if medium:
+            user.medium = medium
+            update_fields.append('medium')
+        elif not user.medium:
+            user.medium = '(none)'
+            update_fields.append('medium')
+
+        if campaign:
+            user.campaign = campaign
+            update_fields.append('campaign')
+
+        if update_fields:
+            user.save(update_fields=update_fields)
 
 
         if referrer_username:
@@ -100,9 +131,8 @@ class RegisterSerializer(serializers.ModelSerializer):
             if settings.enable_referrals:
                 try:
                     referrer = User.objects.get(username=referrer_username)
-                
+
                     # Anti-fraud: Don't link if same user or same IP
-                    request = self.context.get('request')
                     user_ip = None
                     if request:
                         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
