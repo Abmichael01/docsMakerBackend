@@ -76,7 +76,8 @@ def get_visitor_session_key(request=None, scope=None):
     if request:
         ip = get_client_ip(request=request)
 
-        session_key = getattr(request.session, 'session_key', None)
+        session = getattr(request, 'session', None)
+        session_key = getattr(session, 'session_key', None) if session else None
         if not session_key:
             return f"anon-{ip}"
         return session_key
@@ -201,7 +202,6 @@ def classify_referrer(referrer):
         'channel_group': channel_group,
     }
 
-
 def derive_channel_group(source, medium, gclid=None):
     source = (source or '').lower()
     medium = (medium or '').lower()
@@ -262,14 +262,25 @@ def normalize_attribution(attribution=None, referrer=None):
     payload = attribution if isinstance(attribution, dict) else {}
 
     source = clean_value(payload.get('source') or payload.get('utm_source'), max_length=100)
+    if source: source = source.lower()
+    
     medium = clean_value(payload.get('medium') or payload.get('utm_medium'), max_length=100)
+    if medium: medium = medium.lower()
+    
     campaign = clean_value(payload.get('campaign') or payload.get('utm_campaign'), max_length=150)
+    if campaign: campaign = campaign.lower()
+    
     term = clean_value(payload.get('term') or payload.get('utm_term'), max_length=150)
+    if term: term = term.lower()
+    
     content = clean_value(payload.get('content') or payload.get('utm_content'), max_length=150)
+    if content: content = content.lower()
+    
     source_platform = clean_value(
         payload.get('source_platform') or payload.get('utm_source_platform'),
         max_length=100,
     )
+    if source_platform: source_platform = source_platform.lower()
     gclid = clean_value(payload.get('gclid'), max_length=255)
     fbclid = clean_value(payload.get('fbclid'), max_length=255)
     referrer = clean_value(
