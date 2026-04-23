@@ -26,6 +26,22 @@ def send_wallet_update(user, new_payment):
             "new_payment": new_payment,
         },
     )
+
+    # BROADCAST TO ADMIN ANALYTICS
+    async_to_sync(channel_layer.group_send)(
+        "admin_activity",
+        {
+            "type": "activity_event",
+            "data": {
+                "type": "new_sale",
+                "sale": {
+                    "amount": float(wallet.balance) if hasattr(wallet, 'balance') else 0, # Note: this is balance, but we want the event
+                    "type": "payment" if new_payment else "update"
+                }
+            }
+        }
+    )
+
   
 
 class WalletDetailView(APIView):

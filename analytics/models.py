@@ -6,7 +6,10 @@ class VisitorLog(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     session_key = models.CharField(max_length=40, null=True, blank=True)
+    visitor_id = models.CharField(max_length=100, null=True, blank=True, db_index=True) # Persistent cookie ID
+    is_bot = models.BooleanField(default=False)
     path = models.CharField(max_length=255)
+
     method = models.CharField(max_length=10)
     user_agent = models.TextField(null=True, blank=True)
     referrer = models.TextField(null=True, blank=True)
@@ -19,7 +22,9 @@ class VisitorLog(models.Model):
             models.Index(fields=['timestamp']),
             models.Index(fields=['ip_address']),
             models.Index(fields=['session_key']),
+            models.Index(fields=['visitor_id']),
         ]
+
         ordering = ['-timestamp']
 
     def __str__(self):

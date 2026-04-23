@@ -25,15 +25,16 @@ class CampaignViewSet(viewsets.ModelViewSet):
         """
         total_sources = Campaign.objects.count()
         
-        # Traffic from ALL tracked sources
+        # Traffic from ALL tracked sources (Includes Bots for full accountability)
         total_traffic = VisitorLog.objects.filter(source__isnull=False).count()
         
-        # Sources active today (at least one visit)
+        # Sources active today (Includes Bots)
         today = timezone.localdate()
         active_today = VisitorLog.objects.filter(
             source__isnull=False,
             timestamp__date=today
         ).values('source').distinct().count()
+
 
         # Detailed breakdown per campaign
         campaigns = Campaign.objects.all()
@@ -65,44 +66,110 @@ class LogVisitView(APIView):
         path = request.data.get('path', '')
         source = request.data.get('source')
         
-        # Only log if path is valid (simple check)
         if not path:
             return Response({"status": "ignored"})
             
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
+        ip = x_forwarded_for.split(',')[0] if x_forwarded_for else request.META.get('REMOTE_ADDR')
 
-        # If source not in payload, check cookies
-        if not source:
-            source = request.COOKIES.get('traffic_source')
+        # Use identity from middleware
+        vuid = getattr(request, 'vuid', None)
+        is_bot = getattr(request, 'is_bot', False)
 
-        # Fallback to Organic if still no source (consistent with middleware)
+        # Fallback for source
         if not source:
-            source = 'Organic'
+            source = request.COOKIES.get('traffic_source') or 'Organic'
+
+        # AUTO-CREATE CAMPAIGN/SOURCE
+        campaign, created = Campaign.objects.get_or_create(
+            name=source[:100],
+            defaults={'description': 'Auto-detected through traffic'}
+        )
+        campaign.last_visit_at = timezone.now()
+        campaign.save()
 
         from .utils import get_visitor_session_key
         session_key = get_visitor_session_key(request=request)
 
-        # Create log
-        VisitorLog.objects.create(
-            user=request.user if request.user.is_authenticated else None,
-            ip_address=ip,
-            session_key=session_key,
-            path=path[:255],
-            method='VIEW', 
-            user_agent=request.META.get('HTTP_USER_AGENT', '')[:1000] if request.META.get('HTTP_USER_AGENT') else '',
-            source=source[:100] if source else None
+        # Heartbeat: If seen on this path/vuid in last 15 mins, just update
+        # CRITICAL: Only deduplicate if we have a valid VUID to avoid merging all guest visitors
+        existing = None
+        if vuid:
+            fifteen_mins_ago = timezone.now() - timedelta(minutes=15)
+            existing = VisitorLog.objects.filter(
+                visitor_id=vuid,
+                path=path[:255],
+                timestamp__gt=fifteen_mins_ago
+            ).first()
+
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+        channel_layer = get_channel_layer()
+
+        if existing:
+            existing.timestamp = timezone.now()
+            if request.user.is_authenticated and not existing.user:
+                existing.user = request.user
+            # Ensure source is updated if it was missing or different (though usually same for vuid)
+            if source and existing.source != source:
+                existing.source = source[:100]
+            existing.save()
+            log_instance = existing
+        else:
+            log_instance = VisitorLog.objects.create(
+                user=request.user if request.user.is_authenticated else None,
+                ip_address=ip,
+                session_key=session_key,
+                visitor_id=vuid,
+                is_bot=is_bot,
+                path=path[:255],
+                method='VIEW', 
+                user_agent=request.META.get('HTTP_USER_AGENT', '')[:1000],
+                source=source[:100]
+            )
+
+        # Broadcast to Admins
+        async_to_sync(channel_layer.group_send)(
+            "admin_activity",
+            {
+                "type": "activity_event",
+                "data": {
+                    "type": "new_visit",
+                    "visitor": {
+                        "ip_address": log_instance.ip_address,
+                        "visitor_id": log_instance.visitor_id,
+                        "path": log_instance.path,
+                        "timestamp": log_instance.timestamp.isoformat(),
+                        "user__username": log_instance.user.username if log_instance.user else None,
+                        "method": log_instance.method,
+                        "source": log_instance.source,
+                        "visit_count": 1
+                    }
+                }
+            }
         )
-        
+
+        # If a NEW campaign was auto-created, notify the stats charts to refresh
+        if created:
+            async_to_sync(channel_layer.group_send)(
+                "admin_activity",
+                {
+                    "type": "activity_event",
+                    "data": {
+                        "type": "new_source",
+                        "source": source[:100]
+                    }
+                }
+            )
+
+
         response = Response({"status": "ok"})
-        # Set cookie so it's available for subsequent requests (like registration)
+
         if source:
             response.set_cookie('traffic_source', source, max_age=30*24*60*60, httponly=True, samesite='Lax')
             
         return response
+
 
 
 
@@ -134,9 +201,16 @@ class AnalyticsDashboardView(APIView):
 
         # Real-time: Online Now (last 5 minutes)
         five_mins_ago = timezone.now() - timedelta(minutes=5)
-        online_now = VisitorLog.objects.filter(timestamp__gte=five_mins_ago).values('ip_address', 'user_id').distinct().count()
+        online_now = VisitorLog.objects.filter(
+            timestamp__gte=five_mins_ago,
+            is_bot=False
+        ).values('visitor_id').distinct().count()
 
-        visit_queryset = VisitorLog.objects.filter(timestamp__range=(start_datetime, end_datetime))
+        visit_queryset = VisitorLog.objects.filter(
+            timestamp__range=(start_datetime, end_datetime),
+            is_bot=False
+        )
+
         completed_payments = Transaction.objects.filter(
             created_at__range=(start_datetime, end_datetime),
             type=Transaction.Type.PAYMENT,
@@ -148,8 +222,9 @@ class AnalyticsDashboardView(APIView):
             date=TruncDate('timestamp')
         ).values('date').annotate(
             total_visits=Count('id'),
-            unique_visitors=Count('ip_address', distinct=True)
+            unique_visitors=Count('visitor_id', distinct=True)
         ).order_by('date')
+
 
         # 2. Wallet Inflow (Daily Revenue)
         revenue_stats = completed_payments.annotate(
@@ -187,21 +262,25 @@ class AnalyticsDashboardView(APIView):
                 stats_map[d]['total_revenue'] = abs(float(item['total_revenue'] or 0))
 
         # 3. Recent visitors, grouped by latest unique activity in the selected range
+        # 3. Recent visitors, grouped by latest unique activity (Includes Bots)
+        recent_logs_qs = VisitorLog.objects.filter(timestamp__range=(start_datetime, end_datetime))
         recent_logs = (
-            visit_queryset
+            recent_logs_qs
             .select_related('user')
             .order_by('-timestamp')
-            .values('ip_address', 'session_key', 'path', 'timestamp', 'user__username', 'method', 'source')
+            .values('ip_address', 'visitor_id', 'session_key', 'path', 'timestamp', 'user__username', 'method', 'source')
         )[:1000]
 
 
         unique_visitors_map = {}
         for log in recent_logs:
             visitor_key = (
-                log['ip_address']
+                log['visitor_id']
+                or log['ip_address']
                 or log['session_key']
                 or f"guest:{log['path']}:{log['timestamp']}"
             )
+
 
             if visitor_key not in unique_visitors_map:
                 unique_visitors_map[visitor_key] = {
@@ -214,18 +293,20 @@ class AnalyticsDashboardView(APIView):
         unique_visitors = list(unique_visitors_map.values())[:24]
 
         top_pages = list(
-            visit_queryset
+            recent_logs_qs
             .values('path')
             .annotate(visits=Count('id'))
             .order_by('-visits', 'path')[:6]
         )
 
+
         visitor_summary = visit_queryset.aggregate(
             total_visits=Count('id'),
-            unique_visitors=Count('ip_address', distinct=True),
+            unique_visitors=Count('visitor_id', distinct=True),
             authenticated_visits=Count('id', filter=Q(user__isnull=False)),
             guest_visits=Count('id', filter=Q(user__isnull=True)),
         )
+
 
         payment_summary = completed_payments.aggregate(
             total_sales=Count('id'),
@@ -233,15 +314,16 @@ class AnalyticsDashboardView(APIView):
         )
 
         source_stats = list(
-            visit_queryset
+            recent_logs_qs
             .filter(source__isnull=False)
             .values('source')
             .annotate(
                 visits=Count('id'),
-                unique_visitors=Count('ip_address', distinct=True)
+                unique_visitors=Count('visitor_id', distinct=True)
             )
             .order_by('-visits')[:10]
         )
+
 
         unique_count = visitor_summary['unique_visitors'] or 0
         sales_count = payment_summary['total_sales'] or 0
