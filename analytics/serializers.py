@@ -17,7 +17,7 @@ class CampaignSerializer(serializers.ModelSerializer):
         return value.strip('_') or None
 
     def validate(self, attrs):
-        normalized_fields = ('source', 'medium', 'campaign', 'content', 'term', 'source_platform', 'ref_code')
+        normalized_fields = ('source', 'medium', 'campaign', 'content', 'term', 'source_platform', 'ref_code', 'gclid', 'fbclid')
 
         for field in normalized_fields:
             if field in attrs:
@@ -53,6 +53,8 @@ class CampaignSerializer(serializers.ModelSerializer):
             'content',
             'term',
             'source_platform',
+            'gclid',
+            'fbclid',
             'landing_path',
             'ref_code',
             'created_at',
@@ -84,6 +86,8 @@ class VisitorLogSerializer(serializers.ModelSerializer):
             'term',
             'content',
             'source_platform',
+            'gclid',
+            'fbclid',
             'channel_group',
             'timestamp',
         ]

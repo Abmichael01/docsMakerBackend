@@ -39,6 +39,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     source = models.CharField(max_length=100, default='Direct', null=True, blank=True, help_text="Traffic source (e.g. google, facebook, direct)")
     medium = models.CharField(max_length=100, default='(none)', null=True, blank=True, help_text="Acquisition medium (e.g. organic, referral, cpc)")
     campaign = models.CharField(max_length=150, null=True, blank=True, help_text="Acquisition campaign name")
+    term = models.CharField(max_length=150, null=True, blank=True, help_text="Acquisition term")
+    content = models.CharField(max_length=150, null=True, blank=True, help_text="Acquisition content")
+    source_platform = models.CharField(max_length=100, null=True, blank=True, help_text="Acquisition source platform")
+    gclid = models.CharField(max_length=255, null=True, blank=True, help_text="Google Click ID")
+    fbclid = models.CharField(max_length=255, null=True, blank=True, help_text="Facebook Click ID")
 
 
     objects = UserManager()
