@@ -13,6 +13,7 @@ from .models import VisitorLog, Campaign
 from .serializers import VisitorLogSerializer, CampaignSerializer
 from accounts.models import User
 from .services import record_visit
+from .utils import build_source_label
 
 
 def build_campaign_match_q(campaign_record):
