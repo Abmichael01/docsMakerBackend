@@ -202,7 +202,7 @@ def classify_referrer(referrer):
     }
 
 
-def derive_channel_group(source, medium):
+def derive_channel_group(source, medium, gclid=None):
     source = (source or '').lower()
     medium = (medium or '').lower()
 
@@ -214,7 +214,7 @@ def derive_channel_group(source, medium):
         return 'Organic Social'
     if medium in ('paid_social', 'paidsocial'):
         return 'Paid Social'
-    if medium in ('cpc', 'ppc', 'paidsearch', 'paid_search'):
+    if medium in ('cpc', 'ppc', 'paidsearch', 'paid_search') or gclid:
         return 'Paid Search'
     if medium == 'email':
         return 'Email'
@@ -294,7 +294,7 @@ def normalize_attribution(attribution=None, referrer=None):
         medium = medium or '(none)'
 
     if not channel_group:
-        channel_group = derive_channel_group(source, medium)
+        channel_group = derive_channel_group(source, medium, gclid=gclid)
 
     return {
         'source': source,
