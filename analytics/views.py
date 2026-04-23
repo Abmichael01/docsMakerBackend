@@ -107,6 +107,8 @@ class LogVisitView(APIView):
     def post(self, request):
         path = request.data.get('path', '')
         attribution_payload = request.data.get('attribution') or {}
+        referrer = request.data.get('referrer')
+        visitor_id = request.data.get('visitor_id')
 
         if not path:
             return Response({"status": "ignored"})
@@ -118,19 +120,21 @@ class LogVisitView(APIView):
             path=path,
             attribution_payload=attribution_payload,
             request=request,
+            referrer=referrer,
+            visitor_id=visitor_id,
         )
 
-        # Broadcast to Admins
-        async_to_sync(channel_layer.group_send)(
-            "admin_activity",
-            {
-                "type": "activity_event",
-                "data": {
-                    "type": "new_visit",
-                    "visitor": visitor_payload,
+        if visitor_payload:
+            async_to_sync(channel_layer.group_send)(
+                "admin_activity",
+                {
+                    "type": "activity_event",
+                    "data": {
+                        "type": "new_visit",
+                        "visitor": visitor_payload,
+                    }
                 }
-            }
-        )
+            )
 
         return Response({"status": "ok"})
 
