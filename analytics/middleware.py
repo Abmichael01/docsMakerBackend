@@ -1,17 +1,9 @@
 import uuid
-from django.utils import timezone
-from .models import VisitorLog
-from .utils import get_visitor_session_key
+from .utils import is_bot_user_agent
 
 class VisitorTrackingMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
-        self.bot_keywords = [
-            'bot', 'spider', 'crawler', 'lighthouse', 'google', 'bing', 
-            'yandex', 'baiduspider', 'slurp', 'pingdom', 'uptime',
-            'headless', 'python-requests', 'node-fetch', 'axios', 
-            'postman', 'curl', 'wget', 'go-http', 'java', 'libwww-perl', 'ruby'
-        ]
 
     def __call__(self, request):
         # 1. Identity Management (Standardized Persistent VUID)
@@ -23,7 +15,7 @@ class VisitorTrackingMiddleware:
 
         request.vuid = vuid
         user_agent = request.META.get('HTTP_USER_AGENT', '')
-        request.is_bot = self.is_bot(user_agent)
+        request.is_bot = is_bot_user_agent(user_agent)
 
         response = self.get_response(request)
 
@@ -42,8 +34,3 @@ class VisitorTrackingMiddleware:
         
         return response
 
-    def is_bot(self, user_agent):
-        if not user_agent:
-            return True
-        ua_lower = user_agent.lower()
-        return any(keyword in ua_lower for keyword in self.bot_keywords)

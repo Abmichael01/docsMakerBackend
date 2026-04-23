@@ -2,6 +2,21 @@ import json
 from urllib.parse import parse_qs, urlparse
 
 
+BOT_KEYWORDS = [
+    'bot', 'spider', 'crawler', 'lighthouse', 'googlebot', 'bingbot',
+    'yandex', 'baiduspider', 'slurp', 'pingdom', 'uptime',
+    'headless', 'python-requests', 'node-fetch', 'axios',
+    'postman', 'curl', 'wget', 'go-http', 'libwww-perl',
+]
+
+
+def is_bot_user_agent(user_agent: str) -> bool:
+    if not user_agent:
+        return True
+    ua_lower = user_agent.lower()
+    return any(keyword in ua_lower for keyword in BOT_KEYWORDS)
+
+
 def log_action(actor, action, target, ip_address=None, details=None):
     """
     Utility to record administrative actions in the AuditLog.

@@ -2,7 +2,7 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.core.cache import cache
 from asgiref.sync import sync_to_async
-from .utils import get_persistent_visitor_id, get_visitor_session_key
+from .utils import get_persistent_visitor_id, get_visitor_session_key, is_bot_user_agent
 from .services import record_visit
 
 PRESENCE_CACHE_KEY = "online_visitor_sessions"
@@ -166,10 +166,8 @@ class VisitorAnalyticsConsumer(AsyncWebsocketConsumer):
         attribution = payload.get("attribution") or {}
         referrer = payload.get("referrer")
         user = self.scope.get("user")
-        is_bot = False
-        user_agent = dict(self.scope.get("headers", [])).get(b'user-agent', b'').decode('utf-8', errors='ignore').lower()
-        if user_agent:
-            is_bot = any(keyword in user_agent for keyword in ('bot', 'spider', 'crawler', 'headless', 'curl', 'wget'))
+        user_agent = dict(self.scope.get("headers", [])).get(b'user-agent', b'').decode('utf-8', errors='ignore')
+        is_bot = is_bot_user_agent(user_agent)
 
         _log_instance, visitor_payload = await sync_to_async(record_visit)(
             path=path,
@@ -181,15 +179,16 @@ class VisitorAnalyticsConsumer(AsyncWebsocketConsumer):
             is_bot=is_bot,
         )
 
-        await self.channel_layer.group_send(
-            "admin_activity",
-            {
-                "type": "activity_event",
-                "data": {
-                    "type": "new_visit",
-                    "visitor": visitor_payload,
+        if visitor_payload:
+            await self.channel_layer.group_send(
+                "admin_activity",
+                {
+                    "type": "activity_event",
+                    "data": {
+                        "type": "new_visit",
+                        "visitor": visitor_payload,
+                    }
                 }
-            }
-        )
+            )
 
         await self.send(text_data=json.dumps({"type": "visit_logged", "path": path}))
