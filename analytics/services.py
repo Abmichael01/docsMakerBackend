@@ -86,54 +86,79 @@ def record_visit(*, path, attribution_payload=None, request=None, scope=None, re
         resolved_user = user if user and getattr(user, 'is_authenticated', False) else None
         resolved_visitor_id = visitor_id or get_persistent_visitor_id(scope=scope) or session_key
         resolved_is_bot = is_bot
-        headers = dict(scope.get('headers', []))
-        user_agent = headers.get(b'user-agent', b'').decode('utf-8', errors='ignore')[:1000]
+        headers = dict(scope.get('headers', [])) if scope else {}
+        user_agent = headers.get(b'user-agent', b'').decode('utf-8', errors='ignore')[:1000] if headers else ''
 
-    source = attribution['source']
-    fifteen_mins_ago = timezone.now() - timedelta(minutes=15)
+    try:
+        source = attribution['source']
+        fifteen_mins_ago = timezone.now() - timedelta(minutes=15)
 
-    existing = VisitorLog.objects.filter(
-        visitor_id=resolved_visitor_id,
-        path=path,
-        timestamp__gt=fifteen_mins_ago
-    ).first()
-
-    if existing:
-        updated_fields = ['timestamp']
-        existing.timestamp = timezone.now()
-        if resolved_user and not existing.user:
-            existing.user = resolved_user
-            updated_fields.append('user')
-        for field_name in ('referrer', 'source', 'medium', 'campaign', 'term', 'content', 'source_platform', 'channel_group', 'gclid', 'fbclid'):
-            incoming_value = attribution.get(field_name)
-            if incoming_value and not getattr(existing, field_name):
-                setattr(existing, field_name, incoming_value)
-                updated_fields.append(field_name)
-        existing.save(update_fields=updated_fields)
-        log_instance = existing
-    else:
-        log_instance = VisitorLog.objects.create(
-            user=resolved_user,
-            ip_address=ip,
-            session_key=session_key,
+        existing = VisitorLog.objects.filter(
             visitor_id=resolved_visitor_id,
-            is_bot=resolved_is_bot,
             path=path,
-            method='VIEW',
-            user_agent=user_agent,
-            referrer=attribution.get('referrer'),
-            source=source,
-            medium=attribution.get('medium'),
-            campaign=attribution.get('campaign'),
-            term=attribution.get('term'),
-            content=attribution.get('content'),
-            source_platform=attribution.get('source_platform'),
-            gclid=attribution.get('gclid'),
-            fbclid=attribution.get('fbclid'),
-            channel_group=attribution.get('channel_group'),
-        )
+            timestamp__gt=fifteen_mins_ago
+        ).first()
 
-    if attribution.get('is_custom_source') and source:
-        update_legacy_campaign(source, attribution, path)
+        if existing:
+            updated_fields = ['timestamp']
+            existing.timestamp = timezone.now()
+            if resolved_user and not existing.user:
+                existing.user = resolved_user
+                updated_fields.append('user')
+            
+            # Special logic: If existing was 'direct' or '(not set)' but incoming is better, overwrite.
+            for field_name in ('referrer', 'source', 'medium', 'campaign', 'term', 'content', 'source_platform', 'channel_group', 'gclid', 'fbclid'):
+                incoming_value = attribution.get(field_name)
+                current_value = getattr(existing, field_name)
+                
+                is_better = False
+                if incoming_value:
+                    if not current_value:
+                        is_better = True
+                    elif field_name == 'source' and current_value == 'direct':
+                        is_better = True
+                    elif field_name == 'medium' and current_value in ('(none)', '(not set)', 'custom'):
+                        is_better = True
+                    elif field_name == 'channel_group' and current_value in ('Direct', 'Unassigned'):
+                        is_better = True
 
-    return log_instance, build_visitor_payload(log_instance)
+                if is_better:
+                    setattr(existing, field_name, incoming_value)
+                    if field_name not in updated_fields:
+                        updated_fields.append(field_name)
+            
+            existing.save(update_fields=updated_fields)
+            log_instance = existing
+        else:
+            log_instance = VisitorLog.objects.create(
+                user=resolved_user,
+                ip_address=ip,
+                session_key=session_key,
+                visitor_id=resolved_visitor_id,
+                is_bot=resolved_is_bot,
+                path=path,
+                method='VIEW',
+                user_agent=user_agent,
+                referrer=attribution.get('referrer'),
+                source=source,
+                medium=attribution.get('medium'),
+                campaign=attribution.get('campaign'),
+                term=attribution.get('term'),
+                content=attribution.get('content'),
+                source_platform=attribution.get('source_platform'),
+                gclid=attribution.get('gclid'),
+                fbclid=attribution.get('fbclid'),
+                channel_group=attribution.get('channel_group'),
+            )
+
+        if attribution.get('is_custom_source') and source:
+            update_legacy_campaign(source, attribution, path)
+
+        return log_instance, build_visitor_payload(log_instance)
+
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to record visit for path {path}: {str(e)}", exc_info=True)
+        # Fallback to prevent app crash
+        return None, None
