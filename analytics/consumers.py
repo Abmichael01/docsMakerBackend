@@ -2,10 +2,53 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.core.cache import cache
 from asgiref.sync import sync_to_async
-from .utils import get_visitor_session_key
+from .utils import get_persistent_visitor_id, get_visitor_session_key
 from .services import record_visit
 
 PRESENCE_CACHE_KEY = "online_visitor_sessions"
+
+
+def load_presence_counts():
+    cached_presence = cache.get(PRESENCE_CACHE_KEY, {}) or {}
+
+    if isinstance(cached_presence, set):
+        return {presence_key: 1 for presence_key in cached_presence}
+
+    if isinstance(cached_presence, dict):
+        return cached_presence
+
+    return {}
+
+
+@sync_to_async
+def get_online_presence_keys():
+    presence_counts = load_presence_counts()
+    return list(presence_counts.keys())
+
+
+@sync_to_async
+def add_online_presence(presence_key):
+    presence_counts = load_presence_counts()
+    previous_count = int(presence_counts.get(presence_key, 0))
+    presence_counts[presence_key] = previous_count + 1
+    cache.set(PRESENCE_CACHE_KEY, presence_counts, timeout=3600)
+    return previous_count == 0
+
+
+@sync_to_async
+def remove_online_presence(presence_key):
+    presence_counts = load_presence_counts()
+    previous_count = int(presence_counts.get(presence_key, 0))
+
+    if previous_count <= 1:
+        presence_counts.pop(presence_key, None)
+        went_offline = previous_count > 0
+    else:
+        presence_counts[presence_key] = previous_count - 1
+        went_offline = False
+
+    cache.set(PRESENCE_CACHE_KEY, presence_counts, timeout=3600)
+    return went_offline
 
 class ActivityConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -18,7 +61,7 @@ class ActivityConsumer(AsyncWebsocketConsumer):
             await self.accept()
             
             # INITIAL SYNC: Send the current list of online users immediately
-            online_set = cache.get(PRESENCE_CACHE_KEY, set())
+            online_set = await get_online_presence_keys()
             await self.send(text_data=json.dumps({
                 "type": "online_list",
                 "sessions": list(online_set)
@@ -42,57 +85,53 @@ class PresenceConsumer(AsyncWebsocketConsumer):
         self.group_name = "global_presence"
         self.admin_group = "admin_activity"
         
-        # Use STANDARDIZED session key utility
         self.session_key = get_visitor_session_key(scope=self.scope)
+        self.presence_key = get_persistent_visitor_id(scope=self.scope) or self.session_key
         user = self.scope["user"]
         self.username = user.username if user.is_authenticated else None
         
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
         
-        # Update server-side presence cache
-        online_set = cache.get(PRESENCE_CACHE_KEY, set())
-        online_set.add(self.session_key)
-        cache.set(PRESENCE_CACHE_KEY, online_set, timeout=3600) # 1 hour rolling
+        # Track presence by a stable visitor id and keep tab/window counts.
+        became_online = await add_online_presence(self.presence_key)
         
         # Extract real IP from headers for notification
         headers = dict(self.scope.get('headers', []))
         x_forwarded_for = headers.get(b'x-forwarded-for')
         real_ip = x_forwarded_for.decode('utf-8').split(',')[0] if x_forwarded_for else self.scope['client'][0]
 
-        # Notify admins that a user is online
-        await self.channel_layer.group_send(
-            self.admin_group,
-            {
-                "type": "presence_update",
-                "data": {
-                    "status": "online",
-                    "session_key": self.session_key,
-                    "username": self.username,
-                    "ip_address": real_ip
+        if became_online:
+            # Notify admins only when the visitor's first tab connects.
+            await self.channel_layer.group_send(
+                self.admin_group,
+                {
+                    "type": "presence_update",
+                    "data": {
+                        "status": "online",
+                        "presence_key": self.presence_key,
+                        "username": self.username,
+                        "ip_address": real_ip
+                    }
                 }
-            }
-        )
+            )
 
     async def disconnect(self, close_code):
-        # Update server-side presence cache
-        online_set = cache.get(PRESENCE_CACHE_KEY, set())
-        if self.session_key in online_set:
-            online_set.remove(self.session_key)
-        cache.set(PRESENCE_CACHE_KEY, online_set, timeout=3600)
+        went_offline = await remove_online_presence(self.presence_key)
 
-        # Notify admins that a user is offline
-        await self.channel_layer.group_send(
-            self.admin_group,
-            {
-                "type": "presence_update",
-                "data": {
-                    "status": "offline",
-                    "session_key": self.session_key,
-                    "username": self.username,
+        if went_offline:
+            # Notify admins only after the visitor's last tab disconnects.
+            await self.channel_layer.group_send(
+                self.admin_group,
+                {
+                    "type": "presence_update",
+                    "data": {
+                        "status": "offline",
+                        "presence_key": self.presence_key,
+                        "username": self.username,
+                    }
                 }
-            }
-        )
+            )
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
 
@@ -138,6 +177,7 @@ class VisitorAnalyticsConsumer(AsyncWebsocketConsumer):
             scope=self.scope,
             referrer=referrer,
             user=user,
+            visitor_id=get_persistent_visitor_id(scope=self.scope),
             is_bot=is_bot,
         )
 

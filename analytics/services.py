@@ -8,6 +8,7 @@ from .utils import (
     build_source_label,
     get_attribution_for_request,
     get_client_ip,
+    get_persistent_visitor_id,
     get_visitor_session_key,
     normalize_attribution,
 )
@@ -39,6 +40,8 @@ def update_legacy_campaign(source, attribution, path):
             'content': attribution.get('content'),
             'term': attribution.get('term'),
             'source_platform': attribution.get('source_platform'),
+            'gclid': attribution.get('gclid'),
+            'fbclid': attribution.get('fbclid'),
             'landing_path': path[:255] or '/',
         }
     )
@@ -52,6 +55,8 @@ def update_legacy_campaign(source, attribution, path):
         ('content', attribution.get('content')),
         ('term', attribution.get('term')),
         ('source_platform', attribution.get('source_platform')),
+        ('gclid', attribution.get('gclid')),
+        ('fbclid', attribution.get('fbclid')),
         ('landing_path', path[:255] or '/'),
     ):
         if not getattr(legacy_campaign, field_name) and fallback:
@@ -79,7 +84,7 @@ def record_visit(*, path, attribution_payload=None, request=None, scope=None, re
         session_key = get_visitor_session_key(scope=scope)
         attribution = get_attribution_for_scope(scope, override_attribution=attribution_payload, referrer=referrer)
         resolved_user = user if user and getattr(user, 'is_authenticated', False) else None
-        resolved_visitor_id = visitor_id or (scope.get('cookies', {}) or {}).get('vux_id') or session_key
+        resolved_visitor_id = visitor_id or get_persistent_visitor_id(scope=scope) or session_key
         resolved_is_bot = is_bot
         headers = dict(scope.get('headers', []))
         user_agent = headers.get(b'user-agent', b'').decode('utf-8', errors='ignore')[:1000]
@@ -99,7 +104,7 @@ def record_visit(*, path, attribution_payload=None, request=None, scope=None, re
         if resolved_user and not existing.user:
             existing.user = resolved_user
             updated_fields.append('user')
-        for field_name in ('referrer', 'source', 'medium', 'campaign', 'term', 'content', 'source_platform', 'channel_group'):
+        for field_name in ('referrer', 'source', 'medium', 'campaign', 'term', 'content', 'source_platform', 'channel_group', 'gclid', 'fbclid'):
             incoming_value = attribution.get(field_name)
             if incoming_value and not getattr(existing, field_name):
                 setattr(existing, field_name, incoming_value)
@@ -123,6 +128,8 @@ def record_visit(*, path, attribution_payload=None, request=None, scope=None, re
             term=attribution.get('term'),
             content=attribution.get('content'),
             source_platform=attribution.get('source_platform'),
+            gclid=attribution.get('gclid'),
+            fbclid=attribution.get('fbclid'),
             channel_group=attribution.get('channel_group'),
         )
 

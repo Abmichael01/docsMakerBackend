@@ -35,6 +35,11 @@ class CustomUserDetailsSerializer(UserDetailsSerializer):
             "source",
             "medium",
             "campaign",
+            "term",
+            "content",
+            "source_platform",
+            "gclid",
+            "fbclid",
         )
 
 
@@ -67,16 +72,26 @@ class RegisterSerializer(serializers.ModelSerializer):
     source = serializers.CharField(required=False, allow_blank=True, write_only=True)
     medium = serializers.CharField(required=False, allow_blank=True, write_only=True)
     campaign = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    term = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    content = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    source_platform = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    gclid = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    fbclid = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'referred_by', 'source', 'medium', 'campaign']
+        fields = ['username', 'email', 'password', 'referred_by', 'source', 'medium', 'campaign', 'term', 'content', 'source_platform', 'gclid', 'fbclid']
 
     def create(self, validated_data):
         referrer_username = validated_data.pop('referred_by', None)
         source = validated_data.pop('source', None)
         medium = validated_data.pop('medium', None)
         campaign = validated_data.pop('campaign', None)
+        term = validated_data.pop('term', None)
+        content = validated_data.pop('content', None)
+        source_platform = validated_data.pop('source_platform', None)
+        gclid = validated_data.pop('gclid', None)
+        fbclid = validated_data.pop('fbclid', None)
 
         request = self.context.get('request')
         attribution = {}
@@ -92,6 +107,16 @@ class RegisterSerializer(serializers.ModelSerializer):
             medium = attribution.get('medium')
         if not campaign:
             campaign = attribution.get('campaign')
+        if not term:
+            term = attribution.get('term')
+        if not content:
+            content = attribution.get('content')
+        if not source_platform:
+            source_platform = attribution.get('source_platform')
+        if not gclid:
+            gclid = attribution.get('gclid')
+        if not fbclid:
+            fbclid = attribution.get('fbclid')
 
         # If still no source but we have a referrer, hardcode to 'referral'
         if not source and referrer_username:
@@ -119,6 +144,26 @@ class RegisterSerializer(serializers.ModelSerializer):
         if campaign:
             user.campaign = campaign
             update_fields.append('campaign')
+
+        if term:
+            user.term = term
+            update_fields.append('term')
+
+        if content:
+            user.content = content
+            update_fields.append('content')
+
+        if source_platform:
+            user.source_platform = source_platform
+            update_fields.append('source_platform')
+
+        if gclid:
+            user.gclid = gclid
+            update_fields.append('gclid')
+
+        if fbclid:
+            user.fbclid = fbclid
+            update_fields.append('fbclid')
 
         if update_fields:
             user.save(update_fields=update_fields)

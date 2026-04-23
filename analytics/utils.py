@@ -1,5 +1,5 @@
 import json
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 
 def log_action(actor, action, target, ip_address=None, details=None):
@@ -39,6 +39,15 @@ def clean_value(value, max_length=255):
     if not value:
         return None
     return value[:max_length]
+
+
+def get_scope_query_params(scope):
+    query_string = (scope or {}).get('query_string', b'')
+    if isinstance(query_string, bytes):
+        query_string = query_string.decode('utf-8', errors='ignore')
+
+    parsed = parse_qs(query_string, keep_blank_values=False)
+    return {key: values[-1] for key, values in parsed.items() if values}
 
 
 def get_client_ip(request=None, scope=None):
@@ -82,6 +91,33 @@ def get_visitor_session_key(request=None, scope=None):
         return session_key
 
     return "unknown"
+
+
+def get_persistent_visitor_id(request=None, scope=None):
+    if request is not None:
+        cookie_visitor_id = clean_value(request.COOKIES.get('vux_id'), max_length=100)
+        if cookie_visitor_id:
+            return cookie_visitor_id
+
+        request_visitor_id = clean_value(getattr(request, 'vuid', None), max_length=100)
+        if request_visitor_id:
+            return request_visitor_id
+
+        return None
+
+    if scope is not None:
+        query_params = get_scope_query_params(scope)
+        query_visitor_id = clean_value(query_params.get('vux_id'), max_length=100)
+        if query_visitor_id:
+            return query_visitor_id
+
+        cookie_visitor_id = clean_value((scope.get('cookies', {}) or {}).get('vux_id'), max_length=100)
+        if cookie_visitor_id:
+            return cookie_visitor_id
+
+        return None
+
+    return None
 
 
 def classify_referrer(referrer):
@@ -234,6 +270,8 @@ def normalize_attribution(attribution=None, referrer=None):
         payload.get('source_platform') or payload.get('utm_source_platform'),
         max_length=100,
     )
+    gclid = clean_value(payload.get('gclid'), max_length=255)
+    fbclid = clean_value(payload.get('fbclid'), max_length=255)
     referrer = clean_value(
         payload.get('initial_referrer') or payload.get('referrer') or referrer,
         max_length=1000,
@@ -265,6 +303,8 @@ def normalize_attribution(attribution=None, referrer=None):
         'term': term,
         'content': content,
         'source_platform': source_platform,
+        'gclid': gclid,
+        'fbclid': fbclid,
         'channel_group': channel_group,
         'referrer': referrer,
         'is_custom_source': is_custom_source,
