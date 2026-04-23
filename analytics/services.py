@@ -67,7 +67,7 @@ def update_legacy_campaign(source, attribution, path):
 
 
 def record_visit(*, path, attribution_payload=None, request=None, scope=None, referrer=None, user=None, visitor_id=None, is_bot=False):
-    path = (path or '')[:255]
+    path = (path or '')[:500]
     if not path:
         return None, None
 
@@ -75,7 +75,8 @@ def record_visit(*, path, attribution_payload=None, request=None, scope=None, re
         ip = get_client_ip(request=request)
         session_key = get_visitor_session_key(request=request)
         attribution = get_attribution_for_request(request, override_attribution=attribution_payload)
-        resolved_user = request.user if request.user.is_authenticated else None
+        user_obj = getattr(request, 'user', None)
+        resolved_user = user_obj if (user_obj and user_obj.is_authenticated) else None
         resolved_visitor_id = visitor_id or getattr(request, 'vuid', None)
         resolved_is_bot = getattr(request, 'is_bot', is_bot)
         user_agent = request.META.get('HTTP_USER_AGENT', '')[:1000]
