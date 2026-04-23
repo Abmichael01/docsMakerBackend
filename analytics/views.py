@@ -12,6 +12,26 @@ from rest_framework import viewsets
 from .models import VisitorLog, Campaign
 from .serializers import VisitorLogSerializer, CampaignSerializer
 from accounts.models import User
+from .services import record_visit
+
+
+def build_campaign_match_q(campaign_record):
+    source = campaign_record.source or campaign_record.name
+    medium = campaign_record.medium or 'custom'
+
+    query = Q(source=source, medium=medium)
+
+    if campaign_record.campaign:
+        query &= Q(campaign=campaign_record.campaign)
+    if campaign_record.content:
+        query &= Q(content=campaign_record.content)
+    if campaign_record.term:
+        query &= Q(term=campaign_record.term)
+    if campaign_record.source_platform:
+        query &= Q(source_platform=campaign_record.source_platform)
+
+    return query
+
 
 class CampaignViewSet(viewsets.ModelViewSet):
     queryset = Campaign.objects.all()
@@ -23,33 +43,55 @@ class CampaignViewSet(viewsets.ModelViewSet):
         """
         Get aggregated stats for all campaigns.
         """
-        total_sources = Campaign.objects.count()
-        
-        # Traffic from ALL tracked sources
-        total_traffic = VisitorLog.objects.filter(source__isnull=False).count()
-        
-        # Sources active today (at least one visit)
         today = timezone.localdate()
-        active_today = VisitorLog.objects.filter(
-            source__isnull=False,
-            timestamp__date=today
-        ).values('source').distinct().count()
-
-        # Detailed breakdown per campaign
         campaigns = Campaign.objects.all()
+        total_sources = campaigns.count()
+
+        combined_query = Q(pk__in=[])
+        for campaign_record in campaigns:
+            combined_query |= build_campaign_match_q(campaign_record)
+
+        campaign_visit_queryset = VisitorLog.objects.filter(combined_query, is_bot=False) if total_sources else VisitorLog.objects.none()
+        total_traffic = campaign_visit_queryset.count()
+
         breakdown = []
         for c in campaigns:
-            c_visits = VisitorLog.objects.filter(source=c.name).count()
-            c_users = User.objects.filter(source=c.name).count()
+            visit_query = build_campaign_match_q(c)
+            c_visits = VisitorLog.objects.filter(visit_query, is_bot=False).count()
+
+            user_query = Q(source=c.source or c.name)
+            if c.medium:
+                user_query &= Q(medium=c.medium)
+            if c.campaign:
+                user_query &= Q(campaign=c.campaign)
+
+            c_users = User.objects.filter(user_query).count()
             breakdown.append({
                 "id": c.id,
                 "name": c.name,
                 "description": c.description,
+                "source": c.source,
+                "medium": c.medium,
+                "campaign": c.campaign,
+                "content": c.content,
+                "term": c.term,
+                "source_platform": c.source_platform,
+                "landing_path": c.landing_path,
                 "ref_code": c.ref_code,
                 "visits": c_visits,
                 "users": c_users,
                 "created_at": c.created_at
             })
+
+        active_today = sum(
+            1
+            for campaign_record in campaigns
+            if VisitorLog.objects.filter(
+                build_campaign_match_q(campaign_record),
+                is_bot=False,
+                timestamp__date=today,
+            ).exists()
+        )
 
         return Response({
             "total_sources": total_sources,
@@ -63,65 +105,20 @@ class LogVisitView(APIView):
 
     def post(self, request):
         path = request.data.get('path', '')
-        source = request.data.get('source')
-        
+        attribution_payload = request.data.get('attribution') or {}
+
         if not path:
             return Response({"status": "ignored"})
-            
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        ip = x_forwarded_for.split(',')[0] if x_forwarded_for else request.META.get('REMOTE_ADDR')
-
-        # Use identity from middleware
-        vuid = getattr(request, 'vuid', None)
-        is_bot = getattr(request, 'is_bot', False)
-
-        # Fallback for source
-        if not source:
-            source = request.COOKIES.get('traffic_source') or 'Organic'
-
-        # AUTO-CREATE CAMPAIGN/SOURCE
-        campaign, created = Campaign.objects.get_or_create(
-            name=source[:100],
-            defaults={'description': 'Auto-detected through traffic'}
-        )
-        campaign.last_visit_at = timezone.now()
-        campaign.save()
-
-        from .utils import get_visitor_session_key
-        session_key = get_visitor_session_key(request=request)
-
-        # Heartbeat: If seen on this path/vuid in last 15 mins, just update
-        fifteen_mins_ago = timezone.now() - timedelta(minutes=15)
-        existing = VisitorLog.objects.filter(
-            visitor_id=vuid,
-            path=path[:255],
-            timestamp__gt=fifteen_mins_ago
-        ).first()
 
         from asgiref.sync import async_to_sync
         from channels.layers import get_channel_layer
         channel_layer = get_channel_layer()
+        _log_instance, visitor_payload = record_visit(
+            path=path,
+            attribution_payload=attribution_payload,
+            request=request,
+        )
 
-        if existing:
-            existing.timestamp = timezone.now()
-            if request.user.is_authenticated and not existing.user:
-                existing.user = request.user
-            existing.save()
-            log_instance = existing
-        else:
-            log_instance = VisitorLog.objects.create(
-                user=request.user if request.user.is_authenticated else None,
-                ip_address=ip,
-                session_key=session_key,
-                visitor_id=vuid,
-                is_bot=is_bot,
-                path=path[:255],
-                method='VIEW', 
-                user_agent=request.META.get('HTTP_USER_AGENT', '')[:1000],
-                source=source[:100]
-            )
-
-        
         # Broadcast to Admins
         async_to_sync(channel_layer.group_send)(
             "admin_activity",
@@ -129,29 +126,12 @@ class LogVisitView(APIView):
                 "type": "activity_event",
                 "data": {
                     "type": "new_visit",
-                    "visitor": {
-                        "ip_address": log_instance.ip_address,
-                        "visitor_id": log_instance.visitor_id,
-                        "path": log_instance.path,
-                        "timestamp": log_instance.timestamp.isoformat(),
-                        "user__username": log_instance.user.username if log_instance.user else None,
-                        "method": log_instance.method,
-                        "source": log_instance.source,
-                        "visit_count": 1 # Just a placeholder for immediate display
-                    }
+                    "visitor": visitor_payload,
                 }
             }
         )
 
-        response = Response({"status": "ok"})
-
-        if source:
-            response.set_cookie('traffic_source', source, max_age=30*24*60*60, httponly=True, samesite='Lax')
-            
-        return response
-
-
-
+        return Response({"status": "ok"})
 
 class AnalyticsDashboardView(APIView):
     permission_classes = [IsAdminUser]
@@ -246,7 +226,20 @@ class AnalyticsDashboardView(APIView):
             visit_queryset
             .select_related('user')
             .order_by('-timestamp')
-            .values('ip_address', 'visitor_id', 'session_key', 'path', 'timestamp', 'user__username', 'method', 'source')
+            .values(
+                'id',
+                'ip_address',
+                'visitor_id',
+                'session_key',
+                'path',
+                'timestamp',
+                'user__username',
+                'method',
+                'source',
+                'medium',
+                'campaign',
+                'channel_group',
+            )
         )[:1000]
 
         unique_visitors_map = {}
@@ -265,6 +258,7 @@ class AnalyticsDashboardView(APIView):
             if visitor_key not in unique_visitors_map:
                 unique_visitors_map[visitor_key] = {
                     **log,
+                    'source_label': build_source_label(log.get('source'), log.get('medium')),
                     'visit_count': 0,
                 }
 
@@ -295,14 +289,20 @@ class AnalyticsDashboardView(APIView):
         source_stats = list(
             visit_queryset
             .filter(source__isnull=False)
-            .values('source')
+            .values('source', 'medium')
             .annotate(
                 visits=Count('id'),
                 unique_visitors=Count('visitor_id', distinct=True)
             )
-
             .order_by('-visits')[:10]
         )
+        source_stats = [
+            {
+                **item,
+                'source': build_source_label(item.get('source'), item.get('medium')),
+            }
+            for item in source_stats
+        ]
 
         unique_count = visitor_summary['unique_visitors'] or 0
         sales_count = payment_summary['total_sales'] or 0
@@ -381,10 +381,14 @@ class UserActivityView(APIView):
         search = request.GET.get('search')
         source = request.GET.get('source')
 
-        queryset = VisitorLog.objects.select_related('user').order_by('-timestamp')
+        queryset = VisitorLog.objects.select_related('user').filter(is_bot=False).order_by('-timestamp')
 
         if source:
-            queryset = queryset.filter(source=source)
+            queryset = queryset.filter(
+                Q(source__icontains=source) |
+                Q(medium__icontains=source) |
+                Q(campaign__icontains=source)
+            )
 
         if date_str:
             try:
@@ -401,8 +405,11 @@ class UserActivityView(APIView):
         
         if search:
             queryset = queryset.filter(
-                Q(ip_address__icontains=search) | 
-                Q(path__icontains=search) | 
+                Q(ip_address__icontains=search) |
+                Q(path__icontains=search) |
+                Q(source__icontains=search) |
+                Q(medium__icontains=search) |
+                Q(campaign__icontains=search) |
                 Q(user__username__icontains=search)
             )
 

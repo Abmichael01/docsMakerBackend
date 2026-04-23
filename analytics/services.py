@@ -1,0 +1,132 @@
+from datetime import timedelta
+
+from django.utils import timezone
+
+from .models import Campaign, VisitorLog
+from .serializers import VisitorLogSerializer
+from .utils import (
+    build_source_label,
+    get_attribution_for_request,
+    get_client_ip,
+    get_visitor_session_key,
+    normalize_attribution,
+)
+
+
+def get_attribution_for_scope(scope, override_attribution=None, referrer=None):
+    attribution_payload = override_attribution if isinstance(override_attribution, dict) else {}
+    return normalize_attribution(attribution_payload, referrer=referrer)
+
+
+def build_visitor_payload(log_instance):
+    serialized_log = VisitorLogSerializer(log_instance).data
+    return {
+        **serialized_log,
+        "user__username": log_instance.user.username if log_instance.user else None,
+        "source_label": build_source_label(log_instance.source, log_instance.medium),
+        "visit_count": 1,
+    }
+
+
+def update_legacy_campaign(source, attribution, path):
+    legacy_campaign, _created = Campaign.objects.get_or_create(
+        name=source[:100],
+        defaults={
+            'description': 'Auto-detected through legacy custom traffic links',
+            'source': source[:100],
+            'medium': (attribution.get('medium') or 'custom')[:100],
+            'campaign': attribution.get('campaign'),
+            'content': attribution.get('content'),
+            'term': attribution.get('term'),
+            'source_platform': attribution.get('source_platform'),
+            'landing_path': path[:255] or '/',
+        }
+    )
+    legacy_updates = ['last_visit_at']
+    legacy_campaign.last_visit_at = timezone.now()
+
+    for field_name, fallback in (
+        ('source', source[:100]),
+        ('medium', (attribution.get('medium') or 'custom')[:100]),
+        ('campaign', attribution.get('campaign')),
+        ('content', attribution.get('content')),
+        ('term', attribution.get('term')),
+        ('source_platform', attribution.get('source_platform')),
+        ('landing_path', path[:255] or '/'),
+    ):
+        if not getattr(legacy_campaign, field_name) and fallback:
+            setattr(legacy_campaign, field_name, fallback)
+            legacy_updates.append(field_name)
+
+    legacy_campaign.save(update_fields=legacy_updates)
+
+
+def record_visit(*, path, attribution_payload=None, request=None, scope=None, referrer=None, user=None, visitor_id=None, is_bot=False):
+    path = (path or '')[:255]
+    if not path:
+        return None, None
+
+    if request is not None:
+        ip = get_client_ip(request=request)
+        session_key = get_visitor_session_key(request=request)
+        attribution = get_attribution_for_request(request, override_attribution=attribution_payload)
+        resolved_user = request.user if request.user.is_authenticated else None
+        resolved_visitor_id = visitor_id or getattr(request, 'vuid', None)
+        resolved_is_bot = getattr(request, 'is_bot', is_bot)
+        user_agent = request.META.get('HTTP_USER_AGENT', '')[:1000]
+    else:
+        ip = get_client_ip(scope=scope)
+        session_key = get_visitor_session_key(scope=scope)
+        attribution = get_attribution_for_scope(scope, override_attribution=attribution_payload, referrer=referrer)
+        resolved_user = user if user and getattr(user, 'is_authenticated', False) else None
+        resolved_visitor_id = visitor_id or (scope.get('cookies', {}) or {}).get('vux_id') or session_key
+        resolved_is_bot = is_bot
+        headers = dict(scope.get('headers', []))
+        user_agent = headers.get(b'user-agent', b'').decode('utf-8', errors='ignore')[:1000]
+
+    source = attribution['source']
+    fifteen_mins_ago = timezone.now() - timedelta(minutes=15)
+
+    existing = VisitorLog.objects.filter(
+        visitor_id=resolved_visitor_id,
+        path=path,
+        timestamp__gt=fifteen_mins_ago
+    ).first()
+
+    if existing:
+        updated_fields = ['timestamp']
+        existing.timestamp = timezone.now()
+        if resolved_user and not existing.user:
+            existing.user = resolved_user
+            updated_fields.append('user')
+        for field_name in ('referrer', 'source', 'medium', 'campaign', 'term', 'content', 'source_platform', 'channel_group'):
+            incoming_value = attribution.get(field_name)
+            if incoming_value and not getattr(existing, field_name):
+                setattr(existing, field_name, incoming_value)
+                updated_fields.append(field_name)
+        existing.save(update_fields=updated_fields)
+        log_instance = existing
+    else:
+        log_instance = VisitorLog.objects.create(
+            user=resolved_user,
+            ip_address=ip,
+            session_key=session_key,
+            visitor_id=resolved_visitor_id,
+            is_bot=resolved_is_bot,
+            path=path,
+            method='VIEW',
+            user_agent=user_agent,
+            referrer=attribution.get('referrer'),
+            source=source,
+            medium=attribution.get('medium'),
+            campaign=attribution.get('campaign'),
+            term=attribution.get('term'),
+            content=attribution.get('content'),
+            source_platform=attribution.get('source_platform'),
+            channel_group=attribution.get('channel_group'),
+        )
+
+    if attribution.get('is_custom_source') and source:
+        update_legacy_campaign(source, attribution, path)
+
+    return log_instance, build_visitor_payload(log_instance)
