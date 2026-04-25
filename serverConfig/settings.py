@@ -430,6 +430,9 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
 # Security Settings
 SECURITY_CODE = os.getenv('SECURITY_CODE', '123456')
 
+# Google OAuth
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
+
 # AI Chat
 AI_API_KEY = os.getenv("AI_API_KEY")
 AI_BASE_URL = os.getenv("AI_BASE_URL", "https://openrouter.ai/api/v1")

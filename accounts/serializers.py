@@ -82,6 +82,15 @@ class RegisterSerializer(serializers.ModelSerializer):
         model = User
         fields = ['username', 'email', 'password', 'referred_by', 'source', 'medium', 'campaign', 'term', 'content', 'source_platform', 'gclid', 'fbclid']
 
+    def validate_referred_by(self, value):
+        if not value:
+            return value
+        from api.models import SiteSettings
+        settings = SiteSettings.get_settings()
+        if settings.enable_referrals and not User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Invalid referral code — no user found with that username.")
+        return value
+
     def create(self, validated_data):
         referrer_username = validated_data.pop('referred_by', None)
         source = validated_data.pop('source', None)

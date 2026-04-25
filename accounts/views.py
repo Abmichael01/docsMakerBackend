@@ -165,6 +165,92 @@ class LogoutView(APIView):
 
         return response
     
+class GoogleAuthView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        access_token = request.data.get('access_token')
+        if not access_token:
+            return Response({'error': 'Google access_token is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        import requests as http_requests
+        google_resp = http_requests.get(
+            'https://www.googleapis.com/oauth2/v3/userinfo',
+            params={'access_token': access_token},
+            timeout=5,
+        )
+        if google_resp.status_code != 200:
+            return Response({'error': 'Invalid Google token'}, status=status.HTTP_400_BAD_REQUEST)
+
+        idinfo = google_resp.json()
+        google_id = idinfo.get('sub')
+        email = idinfo.get('email', '')
+
+        if not google_id or not email:
+            return Response({'error': 'Invalid Google token'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(google_id=google_id).first()
+        if not user:
+            user = User.objects.filter(email=email).first()
+
+        if not user:
+            # New user — derive a unique username from their email
+            base_username = email.split('@')[0].lower().replace('.', '_')[:30]
+            username = base_username
+            suffix = 1
+            while User.objects.filter(username=username).exists():
+                username = f"{base_username}{suffix}"
+                suffix += 1
+
+            from analytics.utils import get_attribution_for_request
+            attribution = get_attribution_for_request(request)
+
+            user = User(
+                username=username,
+                email=email,
+                google_id=google_id,
+                source=attribution.get('source', 'google'),
+                medium=attribution.get('medium', 'oauth'),
+                campaign=attribution.get('campaign'),
+            )
+            user.set_unusable_password()
+            user.save()
+
+            from api.utils.email_service import EmailService
+            EmailService.send_welcome_email(user)
+
+        if not user.is_active:
+            return Response({'error': 'This account has been disabled.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Link google_id if not already set (existing email/password user signing in with Google)
+        if not user.google_id:
+            user.google_id = google_id
+            user.save(update_fields=['google_id'])
+
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
+        refresh_token_str = str(refresh)
+
+        user_data = CustomUserDetailsSerializer(user, many=False)
+
+        max_age = 2 * 24 * 60 * 60
+        cookie_settings = {
+            'httponly': settings.JWT_COOKIE_HTTPONLY,
+            'secure': settings.JWT_COOKIE_SECURE,
+            'samesite': settings.JWT_COOKIE_SAMESITE,
+            'path': settings.JWT_COOKIE_PATH,
+            'max_age': max_age,
+        }
+        if hasattr(settings, 'JWT_COOKIE_DOMAIN') and settings.JWT_COOKIE_DOMAIN:
+            cookie_settings['domain'] = settings.JWT_COOKIE_DOMAIN
+
+        response = JsonResponse(user_data.data)
+        response.set_cookie(key='access_token', value=access_token, **cookie_settings)
+        response.set_cookie(key='refresh_token', value=refresh_token_str, **cookie_settings)
+        return response
+
+
 class RefreshTokenView(APIView):
     permission_classes = []
     authentication_classes = []
