@@ -81,6 +81,7 @@ referencing==0.37.0
 rembg==2.0.72
 removebg==0.4
 requests==2.32.4
+google-auth==2.38.0
 rpds-py==0.30.0
 s3transfer==0.16.0
 scikit-image==0.26.0

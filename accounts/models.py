@@ -44,6 +44,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     source_platform = models.CharField(max_length=100, null=True, blank=True, help_text="Acquisition source platform")
     gclid = models.CharField(max_length=500, null=True, blank=True, help_text="Google Click ID")
     fbclid = models.CharField(max_length=500, null=True, blank=True, help_text="Facebook Click ID")
+    google_id = models.CharField(max_length=255, null=True, blank=True, unique=True)
 
 
     objects = UserManager()
