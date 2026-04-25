@@ -362,18 +362,21 @@ CSRF_TRUSTED_ORIGINS = [
     "https://devapi.sharptoolz.com",
 ]
 
-JWT_COOKIE_SAMESITE = 'None'  # Allow cross-site cookies
-JWT_COOKIE_SECURE = True      # MUST be True for SameSite=None
-JWT_COOKIE_HTTPONLY = True    # Prevent XSS
-JWT_COOKIE_PATH = '/'         # Available site-wide
+# Security / Cookie settings (Conditional for Local Dev)
+IS_PRODUCTION = ENV == "production"
 
-CSRF_COOKIE_SAMESITE = 'None'     # Allow cross-site cookies
-CSRF_COOKIE_SECURE = True         # MUST be True for SameSite=None
-CSRF_COOKIE_HTTPONLY = False      # CSRF cookie must be accessible via JavaScript
+JWT_COOKIE_SAMESITE = 'None' if IS_PRODUCTION else 'Lax'
+JWT_COOKIE_SECURE = IS_PRODUCTION      # MUST be True for SameSite=None, False for Local Dev
+JWT_COOKIE_HTTPONLY = True             # Prevent XSS
+JWT_COOKIE_PATH = '/'                  # Available site-wide
+
+CSRF_COOKIE_SAMESITE = 'None' if IS_PRODUCTION else 'Lax'
+CSRF_COOKIE_SECURE = IS_PRODUCTION
+CSRF_COOKIE_HTTPONLY = False           # CSRF cookie must be accessible via JavaScript
 CSRF_COOKIE_PATH = '/' 
 
-SESSION_COOKIE_SAMESITE = 'None'     # Allow cross-site cookies
-SESSION_COOKIE_SECURE = True         # MUST be True for SameSite=None
+SESSION_COOKIE_SAMESITE = 'None' if IS_PRODUCTION else 'Lax'
+SESSION_COOKIE_SECURE = IS_PRODUCTION
 SESSION_COOKIE_HTTPONLY = False
 SESSION_COOKIE_PATH = '/' 
 
