@@ -1,5 +1,6 @@
 import uuid
 from .utils import is_bot_user_agent
+from .services import record_visit, update_presence
 
 class VisitorTrackingMiddleware:
     def __init__(self, get_response):
@@ -17,9 +18,29 @@ class VisitorTrackingMiddleware:
         user_agent = request.META.get('HTTP_USER_AGENT', '')
         request.is_bot = is_bot_user_agent(user_agent)
 
+        # 2. Smart Visit Tracking
+        # The middleware only handles "Initial Landings" (requests with attribution).
+        # Normal page views are handled by the frontend calling LogVisitView.
+        if not request.is_bot:
+            has_attribution = any(key in request.GET for key in [
+                'utm_source', 'utm_medium', 'utm_campaign', 
+                'source', 'medium', 'campaign',
+                'gclid', 'fbclid', 'ref'
+            ])
+            
+            if has_attribution:
+                record_visit(
+                    path=request.path,
+                    request=request,
+                    visitor_id=vuid
+                )
+            
+            # 3. Active User Tracking (Presence)
+            # Update the presence cache on every hit to keep the "Live" list accurate.
+            update_presence(vuid, user=getattr(request, 'user', None))
         response = self.get_response(request)
 
-        # 2. Persist the identity cookie for 1 year
+        # 4. Persist the identity cookie for 1 year
         if new_vuid_created:
             response.set_cookie(
                 'vux_id', 
@@ -28,9 +49,6 @@ class VisitorTrackingMiddleware:
                 httponly=True, 
                 samesite='Lax'
             )
-
-        # NOTE: We NO LONGER log every request here.
-        # Visits are now logged explicitly via the frontend tracker to avoid noise.
         
         return response
 

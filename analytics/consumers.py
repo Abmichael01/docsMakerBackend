@@ -1,53 +1,66 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.core.cache import cache
+from django.utils import timezone
 from asgiref.sync import sync_to_async
 from .utils import get_persistent_visitor_id, get_visitor_session_key, is_bot_user_agent
-from .services import record_visit
+from .services import record_visit, ONLINE_SET_KEY, update_presence
 
 PRESENCE_CACHE_KEY = "online_visitor_sessions"
 
 
-def load_presence_counts():
-    cached_presence = cache.get(PRESENCE_CACHE_KEY, {}) or {}
-
-    if isinstance(cached_presence, set):
-        return {presence_key: 1 for presence_key in cached_presence}
-
-    if isinstance(cached_presence, dict):
-        return cached_presence
-
-    return {}
+def load_presence_data():
+    """Load presence data from cache."""
+    return cache.get(ONLINE_SET_KEY, {}) or {}
 
 
 @sync_to_async
-def get_online_presence_keys():
-    presence_counts = load_presence_counts()
-    return list(presence_counts.keys())
+def get_online_presence_data():
+    """Returns a list of {presence_key, username} for all online users."""
+    presence_data = load_presence_data()
+    return [
+        {"presence_key": k, "username": v.get("username")}
+        for k, v in presence_data.items()
+    ]
 
 
 @sync_to_async
-def add_online_presence(presence_key):
-    presence_counts = load_presence_counts()
-    previous_count = int(presence_counts.get(presence_key, 0))
-    presence_counts[presence_key] = previous_count + 1
-    cache.set(PRESENCE_CACHE_KEY, presence_counts, timeout=3600)
+def add_online_presence(presence_key, username=None):
+    presence_data = load_presence_data()
+    entry = presence_data.get(presence_key, {'count': 0, 'username': username, 'last_active': timezone.now().timestamp()})
+    
+    previous_count = entry.get('count', 0)
+    entry['count'] = previous_count + 1
+    entry['last_active'] = timezone.now().timestamp()
+    
+    # Update username if we now have one (e.g. user just logged in)
+    if username:
+        entry['username'] = username
+        
+    presence_data[presence_key] = entry
+    cache.set(ONLINE_SET_KEY, presence_data, timeout=3600)
     return previous_count == 0
 
 
 @sync_to_async
 def remove_online_presence(presence_key):
-    presence_counts = load_presence_counts()
-    previous_count = int(presence_counts.get(presence_key, 0))
+    presence_data = load_presence_data()
+    entry = presence_data.get(presence_key)
 
-    if previous_count <= 1:
-        presence_counts.pop(presence_key, None)
-        went_offline = previous_count > 0
+    if not entry:
+        return False
+
+    current_count = entry.get('count', 1)
+    if current_count <= 1:
+        presence_data.pop(presence_key, None)
+        went_offline = True
     else:
-        presence_counts[presence_key] = previous_count - 1
+        entry['count'] = current_count - 1
+        entry['last_active'] = timezone.now().timestamp()
+        presence_data[presence_key] = entry
         went_offline = False
 
-    cache.set(PRESENCE_CACHE_KEY, presence_counts, timeout=3600)
+    cache.set(ONLINE_SET_KEY, presence_data, timeout=3600)
     return went_offline
 
 class ActivityConsumer(AsyncWebsocketConsumer):
@@ -61,10 +74,10 @@ class ActivityConsumer(AsyncWebsocketConsumer):
             await self.accept()
             
             # INITIAL SYNC: Send the current list of online users immediately
-            online_set = await get_online_presence_keys()
+            online_data = await get_online_presence_data()
             await self.send(text_data=json.dumps({
                 "type": "online_list",
-                "sessions": list(online_set)
+                "sessions": online_data
             }))
 
     async def disconnect(self, close_code):
@@ -86,15 +99,18 @@ class PresenceConsumer(AsyncWebsocketConsumer):
         self.admin_group = "admin_activity"
         
         self.session_key = get_visitor_session_key(scope=self.scope)
-        self.presence_key = get_persistent_visitor_id(scope=self.scope) or self.session_key
+        visitor_id = get_persistent_visitor_id(scope=self.scope) or self.session_key
         user = self.scope["user"]
         self.username = user.username if user.is_authenticated else None
+        
+        # Identity-based grouping: Group authenticated users by username
+        self.presence_key = f"u:{self.username}" if self.username else visitor_id
         
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
         
         # Track presence by a stable visitor id and keep tab/window counts.
-        became_online = await add_online_presence(self.presence_key)
+        became_online = await add_online_presence(self.presence_key, username=self.username)
         
         # Extract real IP from headers for notification
         headers = dict(self.scope.get('headers', []))

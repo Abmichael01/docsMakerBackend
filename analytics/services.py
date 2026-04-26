@@ -1,6 +1,9 @@
 from datetime import timedelta
 
 from django.utils import timezone
+from django.core.cache import cache
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 
 from .models import Campaign, VisitorLog
 from .serializers import VisitorLogSerializer
@@ -12,6 +15,52 @@ from .utils import (
     get_visitor_session_key,
     normalize_attribution,
 )
+
+PRESENCE_KEY_PREFIX = "presence:v2:"
+ONLINE_SET_KEY = "online_visitors_v2"
+
+
+def update_presence(visitor_id, user=None):
+    """
+    Updates the presence of a visitor in the cache.
+    Authenticated users are grouped by their username to avoid duplicates.
+    """
+    if not visitor_id:
+        return
+
+    now = timezone.now()
+    is_auth = user and user.is_authenticated
+    username = user.username if is_auth else None
+    
+    # Use username as key for auth users to group their sessions/tabs
+    presence_key = f"u:{username}" if is_auth else visitor_id
+    
+    presence_data = cache.get(ONLINE_SET_KEY, {})
+    if not isinstance(presence_data, dict):
+        presence_data = {}
+        
+    # Get existing entry or create new
+    entry = presence_data.get(presence_key, {"count": 0})
+    
+    # Update fields
+    entry["last_active"] = now.timestamp()
+    if username:
+        entry["username"] = username
+    
+    # If it's a new entry from middleware (not WS), we start with count 0
+    # but the 'last_active' will keep them in the 'Online Now' list.
+    
+    presence_data[presence_key] = entry
+    
+    # Cleanup old entries (older than 5 minutes)
+    five_mins_ago = (now - timedelta(minutes=5)).timestamp()
+    cleaned_data = {
+        pk: data for pk, data in presence_data.items() 
+        if data.get("last_active", 0) > five_mins_ago
+    }
+    
+    cache.set(ONLINE_SET_KEY, cleaned_data, timeout=3600)
+
 
 
 def get_attribution_for_scope(scope, override_attribution=None, referrer=None):
@@ -92,10 +141,16 @@ def record_visit(*, path, attribution_payload=None, request=None, scope=None, re
 
     try:
         source = attribution['source']
+        from django.db.models import Q
         fifteen_mins_ago = timezone.now() - timedelta(minutes=15)
 
+        # Smart deduplication: Match by visitor_id OR the authenticated user
+        identity_filter = Q(visitor_id=resolved_visitor_id)
+        if resolved_user and resolved_user.is_authenticated:
+            identity_filter |= Q(user=resolved_user)
+
         existing = VisitorLog.objects.filter(
-            visitor_id=resolved_visitor_id,
+            identity_filter,
             path=path,
             timestamp__gt=fifteen_mins_ago
         ).first()
@@ -155,7 +210,27 @@ def record_visit(*, path, attribution_payload=None, request=None, scope=None, re
         if attribution.get('is_custom_source') and source:
             update_legacy_campaign(source, attribution, path)
 
-        return log_instance, build_visitor_payload(log_instance)
+        visitor_payload = build_visitor_payload(log_instance)
+
+        # Real-time Broadcast to Admin Dashboard
+        # This ensures the "Activity Hit" cards update instantly
+        try:
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    "admin_activity",
+                    {
+                        "type": "activity_event",
+                        "data": {
+                            "type": "new_visit",
+                            "visitor": visitor_payload,
+                        }
+                    }
+                )
+        except Exception:
+            pass  # Avoid crashing if Channels is misconfigured
+
+        return log_instance, visitor_payload
 
     except Exception as e:
         import logging
