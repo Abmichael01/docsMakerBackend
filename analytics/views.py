@@ -12,8 +12,9 @@ from rest_framework import viewsets
 from .models import VisitorLog, Campaign
 from .serializers import VisitorLogSerializer, CampaignSerializer
 from accounts.models import User
-from .services import record_visit
+from .services import record_visit, ONLINE_SET_KEY
 from .utils import build_source_label
+from django.core.cache import cache
 
 
 def build_campaign_match_q(campaign_record):
@@ -113,9 +114,6 @@ class LogVisitView(APIView):
         if not path:
             return Response({"status": "ignored"})
 
-        from asgiref.sync import async_to_sync
-        from channels.layers import get_channel_layer
-        channel_layer = get_channel_layer()
         _log_instance, visitor_payload = record_visit(
             path=path,
             attribution_payload=attribution_payload,
@@ -123,18 +121,6 @@ class LogVisitView(APIView):
             referrer=referrer,
             visitor_id=visitor_id,
         )
-
-        if visitor_payload:
-            async_to_sync(channel_layer.group_send)(
-                "admin_activity",
-                {
-                    "type": "activity_event",
-                    "data": {
-                        "type": "new_visit",
-                        "visitor": visitor_payload,
-                    }
-                }
-            )
 
         return Response({"status": "ok"})
 
@@ -164,12 +150,9 @@ class AnalyticsDashboardView(APIView):
             end_datetime = timezone.now()
             range_label = get_range_label(days)
 
-        # Real-time: Online Now (last 5 minutes)
-        five_mins_ago = timezone.now() - timedelta(minutes=5)
-        online_now = VisitorLog.objects.filter(
-            timestamp__gte=five_mins_ago,
-            is_bot=False
-        ).values('visitor_id').distinct().count()
+        # Real-time: Online Now (last 5 minutes via Presence Cache)
+        presence_data = cache.get(ONLINE_SET_KEY, {})
+        online_now = len(presence_data) if isinstance(presence_data, dict) else 0
 
         visit_queryset = VisitorLog.objects.filter(
             timestamp__range=(start_datetime, end_datetime),
@@ -182,14 +165,31 @@ class AnalyticsDashboardView(APIView):
             status=Transaction.Status.COMPLETED,
         )
 
+        from django.db.models.functions import Cast, Coalesce
+        from django.db.models import CharField
+
         # 1. Visitor Stats (Daily)
+        # We use a combined ID (User ID or Visitor ID) to ensure authenticated users 
+        # are counted as 1 unique visitor even if their persistent ID changes.
+        
+        source_filter = request.query_params.get('source')
+        medium_filter = request.query_params.get('medium')
+        campaign_filter = request.query_params.get('campaign')
+
+        if source_filter:
+            visit_queryset = visit_queryset.filter(source=source_filter)
+        if medium_filter:
+            visit_queryset = visit_queryset.filter(medium=medium_filter)
+        if campaign_filter:
+            visit_queryset = visit_queryset.filter(campaign=campaign_filter)
+
         visitor_stats = visit_queryset.annotate(
-            date=TruncDate('timestamp')
+            date=TruncDate('timestamp'),
+            combined_id=Coalesce(Cast('user_id', CharField()), 'visitor_id')
         ).values('date').annotate(
             total_visits=Count('id'),
-            unique_visitors=Count('visitor_id', distinct=True)
+            unique_visitors=Count('combined_id', distinct=True)
         ).order_by('date')
-
 
         # 2. Wallet Inflow (Daily Revenue)
         revenue_stats = completed_payments.annotate(

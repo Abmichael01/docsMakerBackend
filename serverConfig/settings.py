@@ -103,6 +103,10 @@ if DEBUG:
 if ENV == "development":
     MIDDLEWARE.append('serverConfig.middleware.MediaCorsMiddleware')
 
+# Honor the 'X-Forwarded-Proto' header for request.is_secure()
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+
 ROOT_URLCONF = 'serverConfig.urls'
 
 
@@ -320,8 +324,11 @@ CORS_ALLOWED_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:5174",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
     "https://docs-maker-demo.vercel.app",
     "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "https://order-tracker-demo.vercel.app",
     "https://sharptoolz.com",
     "https://parcelfinda.com",
@@ -336,8 +343,11 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ORIGIN_WHITELIST = [
     "http://localhost:5173",
     "http://localhost:5174",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
     "https://docs-maker-demo.vercel.app",
     "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "https://order-tracker-demo.vercel.app",
     "https://sharptoolz.com",
     "http://38.242.198.49",
@@ -346,7 +356,7 @@ CORS_ORIGIN_WHITELIST = [
     "https://api.sharptoolz.com",
 ]
 
-# Additional CORS settings to fix image loading in development
+# Additional CORS settings
 CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins in development
 CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
 CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
@@ -362,22 +372,20 @@ CSRF_TRUSTED_ORIGINS = [
     "https://devapi.sharptoolz.com",
 ]
 
-# Security / Cookie settings (Conditional for Local Dev)
-IS_PRODUCTION = ENV == "production"
+# Security / Cookie settings (Restored to working cross-site defaults)
+JWT_COOKIE_SAMESITE = 'None'
+JWT_COOKIE_SECURE = True
+JWT_COOKIE_HTTPONLY = True
+JWT_COOKIE_PATH = '/'
 
-JWT_COOKIE_SAMESITE = 'None' if IS_PRODUCTION else 'Lax'
-JWT_COOKIE_SECURE = IS_PRODUCTION      # MUST be True for SameSite=None, False for Local Dev
-JWT_COOKIE_HTTPONLY = True             # Prevent XSS
-JWT_COOKIE_PATH = '/'                  # Available site-wide
-
-CSRF_COOKIE_SAMESITE = 'None' if IS_PRODUCTION else 'Lax'
-CSRF_COOKIE_SECURE = IS_PRODUCTION
-CSRF_COOKIE_HTTPONLY = False           # CSRF cookie must be accessible via JavaScript
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_PATH = '/' 
 
-SESSION_COOKIE_SAMESITE = 'None' if IS_PRODUCTION else 'Lax'
-SESSION_COOKIE_SECURE = IS_PRODUCTION
-SESSION_COOKIE_HTTPONLY = False
+SESSION_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_PATH = '/' 
 
 # # JWT / Auth cookies
