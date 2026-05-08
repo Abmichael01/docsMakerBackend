@@ -18,12 +18,17 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 
+from analytics.views import LogVisitView
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/accounts/',include("accounts.urls")),
     path('api/',include("api.urls")),
     path('api/',include("wallet.urls")),
     path('api/analytics/',include("analytics.urls")),
+    # Innocuous-named alias of /api/analytics/log-visit/ — bypasses ad-blocker
+    # filter lists that match URLs containing "analytics" or "log".
+    path('api/u/p/', LogVisitView.as_view(), name='analytics-track-page'),
 ]
 
 if settings.DEBUG:
