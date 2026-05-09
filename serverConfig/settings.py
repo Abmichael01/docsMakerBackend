@@ -38,6 +38,17 @@ load_dotenv(os.path.join(BASE_DIR, '.env'))
 # Environment configuration
 ENV = os.getenv("ENV", "development")  # default to development
 
+
+def env_int(name, default):
+    try:
+        return int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+DB_CONN_MAX_AGE = env_int("DB_CONN_MAX_AGE", 60)
+DB_CONNECT_TIMEOUT = env_int("DB_CONNECT_TIMEOUT", 5)
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -150,13 +161,21 @@ WSGI_APPLICATION = 'serverConfig.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-if ENV == "production" and os.getenv("DATABASE_URL"):
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if ENV == "production" and DATABASE_URL:
+    database_config = dj_database_url.parse(DATABASE_URL)
+    database_options = dict(database_config.get('OPTIONS', {}))
+    database_options.setdefault('connect_timeout', DB_CONNECT_TIMEOUT)
+
     DATABASES = {
         'default': {
-            **dj_database_url.parse(os.getenv("DATABASE_URL")),
-            'CONN_MAX_AGE': 600,  # Connection lifetime
+            **database_config,
+            'CONN_MAX_AGE': DB_CONN_MAX_AGE,
+            'CONN_HEALTH_CHECKS': True,
             'ATOMIC_REQUESTS': False,  # Disable for better performance
             'AUTOCOMMIT': True,
+            'OPTIONS': database_options,
         }
     }
 else:
