@@ -1,6 +1,7 @@
 import uuid
 from .utils import is_bot_user_agent
 from .services import record_visit, update_presence
+import threading
 
 
 def resolve_request_user(request):
@@ -41,12 +42,11 @@ _VISIT_LOG_SKIP_PREFIXES = (
     '/admin/',
     '/__debug__/',
     '/favicon.ico',
-    '/api/u/p/',                   # the new tracking endpoint itself
-    '/api/analytics/log-visit/',   # legacy tracking endpoint
-    '/api/analytics/dashboard/',   # admin polling
-    '/api/analytics/user-activity/',
-    '/api/analytics/audit-logs/',
-    '/api/analytics/campaigns/',
+    '/api/u/p/',
+    '/api/analytics/',             # All analytics endpoints
+    '/api/auth/',                  # Auth is too noisy
+    '/api/token/',
+    '/_next/',                     # Next.js internal calls
 )
 
 
@@ -94,11 +94,19 @@ class VisitorTrackingMiddleware:
                 # (record_visit reads request.user via get_attribution_for_request).
                 if resolved_user is not None and not getattr(getattr(request, 'user', None), 'is_authenticated', False):
                     request.user = resolved_user
-                record_visit(
-                    path=request.path,
-                    request=request,
-                    visitor_id=vuid,
-                )
+                
+                # Senior Optimization: Fire-and-Forget background thread.
+                # This ensures the user gets their response IMMEDIATELY
+                # without waiting for the Database write.
+                threading.Thread(
+                    target=record_visit,
+                    kwargs={
+                        "path": request.path,
+                        "request": request,
+                        "visitor_id": vuid,
+                    },
+                    daemon=True
+                ).start()
 
         response = self.get_response(request)
 

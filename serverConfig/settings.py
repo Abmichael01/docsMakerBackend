@@ -37,7 +37,7 @@ load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 # Environment configuration
 ENV = os.getenv("ENV", "development")  # default to development
-
+IS_PRODUCTION = ENV == "production"
 
 def env_int(name, default):
     try:
@@ -46,17 +46,19 @@ def env_int(name, default):
         return default
 
 
-DB_CONN_MAX_AGE = env_int("DB_CONN_MAX_AGE", 60)
-DB_CONNECT_TIMEOUT = env_int("DB_CONNECT_TIMEOUT", 5)
+# Senior Optimization: Lower CONN_MAX_AGE for small RAM servers
+# 20-30 seconds is better than 60 if RAM is tight.
+DB_CONN_MAX_AGE = env_int("DB_CONN_MAX_AGE", 20 if IS_PRODUCTION else 0)
+DB_CONNECT_TIMEOUT = env_int("DB_CONNECT_TIMEOUT", 10)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-+#ds1yk1fdrx$=3&yf+!q$r9sy!l$vjl8ea@_fhya_t3(okl!p'
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-+#ds1yk1fdrx$=3&yf+!q$r9sy!l$vjl8ea@_fhya_t3(okl!p')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG", "False") == "True" if IS_PRODUCTION else True
 
 ALLOWED_HOSTS = ['localhost', ".vercel.app", ".now.sh", ".vercel.sh", "127.0.0.1", "9bad-102-89-68-147.ngrok-free.app", "api.sharptoolz.com", "devapi.sharptoolz.com", "38.242.198.49", "testserver"]
 

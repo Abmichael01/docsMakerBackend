@@ -5,6 +5,7 @@ from django.core.cache import cache
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
+import hashlib
 from .models import Campaign, VisitorLog
 from .serializers import VisitorLogSerializer
 from .utils import (
@@ -140,6 +141,20 @@ def record_visit(*, path, attribution_payload=None, request=None, scope=None, re
         user_agent = headers.get(b'user-agent', b'').decode('utf-8', errors='ignore')[:1000] if headers else ''
 
     try:
+        # Senior Optimization: Daily Deduplication via Redis
+        # If the user has already visited this specific path today, 
+        # we stop here to save Database RAM and CPU.
+        if not resolved_is_bot and resolved_visitor_id:
+            today = timezone.now().date().isoformat()
+            path_hash = hashlib.md5(path.encode()).hexdigest()[:10]
+            dedup_key = f"vlog:dedup:{resolved_visitor_id}:{path_hash}:{today}"
+            
+            if cache.get(dedup_key):
+                return None, None # Already counted today
+            
+            # Mark as counted for the next 24 hours
+            cache.set(dedup_key, 1, timeout=86400)
+
         source = attribution['source']
         from django.db.models import Q
         fifteen_mins_ago = timezone.now() - timedelta(minutes=15)
