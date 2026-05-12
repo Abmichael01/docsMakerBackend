@@ -470,6 +470,8 @@ def create_regular_field(base_id: str, element_id: str, extensions: Dict[str, An
     
     if extensions["generation_rule"]:
         field["generationRule"] = extensions["generation_rule"]
+        if extensions["generation_rule"].startswith("AUTO:"):
+            field["generationMode"] = "auto"
     
     if extensions.get("max_generation"):
         field["maxGeneration"] = extensions["max_generation"]
