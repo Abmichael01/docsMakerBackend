@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 FIELD_TYPES = [
     "text", "textarea", "checkbox", "date", "upload",
     "number", "email", "tel", "gen", "password",
-    "range", "color", "file", "status", "sign",
+    "range", "color", "file", "status", "sign", "qrcode",
     "hide", "hide_checked", "hide_unchecked"
 ]
 
@@ -45,7 +45,15 @@ def _fix_id_value(element_id: str) -> str | None:
     Specifically handles cases where .depends_ is not the first extension.
     """
     if '.' not in element_id:
+        # Even if no dot, we should fix @ if present for base IDs
+        if "@" in element_id:
+            return element_id.replace("@", "_")
         return None
+    
+    # Pre-sanitize @ in the whole ID
+    original_id = element_id
+    if "@" in element_id:
+        element_id = element_id.replace("@", "_")
 
     parts = element_id.split('.')
     base_id = parts[0]
@@ -72,7 +80,7 @@ def _fix_id_value(element_id: str) -> str | None:
         final_extensions.append(track_val)
 
     new_id = f"{base_id}.{'.'.join(final_extensions)}"
-    return new_id if new_id != element_id else None
+    return new_id if new_id != original_id else None
 
 
 def fix_svg_element_ids(svg_content: str) -> Tuple[str, int]:
@@ -351,9 +359,14 @@ def parse_field_extensions(parts: List[str]) -> Dict[str, Any]:
             # Extract generation rule
             # e.g., "gen_(rn[12])" or "gen_FL(rn[12])(rc[6])"
             result["generation_rule"] = get_extension_value(part, "gen_")
-            # Set field type to gen if not already set
-            if result["field_type"] == parts[0]:
+            # Set field type to gen ONLY if not already set to something specialized (like qrcode)
+            if result["field_type"] in [parts[0], "text", "textarea"]:
                 result["field_type"] = "gen"
+        
+        elif part.startswith("qrcode_"):
+            # Extract generation rule for QR codes
+            result["generation_rule"] = get_extension_value(part, "qrcode_")
+            result["field_type"] = "qrcode"
         
         # Handle flag extensions
         elif part == "tracking_id":
@@ -393,7 +406,12 @@ def parse_field_extensions(parts: List[str]) -> Dict[str, Any]:
 
         # Handle field type extensions
         elif part.startswith("hide") or part in FIELD_TYPES:
-            result["field_type"] = "hide" if part.startswith("hide") else part
+            new_type = "hide" if part.startswith("hide") else part
+            # Only update if it's currently the default (first part) or we're explicitly setting it to a specialized type.
+            # Avoid overwriting 'qrcode' or 'gen' with 'text' or 'textarea'.
+            if result["field_type"] == parts[0] or (new_type not in ["text", "textarea"]):
+                result["field_type"] = new_type
+            
             # All hide variants use inverted logic: Checked (true) means Hidden (false visibility)
             if result["field_type"] == "hide":
                 result["inverted"] = True
@@ -545,7 +563,14 @@ def process_element_to_field(element: ET.Element, fields_list: List[Dict[str, An
     Process a single SVG element and either update existing fields or add new ones.
     """
     # Prioritize data-name (preserves original naming with quotes/dots/slashes)
-    original_element_id = element.attrib.get("data-name") or element.attrib.get("id", "")
+    # Prefer 'id' over 'data-name' for Sharptoolz DSL compatibility.
+    # Data-name often contains 'excess' metadata from design tools (e.g. Passenger_Name@name).
+    original_element_id = (element.attrib.get("id") or element.attrib.get("data-name") or "").strip()
+    
+    # Sanitize: some design tools (Inkscape/Figma) inject '@' or other characters into IDs.
+    # Replacing '@' with '_' ensures the IDs remain valid DSL identifiers.
+    if "@" in original_element_id:
+        original_element_id = original_element_id.replace("@", "_")
     if not original_element_id:
         return
 

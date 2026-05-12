@@ -1,204 +1,368 @@
-SVG PARSER CONVENTIONS
-======================
+# SVG Parser - Form Field Conventions
 
-This document explains how to name SVG element IDs to create form fields automatically.
+This SVG parser converts SVG text elements into form fields based on their ID attributes.
 
-BASIC FIELD TYPES
-=================
+## Basic Field Types
 
-1. TEXT FIELD
-   ID: Company_Name.text
-   Meaning: Creates a text input field with the label "Company Name"
+### Text Input
+```xml
+<text id="fieldname.text">Default text here</text>
+```
+**Examples:**
+```xml
+<text id="company_name.text">Enter company name</text>
+<text id="phone_number.text">Enter phone number</text>
+```
 
-2. TEXTAREA FIELD  
-   ID: Description.textarea
-   Meaning: Creates a large text area with the label "Description"
+### Textarea (Multi-line)
+```xml
+<text id="fieldname.textarea">Default text here</text>
+```
+**Examples:**
+```xml
+<text id="description.textarea">Enter description</text>
+<text id="address.textarea">Enter full address</text>
+```
 
-3. DROPDOWN FIELD
-   ID: Country.select_OPTION1
-   ID: Country.select_OPTION2  
-   ID: Country.select_OPTION3
-   Meaning: Creates a dropdown with options "OPTION1", "OPTION2", "OPTION3"
-   Example: 
-   Country.select_USA
-   Country.select_Canada
-   Country.select_Mexico
-   Creates dropdown with USA, Canada, Mexico options
+### File Upload
+```xml
+<text id="fieldname.upload">Upload file</text>
+<text id="fieldname.file">Upload file</text>
+```
+**Examples:**
+```xml
+<text id="company_logo.upload">Upload company logo</text>
+<text id="product_image.file">Upload product image</text>
+<text id="document.upload">Upload document</text>
+```
 
-4. RANDOM CODE FIELD
-   ID: Reference_Code.gen.max_8
-   Meaning: Creates a field that generates random 8-character codes
-   Example: Reference_Code.gen.max_10 generates 10-character codes
+### Signature Field
+```xml
+<text id="fieldname.sign">Signature</text>
+```
+**Examples:**
+```xml
+<text id="author_signature.sign">Author Signature</text>
+<text id="witness_signature.sign">Witness Signature</text>
+<text id="approval_signature.sign">Approval Signature</text>
+```
 
-5. DEPENDENT FIELD
-   For TEXT dependencies (no field type needed):
-   ID: City.depends_Country
-   Meaning: This field copies the same content as the "Country" field - when Country changes, this field shows the same content
-   
-   For IMAGE dependencies (requires .upload):
-   ID: Photo.upload
-   ID: Photo_Copy.upload.depends_Photo
-   Meaning: Photo_Copy automatically displays the same image as Photo
-   ⚠️ IMPORTANT for image dependencies:
-   - Use .upload.depends_SourceField format (field type required!)
-   - The dependent field (Photo_Copy) will be HIDDEN from the form (auto-populated)
-   - The field name MUST be unique (Photo_Copy, Photo2, etc. - NOT the same as source)
-   
-   For SIGNATURE dependencies (requires .sign):
-   ID: Signature.sign
-   ID: Signature_Copy.sign.depends_Signature
-   Meaning: Signature_Copy automatically displays the same signature
+### QR Code Field
+```xml
+<image id="fieldname.qrcode" x="0" y="0" width="100" height="100" />
+```
+- Must be used on an `<image>` element.
+- Generates a scannable QR code.
+- If the value is a single string (e.g. "Order #123"), it encodes that string.
+- Supports structured data (e.g. "Name: John\nEmail: john@example.com").
 
-6. DATE FIELD
-   ID: Start_Date.date
-   Meaning: Creates a basic date picker field (YYYY-MM-DD format)
-   
-   ID: Event_Date.date_MM/DD/YYYY
-   Meaning: Creates a date picker with custom format
-   
-   ID: Schedule.date_MM/DD/YYYY_hh:mm_A
-   Meaning: Creates a date/time picker with 12-hour format and AM/PM
-   
-   Date format codes:
-   - YYYY = Full year (2025)
-   - YY = Short year (25)
-   - MMMM = Full month (January)
-   - MMM = Short month (Jan)
-   - MM = Month with zero (01)
-   - M = Month no zero (1)
-   - DD = Day with zero (01)
-   - D = Day no zero (1)
-   - dddd = Full weekday (Monday)
-   - ddd = Short weekday (Mon)
-   - HH = 24-hour with zero (01, 23)
-   - H = 24-hour no zero (1, 23)
-   - hh = 12-hour with zero (01, 12)
-   - h = 12-hour no zero (1, 12)
-   - mm = Minutes with zero (01, 59)
-   - m = Minutes no zero (1, 59)
-   - ss = Seconds with zero (01, 59)
-   - s = Seconds no zero (1, 59)
-   - A = AM/PM uppercase
-   - a = am/pm lowercase
-   
-   IMPORTANT: Use underscores (_) to represent spaces in format string
-   Example: date_MMM_DD displays as "Jan 10" (underscore becomes space)
+**Examples:**
+```xml
+<image id="Verification_Code.qrcode" width="200" height="200" />
+```
 
-SPECIAL TRACKING FIELDS
-=======================
+### Date Field
+```xml
+<text id="fieldname.date">2025-01-10</text>
+```
+Basic date picker (YYYY-MM-DD format).
+**Examples:**
+```xml
+<text id="start_date.date">2025-01-10</text>
+<text id="expiry_date.date">2025-12-31</text>
+```
 
-TRACKING ID FIELD
-ID: Order_Number.gen.max_12.tracking_id.link_https://example.com
-Meaning: Creates a tracking field that:
-- Generates random 12-character tracking codes
-- Marks it as the main tracking ID with .tracking_id
-- Includes a link to https://example.com for tracking
+## Field Extensions
 
-TRACKING ROLE FIELDS (.track_)
-⚠️ IMPORTANT: .track_ extensions MUST ALWAYS be the LAST extension in the ID chain
+### Random Code Generation (.gen)
+```xml
+<text id="fieldname.gen.max_12">Generated code will appear here</text>
+```
+- Creates random alphanumeric code
+- `.max_12` = 12 characters long
 
-ID: Customer_Name.text.track_name
-ID: Customer_Email.email.track_email
-ID: Destination.text.track_destination
-ID: Status.select_Delivered.track_status
-ID: Status.select_Error.editable.track_status
+**Examples:**
+```xml
+<text id="reference_code.gen.max_8">REF12345</text>
+<text id="order_number.gen.max_10">ORD98765432</text>
+```
 
-Meaning: Maps fields to specific roles for tracking website display
-- Common roles: track_name, track_email, track_status, track_destination, track_package, track_weight, track_error_message
-- Must be the last extension (after .gen, .max_, .link_, .editable, etc.)
-- For select fields with .track_, only ONE option needs the extension
+### Dynamic QR Code Rules (.qrcode_)
+```xml
+<image id="fieldname.qrcode_RULE">...</image>
+```
+- Automatically generates a QR code based on a rule.
+- `.qrcode_` **replaces** the need for a field type (do not add `.gen` or `.qrcode` alongside it).
+- Rules can include text and dependencies: `Name:_(dep_FieldName)`.
 
-EDITABLE FIELDS
-ID: Status.text.editable
-ID: Notes.textarea.editable
-ID: Status.select_Delivered.editable.track_status
+**Examples:**
+```xml
+<image id="Flight_QR.qrcode_Name:_(dep_Passenger_Name).track_qrcode" />
+<image id="Payment_QR.qrcode_Pay_to:_(dep_Merchant)_Amt:_(dep_Total)">...</image>
+```
+> [!NOTE]
+> Use `_` for spaces in your rule. Use `(dep_FieldID)` to inject values from other form fields.
 
-Meaning: Marks fields as editable even after document purchase
+### Character Limit (.max)
+```xml
+<text id="fieldname.text.max_50">Enter text (max 50 chars)</text>
+<text id="fieldname.textarea.max_200">Enter text (max 200 chars)</text>
+```
+
+### Date Format (.date_FORMAT)
+```xml
+<text id="fieldname.date_MM/DD/YYYY">01/10/2025</text>
+<text id="fieldname.date_MMM_DD">Jan 10</text>
+```
+Automatically formats dates based on specified format string. Provides dropdown selectors for all components (year, month, day, hour, minute, second, AM/PM).
+
+**Important:** Use underscores `_` to represent spaces in your format string. They will be automatically converted to spaces in the final output.
+
+**Format Codes:**
+- `YYYY` - Full year (2025)
+- `YY` - Short year (25)
+- `MMMM` - Full month (January)
+- `MMM` - Short month (Jan)
+- `MM` - Month with zero (01)
+- `M` - Month no zero (1)
+- `DD` - Day with zero (01)
+- `D` - Day no zero (1)
+- `dddd` - Full weekday (Monday)
+- `ddd` - Short weekday (Mon)
+- `HH` - 24-hour with zero (01, 23)
+- `H` - 24-hour no zero (1, 23)
+- `hh` - 12-hour with zero (01, 12)
+- `h` - 12-hour no zero (1, 12)
+- `mm` - Minutes with zero (01, 59)
+- `m` - Minutes no zero (1, 59)
+- `ss` - Seconds with zero (01, 59)
+- `s` - Seconds no zero (1, 59)
+- `A` - AM/PM uppercase
+- `a` - am/pm lowercase
+
+**Examples:**
+```xml
+<text id="Date_of_Birth.date_MM/DD/YYYY">01/10/2025</text>
+<text id="Event_Date.date_MMMM_D">January 10</text>
+<text id="Created_At.date_MMM_DD,_YYYY">Jan 10, 2025</text>
+<text id="Timestamp.date_MM/DD/YYYY_HH:mm">01/10/2025 14:30</text>
+<text id="Delivery_Date.date_MMM_DD.editable.track_date">Jan 10</text>
+```
+
+### Dropdown Options (.select)
+```xml
+<text id="fieldname.select_option1">Option 1 Name</text>
+<text id="fieldname.select_option2">Option 2 Name</text>
+```
+All elements with same base ID + `.select_` become one dropdown.
+
+**Examples:**
+```xml
+<text id="country.select_uk">United Kingdom</text>
+```
+
+### Toggle Visibility (.hide)
+```xml
+<text id="fieldname.hide">This text is hidden by default</text>
+<text id="fieldname.hide_unchecked">This text is hidden by default</text>
+<text id="fieldname.hide_checked">This text is visible by default</text>
+```
+Creates a toggle checkbox for the SVG element.
+- `.hide` / `.hide_unchecked` will be **un-checked** by default, hiding the element.
+- `.hide_checked` will be **checked** by default, showing the element.
+
+**Examples:**
+```xml
+<image id="Watermark.hide" href="watermark.png" />
+<text id="Special_Offer.hide_checked">30% OFF!</text>
+```
+
+### Field Sync (.depends)
+```xml
+<text id="fieldname.depends_ANOTHER_ID">This field will sync with ANOTHER_ID</text>
+```
+When `ANOTHER_ID` changes, this field copies the same value.
+`.depends_FIELD` **replaces** the need for a field type — do not add `.text`, `.upload` etc.
+After `.depends_`, only `.grayscale` / `.grayscale_N` and `.track_ROLE` are allowed.
+
+**Examples:**
+```xml
+<text id="company_name.text">Enter company name</text>
+<text id="company_display.depends_company_name">Will show same as company name</text>
+```
+
+### Tracking ID with Link (.tracking_id .link_)
+```xml
+<text id="Order_Number.gen.max_10.tracking_id.link_\"https://example.com\"">Generated tracking code</text>
+```
+- Use `.tracking_id` to mark field as tracking ID
+- Use `.link_"URL"` to add clickable link (MUST use double quotes)
+- Generates random code with `.gen.max_N`
+
+**Examples:**
+```xml
+<text id="Order_Number.gen.max_8.tracking_id.link_\"https://track.example.com\"">TRK12345</text>
+<text id="Booking_Ref.gen.max_12.tracking_id.link_\"https://orders.example.com\"">TRK123456789</text>
+```
+
+### Tracking Roles (.track_)
+⚠️ **IMPORTANT: `.track_` extensions must ALWAYS be the LAST extension in the ID chain.**
+
+```xml
+<text id="fieldname.text.track_name">Customer Name</text>
+<text id="fieldname.text.editable.track_status">Status</text>
+```
+- Maps fields to specific roles for tracking website display
+- Must be the last extension (after `.gen`, `.max_`, `.link_`, `.editable`, etc.)
+- Common roles: `track_name`, `track_email`, `track_status`, `track_destination`, `track_package`, `track_weight`, `track_error_message`, `track_origin1`, `track_destination1`, `track_origin1_departure_date`, `track_origin1_departure_time`
+
+**Flight Specific Roles (Multi-Leg Itineraries):**
+For complex journeys (One Way, Return, Stop Over), use numbered legs (e.g., `origin1`, `origin2`). Each leg supports distinct departure and arrival details:
+
+- `track_origin{N}`: Departure city for Leg N (e.g., `track_origin1`)
+- `track_origin{N}_departure_date`: Date the flight leaves the origin city
+- `track_origin{N}_departure_time`: Time the flight leaves the origin city
+- `track_destination{N}`: Arrival city for Leg N (e.g., `track_destination1`)
+- `track_destination{N}_arrival_date`: Date the flight arrives at the destination city
+- `track_destination{N}_arrival_time`: Time the flight arrives at the destination city
+- `track_flight_type`: Explicitly set "Return", "One Way", etc. (optional, auto-detected if omitted)
+- `track_flight`: General flight number fallback
+
+**Example: Stop Over Flight (London -> Dubai -> Tokyo)**
+
+*Leg 1 (London to Dubai):*
+- Origin: `id="Flight_Departure_Location.text.track_origin1"` (Value: "London")
+- Dep Date/Time: `id="Flight_Departure_Date_and_Time.text.track_origin1_departure_date"` (Value: "10 Jan, 10:00 AM")
+- Destination: `id="Flight_Arrival_Location.text.track_destination1"` (Value: "Dubai")
+- Arr Date/Time: `id="Flight_Arrival_Date_and_Time.text.track_destination1_arrival_date"` (Value: "10 Jan, 8:00 PM")
+
+*Leg 2 (Dubai to Tokyo):*
+- Origin: `id="Flight_Departure_Location_2.text.track_origin2"` (Value: "Dubai")
+- Dep Date/Time: `id="Flight_Departure_Date_and_Time_2.text.track_origin2_departure_date"` (Value: "11 Jan, 09:00 AM")
+- Destination: `id="Flight_Arrival_Location_2.text.track_destination2"` (Value: "Tokyo")
+- Arr Date/Time: `id="Flight_Arrival_Date_and_Time_2.text.track_destination2_arrival_date"` (Value: "12 Jan, 02:00 PM")
+- Arr Time: `id="Time.text.track_destination2_arrival_time"` (Value: "06:00 AM")
+```xml
+<text id="Customer_Name.text.track_name">John Doe</text>
+<text id="Customer_Email.email.track_email">john@example.com</text>
+<text id="Destination.text.track_destination">123 Main St</text>
+<text id="Status.select_Processing">Processing</text>
+<text id="Status.select_Delivered.track_status">Delivered</text>
+<text id="Status.select_Error.editable.track_status">Error</text>
+```
+
+### Editable After Purchase (.editable)
+```xml
+<text id="fieldname.text.editable">Editable text</text>
+```
+- Marks fields as editable even after document purchase
 - By default, all fields become non-editable after purchase
-- Must come BEFORE .track_ extension if both are used
+- Must come BEFORE `.track_` extension if both are used
 
-IMPORTANT RULES
-===============
+**Examples:**
+```xml
+<text id="Status.text.editable">Status field stays editable</text>
+<text id="Notes.textarea.editable">Editable notes field</text>
+<text id="Status.select_Processing">Processing</text>
+<text id="Status.select_Delivered.editable.track_status">Delivered</text>
+```
 
-1. Field names must use Title_Case (capital first letter of each word)
-   Examples: Company_Name, Reference_Code, Tracking_ID
+## Examples
 
-2. Tracking_ID must always be uppercase exactly as shown ("For now, will be updated later")
+### Simple Form
+```xml
+<text id="company_name.text">Enter company name</text>
+<text id="description.textarea.max_300">Company description</text>
+<text id="Order_Number.gen.max_8.tracking_id.link_https://track.example.com">TRK12345</text>
+```
 
-3. For dropdowns, create separate elements for each option
-   Example: 
-   Country.select_USA
-   Country.select_Canada  
-   Country.select_Mexico
+### Tracking Form with Editable Fields
+```xml
+<text id="Tracking_ID.gen.max_12.tracking_id.link_https://parcelfinda.com">TRK123456789</text>
+<text id="Customer_Name.text.track_name">John Doe</text>
+<text id="Customer_Email.email.track_email">john@example.com</text>
+<text id="Destination.text.track_destination">123 Main St</text>
+<text id="Status.select_Processing">Processing</text>
+<text id="Status.select_In_Transit">In Transit</text>
+<text id="Status.select_Delivered.editable.track_status">Delivered</text>
+<text id="Status.select_Error">Error</text>
+<text id="Error_Message.textarea.editable.track_error_message">Error details here</text>
+```
 
-4. For random codes, use .gen.max_N where N is the number of characters
-   Example: Reference_Code.gen.max_8
+### Form with Sync Fields
+```xml
+<text id="full_name.text">Enter full name</text>
+<text id="display_name.depends_full_name">Will show same as full name</text>
+```
 
-5. For links, use .link_URL where URL is the full website address
-   Example: Order_Number.gen.max_12.tracking_id.link_https://example.com
+### Form with Dropdown
+```xml
+<text id="country.select_usa">United States</text>
+<text id="country.select_canada">Canada</text>
+<text id="country.select_uk">United Kingdom</text>
+```
 
-6. ⚠️ .track_ extensions MUST ALWAYS be the LAST extension
-   Example: Customer_Name.text.track_name
-   Example with editable: Status.text.editable.track_status
+## Quick Reference
 
-7. For editable fields, use .editable (must come before .track_ if both are used)
-   Example: Notes.textarea.editable
-   Example with tracking: Status.select_Delivered.editable.track_status
+| Extension | What it does | Example |
+|-----------|-------------|---------|
+| `.text` | Single-line text | `id="name.text"` |
+| `.textarea` | Multi-line text | `id="description.textarea"` |
+| `.upload` | File upload field | `id="logo.upload"` |
+| `.file` | File upload field | `id="document.file"` |
+| `.sign` | Signature field | `id="signature.sign"` |
+| `.qrcode` | QR code image | `id="verify.qrcode"` |
+| `.qrcode_RULE` | Dynamic QR code | `id="itinerary.qrcode_Name:_(dep_Name)"` |
+| `.gen.max_N` | Random code (N chars) | `id="code.gen.max_8"` |
+| `.max_N` | Character limit | `id="title.text.max_100"` |
+| `.date_FORMAT` | Date with format | `id="dob.date_MM/DD/YYYY"` |
+| `.select_OPTION` | Dropdown option | `id="country.select_usa"` |
+| `.depends_FIELD` | Sync with field | `id="confirm.depends_email"` |
+| `.tracking_id` | Mark as tracking ID | `id="Order.gen.max_8.tracking_id"` |
+| `.link_URL` | Add external link | `id="Order.tracking_id.link_https://..."` |
+| `.editable` | Editable after purchase | `id="status.text.editable"` |
+| `.track_ROLE` | Tracking role (MUST BE LAST) | `id="name.text.track_name"` |
 
-EXAMPLES
-========
+## Important Notes
 
-Company_Name.text
-- Creates: Text field labeled "Company Name"
+- ⚠️ **`.track_` extensions MUST ALWAYS be the LAST extension**
+- If using both `.editable` and `.track_`, put `.editable` first: `field.text.editable.track_name`
+- Use `.tracking_id` to mark the main tracking field
+- All field names should use underscores for spaces
+- The parser converts SVG text elements into form fields automatically
 
-Reference_Code.gen.max_8
-- Creates: Random 8-character code generator
+## SVG ID Validation Rules (DSL)
 
-Country.select_USA
-Country.select_Canada
-Country.select_Mexico
-- Creates: Dropdown with USA, Canada, Mexico options
+To ensure system stability and scalability, all SVG IDs must follow a strict formal syntax (DSL). The validation engine (shared by frontend and backend) enforces these rules:
 
-Order_Number.gen.max_12.tracking_id.link_https://track.example.com
-- Creates: Random 12-character tracking code with link to track.example.com
+### 1. Structure
+IDs must follow the pattern: `[base_id].[type].[extension_1].[extension_2]...[track_role]`
+- **At least one dot is required.** (e.g., `Flight_No.text`)
+- **No empty segments.** Double dots (`..`) or leading/trailing dots are forbidden.
 
-City.depends_Country
-- Creates: City field that copies the same content as Country field
-- Note: No field type needed for text dependencies
+### 2. Base ID
+The `base_id` is the part before the first dot.
+- It must be **unique** within the SVG.
+- It cannot contain dots.
+- It should represent the logical field name (e.g., `Passport_No`).
 
-Photo.upload
-Photo_Copy.upload.depends_Photo
-- Creates: Photo_Copy image field that automatically displays the same image as Photo
-- Photo_Copy is hidden from form (auto-populated when Photo changes)
-- Field name must be unique (Photo_Copy, not Photo)
+### 3. Extensions with Values
+Extensions that require a value (like `max`, `select`, `depends`, `date`, `gen`, `qrcode`) must use an underscore `_` followed by the value.
+- **Valid:** `.max_50`, `.select_USA`, `.depends_Passport_No`, `.qrcode_Name:_(dep_Name)`
+- **Invalid:** `.max`, `.select_`, `.depends`, `.qrcode_` (missing value)
 
-Start_Date.date
-- Creates: Basic date picker field (YYYY-MM-DD format)
+### 4. Field Types
+The first extension (or one in the chain) should ideally be a valid field type (e.g., `.text`, `.textarea`, `.upload`, `.date`, `.gen`). If omitted, it defaults to `text`.
 
-Event_Date.date_MM/DD/YYYY
-- Creates: Date picker displaying dates in US format (01/10/2025)
+### 5. Tracking Roles (`.track_`)
+- **Placement:** Must be the **VERY LAST** extension in the ID.
+- **Value:** Must have a role name (e.g., `.track_name`).
+- **Valid:** `Departure.text.editable.track_origin1`
+- **Invalid:** `Departure.track_origin1.text` (wrong order)
 
-Due_Date.date_MMM_DD
-- Creates: Date picker displaying dates in short format (Jan 10)
+### 6. Duplicates
+- **Only one field type** extension is allowed per ID.
+- **Duplicate extensions** (e.g., `.max_10.max_20`) are strictly forbidden.
 
-Timestamp.date_MM/DD/YYYY_HH:mm:ss
-- Creates: Date/time picker with 24-hour format (01/10/2025 14:30:45)
-
-Schedule.date_MM/DD/YYYY_hh:mm_A
-- Creates: Date/time picker with 12-hour format and AM/PM (01/10/2025 02:30 PM)
-
-Customer_Name.text.track_name
-- Creates: Text field for customer name, mapped to "name" role for tracking sites
-
-Customer_Email.email.track_email
-- Creates: Email field for customer email, mapped to "email" role for tracking sites
-
-Status.select_Processing
-Status.select_In_Transit  
-Status.select_Delivered.editable.track_status
-Status.select_Error
-- Creates: Status dropdown with options, editable after purchase, mapped to "status" role
-- Note: .editable comes before .track_status (track_ must be last)
-
-Error_Message.textarea.editable.track_error_message
-- Creates: Editable error message field mapped to "error_message" role for tracking sites
+> [!IMPORTANT]
+> The Admin Editor will highlight invalid IDs in red and disable the **Apply** button. The backend will reject any request containing an invalid SVG ID.

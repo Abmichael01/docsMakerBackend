@@ -9,6 +9,29 @@ logger = logging.getLogger(__name__)
 
 from lxml import etree
 from django.core.cache import cache
+import qrcode
+import base64
+from io import BytesIO
+
+
+def _generate_qr_code(data: str) -> str:
+    """Generate a QR code as a base64 PNG data URL."""
+    if not data:
+        return ""
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(data)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffered = BytesIO()
+    img.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+    return f"data:image/png;base64,{img_str}"
 
 
 def _extract_from_dependency(depends_on: str, field_values: Dict[str, Any]) -> str:
@@ -303,7 +326,7 @@ def update_svg_from_field_updates(
             tag_name = el.tag.split("}")[-1] if "}" in el.tag else el.tag
             
             is_image_tag = tag_name in {"image", "use"}
-            is_image_field = field_type in {"upload", "file", "sign"}
+            is_image_field = field_type in {"upload", "file", "sign", "qrcode"}
             # Support .depends both as a type and as an extension in the ID for backward compatibility
             is_depends_field = field_type == "depends" or ".depends" in field_id
             
@@ -311,9 +334,24 @@ def update_svg_from_field_updates(
             is_image_value = isinstance(value, str) and (
                 value.startswith("data:image/") or 
                 value.startswith("blob:") or 
-                "base64" in value or
-                isinstance(value, str) and (value.endswith(".png") or value.endswith(".jpg") or value.endswith(".jpeg"))
+                ";base64," in value or
+                (value.endswith(".png") or value.endswith(".jpg") or value.endswith(".jpeg"))
             )
+
+            # Special case for QR code generation
+            # Check both field_type and the element ID itself for robustness
+            # Support both .qrcode and .qrcode_ prefixes
+            is_qr_element = (
+                field_type == "qrcode" or 
+                ".qrcode." in el.get("id", "").lower() or 
+                ".qrcode_" in el.get("id", "").lower() or
+                el.get("id", "").lower().endswith(".qrcode")
+            )
+            
+            if is_qr_element and not is_image_value:
+                value = _generate_qr_code(str(value))
+                is_image_value = True
+                is_image_field = True # Mark as image field so it passes the check below
 
             # 1. IMAGE UPDATES
             if is_image_tag:
@@ -326,6 +364,11 @@ def update_svg_from_field_updates(
                 _normalize_transform(el)
 
                 if value and isinstance(value, str) and value.strip():
+                    if field_type == "qrcode":
+                        logger.info(f"[SVG-Updater] Setting QR code image for {field_id} (len: {len(value)})")
+                    
+                    # Set both modern 'href' and legacy 'xlink:href' for max compatibility
+                    el.set("href", value)
                     el.set("{http://www.w3.org/1999/xlink}href", value)
                     el.set("preserveAspectRatio", "none")
             

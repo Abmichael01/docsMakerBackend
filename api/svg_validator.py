@@ -32,7 +32,7 @@ from typing import Optional, List
 VALID_TYPES = [
     "text", "textarea", "upload", "file", "sign", "date",
     "gen", "number", "checkbox", "range", "color", "email",
-    "tel", "status", "password", "hide", "hide_checked", "hide_unchecked"
+    "tel", "status", "password", "hide", "hide_checked", "hide_unchecked", "qrcode"
 ]
 # Note: "depends" is NOT in VALID_TYPES — it's an extension, not a field type.
 
@@ -41,12 +41,11 @@ FLAG_EXTENSIONS = [
     "editable",       # Editable after purchase
     "tracking_id",    # Mark as tracking ID field
     "grayscale",      # Full grayscale (100%)
-    "mode",           # Generation mode
 ]
 
 # Modifier prefixes (matched by startswith)
 VALID_MODIFIER_PREFIXES = [
-    "max_", "depends_", "select_", "link_", "date_", "gen_", "grayscale_", "showIf_",
+    "max_", "depends_", "select_", "link_", "date_", "gen_", "qrcode_", "grayscale_", "showIf_", "mode_",
 ]
 
 # ============================================================================
@@ -60,17 +59,17 @@ ALLOWED_AFTER = {
     "max":          ["text", "textarea", "gen", "number", "range", "min", "hide", "hide_checked", "hide_unchecked"],
     "min":          ["text", "textarea", "gen", "number", "range", "max", "hide", "hide_checked", "hide_unchecked"],
     "editable":     ["text", "textarea", "gen", "email", "number", "date", "checkbox",
-                     "upload", "tel", "password", "range", "color", "file", "status", "sign",
-                     "select", "depends", "hide", "hide_checked", "hide_unchecked"],
+                     "upload", "tel", "password", "range", "color", "file", "status", "sign", "qrcode",
+                     "select", "depends", "hide", "hide_checked", "hide_unchecked", "qrcode"],
     "tracking_id":  ["gen", "max", "min", "text", "number", "hide", "hide_checked", "hide_unchecked"],
     "link":         ["tracking_id"],
     "date_format":  ["date", "hide", "hide_checked", "hide_unchecked"],
     "gen_rule":     ["gen", "hide", "hide_checked", "hide_unchecked"],
-    "mode":         ["gen", "hide", "hide_checked", "hide_unchecked"],
+    "mode":         ["gen", "qrcode", "hide", "hide_checked", "hide_unchecked"],
     "grayscale":    ["upload", "file", "depends", "hide", "hide_checked", "hide_unchecked"],
     "select":       ["editable"],  # track_ is checked separately
     "showIf":       ["text", "textarea", "gen", "email", "number", "date", "checkbox",
-                     "upload", "tel", "password", "range", "color", "file", "status", "sign",
+                     "upload", "tel", "password", "range", "color", "file", "status", "sign", "qrcode",
                      "hide", "hide_checked", "hide_unchecked",
                      "editable", "max", "min", "tracking_id", "date_format", "gen_rule", "select"],
 }
@@ -111,9 +110,9 @@ def validate_svg_id(element_id: str) -> tuple[bool, Optional[str]]:
 
         cleaned_id = element_id[:link_index] + element_id[url_end + 1:]
 
-    # 1. Plain IDs (no dot) are valid SVG IDs but not form field IDs — not our concern
+    # 1. Mandatory Extension Rule (Enforce dot to make it an editable field)
     if "." not in cleaned_id:
-        return True, None
+        return False, "💡 Add '.text' or another extension to make this an editable field!"
 
     parts = cleaned_id.split(".")
     base_id = parts[0]
@@ -182,7 +181,10 @@ def validate_svg_id(element_id: str) -> tuple[bool, Optional[str]]:
         is_flag = is_flag_extension or part_base in FLAG_EXTENSIONS
 
         # A. Field Types (only if NOT recognised as a modifier)
-        if not is_modifier_prefix and not is_flag and part_base in VALID_TYPES:
+        # Note: gen_ and qrcode_ at position 1 also count as the "primary type carrier"
+        is_primary_carrier = i == 1 and (part.startswith("gen_") or part.startswith("qrcode_"))
+
+        if (not is_modifier_prefix and not is_flag and part_base in VALID_TYPES) or is_primary_carrier:
             is_whitelisted = True
             type_count += 1
 
@@ -190,7 +192,7 @@ def validate_svg_id(element_id: str) -> tuple[bool, Optional[str]]:
             if i != 1:
                 return (False,
                         f"❌ Field type '.{part_base}' must come immediately after the base ID. "
-                        f"(Or did you mean to use .depends_?)")
+                        f"(Or did you mean to use .depends_ or .qrcode_?)")
 
         # B. Modifiers / Flag Extensions
         if not is_whitelisted:

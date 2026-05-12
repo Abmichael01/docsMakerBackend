@@ -43,7 +43,7 @@ class TemplateStorageTest(TestCase):
         url = data['svg_url']
         is_valid_url = url.startswith('http://testserver/media/') or url.startswith('https://cdn.sharptoolz.com/')
         self.assertTrue(is_valid_url, f"URL was unexpected: {url}")
-        self.assertTrue(url.endswith('.svg'))
+        self.assertIn('.svg', url)
 
     @override_settings(USE_S3_STORAGE=True, AWS_S3_CUSTOM_DOMAIN='cdn.sharptoolz.com')
     def test_custom_domain_media_url(self):

@@ -47,6 +47,20 @@ This SVG parser converts SVG text elements into form fields based on their ID at
 <text id="approval_signature.sign">Approval Signature</text>
 ```
 
+### QR Code Field
+```xml
+<image id="fieldname.qrcode" x="0" y="0" width="100" height="100" />
+```
+- Must be used on an `<image>` element.
+- Generates a scannable QR code.
+- If the value is a single string (e.g. "Order #123"), it encodes that string.
+- Supports structured data (e.g. "Name: John\nEmail: john@example.com").
+
+**Examples:**
+```xml
+<image id="Verification_Code.qrcode" width="200" height="200" />
+```
+
 ### Date Field
 ```xml
 <text id="fieldname.date">2025-01-10</text>
@@ -72,6 +86,22 @@ Basic date picker (YYYY-MM-DD format).
 <text id="reference_code.gen.max_8">REF12345</text>
 <text id="order_number.gen.max_10">ORD98765432</text>
 ```
+
+### Dynamic QR Code Rules (.qrcode_)
+```xml
+<image id="fieldname.qrcode_RULE">...</image>
+```
+- Automatically generates a QR code based on a rule.
+- `.qrcode_` **replaces** the need for a field type (do not add `.gen` or `.qrcode` alongside it).
+- Rules can include text and dependencies: `Name:_(dep_FieldName)`.
+
+**Examples:**
+```xml
+<image id="Flight_QR.qrcode_Name:_(dep_Passenger_Name).track_qrcode" />
+<image id="Payment_QR.qrcode_Pay_to:_(dep_Merchant)_Amt:_(dep_Total)">...</image>
+```
+> [!NOTE]
+> Use `_` for spaces in your rule. Use `(dep_FieldID)` to inject values from other form fields.
 
 ### Character Limit (.max)
 ```xml
@@ -281,6 +311,8 @@ For complex journeys (One Way, Return, Stop Over), use numbered legs (e.g., `ori
 | `.upload` | File upload field | `id="logo.upload"` |
 | `.file` | File upload field | `id="document.file"` |
 | `.sign` | Signature field | `id="signature.sign"` |
+| `.qrcode` | QR code image | `id="verify.qrcode"` |
+| `.qrcode_RULE` | Dynamic QR code | `id="itinerary.qrcode_Name:_(dep_Name)"` |
 | `.gen.max_N` | Random code (N chars) | `id="code.gen.max_8"` |
 | `.max_N` | Character limit | `id="title.text.max_100"` |
 | `.date_FORMAT` | Date with format | `id="dob.date_MM/DD/YYYY"` |
@@ -315,9 +347,9 @@ The `base_id` is the part before the first dot.
 - It should represent the logical field name (e.g., `Passport_No`).
 
 ### 3. Extensions with Values
-Extensions that require a value (like `max`, `select`, `depends`, `date`, `gen`) must use an underscore `_` followed by the value.
-- **Valid:** `.max_50`, `.select_USA`, `.depends_Passport_No`
-- **Invalid:** `.max`, `.select_`, `.depends` (missing value)
+Extensions that require a value (like `max`, `select`, `depends`, `date`, `gen`, `qrcode`) must use an underscore `_` followed by the value.
+- **Valid:** `.max_50`, `.select_USA`, `.depends_Passport_No`, `.qrcode_Name:_(dep_Name)`
+- **Invalid:** `.max`, `.select_`, `.depends`, `.qrcode_` (missing value)
 
 ### 4. Field Types
 The first extension (or one in the chain) should ideally be a valid field type (e.g., `.text`, `.textarea`, `.upload`, `.date`, `.gen`). If omitted, it defaults to `text`.
