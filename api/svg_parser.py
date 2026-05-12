@@ -1,5 +1,6 @@
 import xml.etree.ElementTree as ET
 import logging
+import re
 from typing import Optional, Dict, List, Any, Tuple
 
 
@@ -39,6 +40,18 @@ FLAG_EXTENSIONS = [
 # HELPER FUNCTIONS
 # ============================================================================
 
+def split_svg_id(element_id: str) -> List[str]:
+    """
+    Split an SVG ID into parts based on dots, but NOT dots inside parentheses.
+    Example: "base.qrcode_Name:_(dep_F.Subtotal)" -> ["base", "qrcode_Name:_(dep_F.Subtotal)"]
+    """
+    if not element_id:
+        return []
+    # Use negative lookahead to split on dots that are not followed by a closing parenthesis 
+    # without an opening one (simple heuristic for "outside parentheses")
+    return re.split(r"\.(?![^(]*\))", element_id)
+
+
 def _fix_id_value(element_id: str) -> str | None:
     """
     Given a raw id string, return a fixed version or None if no fix is needed.
@@ -55,7 +68,7 @@ def _fix_id_value(element_id: str) -> str | None:
     if "@" in element_id:
         element_id = element_id.replace("@", "_")
 
-    parts = element_id.split('.')
+    parts = split_svg_id(element_id)
     base_id = parts[0]
     extensions = parts[1:]
 
@@ -512,7 +525,7 @@ def parse_field_from_id(element_id: str, text_content: str = "") -> Optional[Dic
         return None
 
     # Select option IDs need multi-element context — skip them here
-    if any(p.startswith("select_") for p in element_id.split(".")):
+    if any(p.startswith("select_") for p in split_svg_id(element_id)):
         return None
 
     # Known explicit field types (mapped by parse_field_extensions via extension parts)
@@ -526,7 +539,7 @@ def parse_field_from_id(element_id: str, text_content: str = "") -> Optional[Dic
         # Extract link URL before splitting (URLs contain dots)
         cleaned_id, url = extract_link_url(element_id)
 
-        parts = cleaned_id.split(".")
+        parts = split_svg_id(cleaned_id)
         if not parts or not parts[0]:
             return None
 
@@ -603,7 +616,7 @@ def process_element_to_field(element: ET.Element, fields_list: List[Dict[str, An
     element_id, url = extract_link_url(original_element_id)
     
     # Split ID into parts
-    parts = element_id.split(".")
+    parts = split_svg_id(element_id)
     base_id = parts[0]
     
     # ====================================================================
@@ -739,7 +752,7 @@ def parse_svg_to_form_fields(svg_text: str) -> List[Dict[str, Any]]:
     for field in fields_map.values():
         if field.get('type') == 'select':
             for opt in field.get('options', []):
-                opt_parts = opt.get('svgElementId', '').split('.')
+                opt_parts = split_svg_id(opt.get('svgElementId', ''))
                 if 'editable' in opt_parts:
                     field['editable'] = True
                 track_part = next((p for p in opt_parts if p.startswith('track_')), None)
