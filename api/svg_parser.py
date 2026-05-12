@@ -532,7 +532,7 @@ def parse_field_from_id(element_id: str, text_content: str = "") -> Optional[Dic
     KNOWN_FIELD_TYPES = {
         "text", "textarea", "select", "checkbox", "date", "upload",
         "file", "sign", "gen", "status", "hide", "number", "range",
-        "color", "email", "tel", "url", "password",
+        "color", "email", "tel", "url", "password", "qrcode",
     }
 
     try:
