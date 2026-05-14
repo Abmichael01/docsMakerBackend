@@ -7,7 +7,7 @@ from django.db.models import Sum, Count, Q
 from django.utils import timezone
 from datetime import timedelta
 from api.serializers.wallet import WalletSerializer, TransactionSerializer
-from api.utils.admin_ranges import get_date_window, get_range_label, parse_days_param
+from api.utils.admin_ranges import get_admin_date_range, get_range_label, parse_days_param
 from wallet.models import Wallet, Transaction
 
 class WalletStatsView(APIView):
@@ -15,8 +15,10 @@ class WalletStatsView(APIView):
     permission_classes = [IsAdminUser]
     
     def get(self, request):
-        days = parse_days_param(request.GET.get('days'), default=1)
-        _today, _start_date, start_datetime = get_date_window(days)
+        start_datetime, end_datetime, range_label, days = get_admin_date_range(
+            days_param=request.GET.get('days'),
+            date_str=request.GET.get('date')
+        )
 
         # Total balance — regular users only (excludes admin/staff wallets)
         total_balance = Wallet.objects.filter(
@@ -24,7 +26,7 @@ class WalletStatsView(APIView):
         ).aggregate(total=Sum('balance'))['total'] or 0
 
         period_transactions = Transaction.objects.filter(
-            created_at__gte=start_datetime,
+            created_at__range=(start_datetime, end_datetime),
             status=Transaction.Status.COMPLETED,
             wallet__user__is_staff=False,
             wallet__user__is_superuser=False,
@@ -47,11 +49,11 @@ class WalletStatsView(APIView):
             'totalBalance': float(total_balance),
             'totalInflow': float(total_inflow),
             'totalOutflow': abs(float(total_outflow)),
-            'netFlow': float(total_inflow) - abs(float(total_outflow)),
+            'netFlow': float(total_inflow), # Per user request: inflow is platform revenue
             'transactionCount': transaction_count,
             'fundedWallets': funded_wallets,
             'rangeDays': days,
-            'rangeLabel': get_range_label(days),
+            'rangeLabel': range_label,
         })
         response["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response["Pragma"] = "no-cache"
@@ -204,9 +206,15 @@ class TransactionHistoryView(APIView):
         status_filter = request.GET.get('status', 'all').strip().lower()
         page_size = int(request.GET.get('page_size', 20))
 
+        start_datetime, end_datetime, range_label, days = get_admin_date_range(
+            days_param=request.GET.get('days'),
+            date_str=request.GET.get('date')
+        )
+
         transactions = Transaction.objects.select_related('wallet__user').filter(
             wallet__user__is_staff=False,
             wallet__user__is_superuser=False,
+            created_at__range=(start_datetime, end_datetime),
         )
 
         if search:
@@ -244,13 +252,11 @@ class TransactionHistoryView(APIView):
             type='deposit',
             wallet__user__is_staff=False,
             wallet__user__is_superuser=False,
+            created_at__range=(start_datetime, end_datetime),
         ).aggregate(total=Sum('amount'))['total'] or 0
         
         stats = {
-            'total_count': Transaction.objects.filter(
-                wallet__user__is_staff=False,
-                wallet__user__is_superuser=False,
-            ).count(),
+            'total_count': transactions.count(),
             'total_volume': float(total_volume),
             'month_count': Transaction.objects.filter(
                 created_at__gte=month_start,

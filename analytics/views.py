@@ -6,7 +6,7 @@ from django.db.models import Count, Sum, Q
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 from datetime import datetime, time, timedelta
-from api.utils.admin_ranges import get_date_window, get_range_label, parse_days_param
+from api.utils.admin_ranges import get_admin_date_range, get_range_label, parse_days_param
 from wallet.models import Transaction
 from rest_framework import viewsets
 from .models import VisitorLog, Campaign
@@ -128,27 +128,11 @@ class AnalyticsDashboardView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
-        date_str = request.GET.get('date')
-        days = parse_days_param(request.GET.get('days'), default=1)
-        
-        # Calculate Time Window
-        if date_str:
-            try:
-                selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-                start_date = selected_date
-                days = 1
-                current_tz = timezone.get_current_timezone()
-                start_datetime = timezone.make_aware(datetime.combine(start_date, time.min), current_tz)
-                end_datetime = timezone.make_aware(datetime.combine(start_date, time.max), current_tz)
-                range_label = selected_date.strftime('%b %d, %Y')
-            except ValueError:
-                _today, start_date, start_datetime = get_date_window(days)
-                end_datetime = timezone.now()
-                range_label = get_range_label(days)
-        else:
-            _today, start_date, start_datetime = get_date_window(days)
-            end_datetime = timezone.now()
-            range_label = get_range_label(days)
+        start_datetime, end_datetime, range_label, days = get_admin_date_range(
+            days_param=request.GET.get('days'),
+            date_str=request.GET.get('date')
+        )
+        start_date = start_datetime.date()
 
         # Real-time: Online Now (last 5 minutes via Presence Cache)
         presence_data = cache.get(ONLINE_SET_KEY, {})
@@ -159,7 +143,15 @@ class AnalyticsDashboardView(APIView):
             is_bot=False
         )
 
-        completed_payments = Transaction.objects.filter(
+        # Revenue is defined as Deposits (Money coming in)
+        revenue_transactions = Transaction.objects.filter(
+            created_at__range=(start_datetime, end_datetime),
+            type=Transaction.Type.DEPOSIT,
+            status=Transaction.Status.COMPLETED,
+        )
+
+        # Spending is defined as Payments (Money used by users)
+        spending_transactions = Transaction.objects.filter(
             created_at__range=(start_datetime, end_datetime),
             type=Transaction.Type.PAYMENT,
             status=Transaction.Status.COMPLETED,
@@ -191,12 +183,18 @@ class AnalyticsDashboardView(APIView):
             unique_visitors=Count('combined_id', distinct=True)
         ).order_by('date')
 
-        # 2. Wallet Inflow (Daily Revenue)
-        revenue_stats = completed_payments.annotate(
+        # 2. Wallet Stats (Daily)
+        inflow_stats = revenue_transactions.annotate(
             date=TruncDate('created_at')
         ).values('date').annotate(
             total_sales=Count('id'),
             total_revenue=Sum('amount')
+        ).order_by('date')
+
+        outflow_stats = spending_transactions.annotate(
+            date=TruncDate('created_at')
+        ).values('date').annotate(
+            total_spending=Sum('amount')
         ).order_by('date')
 
         # Merge Data
@@ -213,18 +211,17 @@ class AnalyticsDashboardView(APIView):
                 "total_revenue": 0
             }
 
-        for item in visitor_stats:
-            d = str(item['date'])
-            if d in stats_map:
-                stats_map[d]['total_visits'] = item['total_visits']
-                stats_map[d]['unique_visitors'] = item['unique_visitors']
-
-        for item in revenue_stats:
+        for item in inflow_stats:
             d = str(item['date'])
             if d in stats_map:
                 stats_map[d]['total_sales'] = item['total_sales']
-                # abs() because payments are negative
-                stats_map[d]['total_revenue'] = abs(float(item['total_revenue'] or 0))
+                stats_map[d]['total_revenue'] = float(item['total_revenue'] or 0)
+
+        for item in outflow_stats:
+            d = str(item['date'])
+            if d in stats_map:
+                # Add spending to the map if we want to track it in charts too
+                stats_map[d]['total_spending'] = abs(float(item['total_spending'] or 0))
 
         # 3. Recent visitors, grouped by latest unique activity in the selected range
         recent_logs = (
@@ -286,9 +283,13 @@ class AnalyticsDashboardView(APIView):
         )
 
 
-        payment_summary = completed_payments.aggregate(
+        revenue_summary = revenue_transactions.aggregate(
             total_sales=Count('id'),
             total_revenue=Sum('amount'),
+        )
+
+        spending_summary = spending_transactions.aggregate(
+            total_spending=Sum('amount'),
         )
 
         source_stats = list(
@@ -345,8 +346,9 @@ class AnalyticsDashboardView(APIView):
                 "unique_visitors": unique_count,
                 "authenticated_visits": visitor_summary['authenticated_visits'] or 0,
                 "guest_visits": visitor_summary['guest_visits'] or 0,
-                "total_sales": sales_count,
-                "total_revenue": abs(float(payment_summary['total_revenue'] or 0)),
+                "total_sales": revenue_summary['total_sales'] or 0,
+                "total_revenue": float(revenue_summary['total_revenue'] or 0),
+                "total_spending": abs(float(spending_summary['total_spending'] or 0)),
                 "conversion_rate": round((sales_count / unique_count) * 100, 2) if unique_count else 0.0,
             },
         })

@@ -13,7 +13,7 @@ from django.contrib.auth import get_user_model
 from ..models import PurchasedTemplate
 from ..serializers import AdminOverviewSerializer
 from ..permissions import IsAdminOrReadOnly, IsSuperUser
-from ..utils.admin_ranges import get_date_window, parse_days_param
+from ..utils.admin_ranges import get_admin_date_range, parse_days_param
 from accounts.serializers import CustomUserDetailsSerializer
 
 User = get_user_model()
@@ -28,8 +28,11 @@ class AdminOverview(APIView):
         Accepts optional ?days= query param (default 1, max 365).
         """
         serializer = AdminOverviewSerializer()
-        days = parse_days_param(request.GET.get('days'), default=1)
-        _today, start_date, _start_datetime = get_date_window(days)
+        start_datetime, end_datetime, range_label, days = get_admin_date_range(
+            days_param=request.GET.get('days'),
+            date_str=request.GET.get('date')
+        )
+        start_date = start_datetime.date()
 
         # 1. Get documents chart data - optimized with single query
         documents_data = (
@@ -133,30 +136,29 @@ class AdminUsers(APIView):
                 users_queryset = users_queryset.filter(is_staff=True, is_superuser=False)
             elif role == 'user':
                 users_queryset = users_queryset.filter(is_staff=False, is_superuser=False)
+
+            start_datetime, end_datetime, range_label, days = get_admin_date_range(
+                days_param=request.GET.get('days'),
+                date_str=request.GET.get('date')
+            )
             
             # Statistics (recalculated on every request)
             today = timezone.localdate()
             intervals = {
                 'today': today,
-                'past_7_days': today - timedelta(days=6),
-                'past_14_days': today - timedelta(days=13),
-                'past_30_days': today - timedelta(days=29),
+                'range_start': start_datetime.date(),
             }
             
             # Optimized stats aggregation
             new_users = User.objects.aggregate(
                 today=Count('id', filter=Q(date_joined__date=intervals['today'])),
-                past_7_days=Count('id', filter=Q(date_joined__date__gte=intervals['past_7_days'])),
-                past_14_days=Count('id', filter=Q(date_joined__date__gte=intervals['past_14_days'])),
-                past_30_days=Count('id', filter=Q(date_joined__date__gte=intervals['past_30_days'])),
+                period=Count('id', filter=Q(date_joined__range=(start_datetime, end_datetime))),
             )
             
             # Fetch purchase stats - combined query
             purchases_stats = PurchasedTemplate.objects.filter(test=False).aggregate(
                 today=Count('buyer_id', filter=Q(created_at__date=intervals['today']), distinct=True),
-                past_7_days=Count('buyer_id', filter=Q(created_at__date__gte=intervals['past_7_days']), distinct=True),
-                past_14_days=Count('buyer_id', filter=Q(created_at__date__gte=intervals['past_14_days']), distinct=True),
-                past_30_days=Count('buyer_id', filter=Q(created_at__date__gte=intervals['past_30_days']), distinct=True),
+                period=Count('buyer_id', filter=Q(created_at__range=(start_datetime, end_datetime)), distinct=True),
             )
             
             regular_users_count = User.objects.filter(is_staff=False, is_superuser=False).count()
@@ -371,7 +373,11 @@ class AdminDocuments(APIView):
             page_size = int(request.GET.get('page_size', 20))
             search = request.GET.get('search', '').strip()
             doc_type = request.GET.get('type', 'all').strip().lower()
-            page_size = max(10, min(page_size, 50))
+            
+            start_datetime, end_datetime, range_label, days = get_admin_date_range(
+                days_param=request.GET.get('days'),
+                date_str=request.GET.get('date')
+            )
 
             queryset = (
                 PurchasedTemplate.objects
@@ -394,14 +400,16 @@ class AdminDocuments(APIView):
             elif doc_type == 'test':
                 queryset = queryset.filter(test=True)
 
-            stats = cache.get('admin_documents_stats_v1')
+            queryset = queryset.filter(created_at__range=(start_datetime, end_datetime))
+
+            stats = cache.get(f'admin_documents_stats_{range_label}')
             if stats is None:
                 now = timezone.now()
                 seven_days_ago = now - timedelta(days=7)
 
                 total_revenue_data = (
                     PurchasedTemplate.objects
-                    .filter(test=False, template__isnull=False)
+                    .filter(test=False, template__isnull=False, created_at__range=(start_datetime, end_datetime))
                     .select_related('template__tool')
                     .aggregate(total=Sum('template__tool__price'))['total'] or 0
                 )
