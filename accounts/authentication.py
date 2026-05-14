@@ -8,6 +8,7 @@ from django.http import JsonResponse
 from django.contrib.auth.models import AnonymousUser
 from channels.db import database_sync_to_async
 from channels.middleware import BaseMiddleware
+from analytics.utils import is_bot_user_agent
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,13 @@ def _parse_cookies_from_headers(scope):
 
 @database_sync_to_async
 def get_user_from_jwt_cookie(scope):
+    # Senior Optimization: Identify bots immediately to save DB connections.
+    # Bots don't need authenticated WebSocket access.
+    headers = dict(scope.get('headers', []))
+    ua = headers.get(b'user-agent', b'').decode('utf-8', errors='ignore')
+    if is_bot_user_agent(ua):
+        return AnonymousUser()
+
     # Prefer CookieMiddleware-parsed cookies; fall back to parsing headers directly.
     cookies = scope.get('cookies') or _parse_cookies_from_headers(scope)
     access_token = cookies.get('access_token')

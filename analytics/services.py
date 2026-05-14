@@ -127,7 +127,10 @@ def record_visit(*, path, attribution_payload=None, request=None, scope=None, re
         attribution = get_attribution_for_request(request, override_attribution=attribution_payload)
         user_obj = getattr(request, 'user', None)
         resolved_user = user_obj if (user_obj and user_obj.is_authenticated) else None
-        resolved_visitor_id = visitor_id or getattr(request, 'vuid', None)
+        
+        # Fallback to session_key (which includes IP) if no persistent ID exists
+        resolved_visitor_id = visitor_id or getattr(request, 'vuid', None) or session_key
+        
         resolved_is_bot = getattr(request, 'is_bot', is_bot)
         user_agent = request.META.get('HTTP_USER_AGENT', '')[:1000]
     else:
@@ -141,13 +144,14 @@ def record_visit(*, path, attribution_payload=None, request=None, scope=None, re
         user_agent = headers.get(b'user-agent', b'').decode('utf-8', errors='ignore')[:1000] if headers else ''
 
     try:
-        # Senior Optimization: Daily Deduplication via Redis
-        # If the user has already visited this specific path today, 
-        # we stop here to save Database RAM and CPU.
-        if not resolved_is_bot and resolved_visitor_id:
+        # Senior Optimization: Deduplication via Redis
+        # Stop both humans and bots from hammering the DB with duplicate hits.
+        if resolved_visitor_id:
             today = timezone.now().date().isoformat()
             path_hash = hashlib.md5(path.encode()).hexdigest()[:10]
-            dedup_key = f"vlog:dedup:{resolved_visitor_id}:{path_hash}:{today}"
+            # Use different prefix for bots to keep them separate in cache if needed
+            prefix = "bot" if resolved_is_bot else "vlog"
+            dedup_key = f"vlog:dedup:{prefix}:{resolved_visitor_id}:{path_hash}:{today}"
             
             if cache.get(dedup_key):
                 return None, None # Already counted today

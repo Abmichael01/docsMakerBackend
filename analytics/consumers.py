@@ -184,6 +184,11 @@ class VisitorAnalyticsConsumer(AsyncWebsocketConsumer):
         user = self.scope.get("user")
         user_agent = dict(self.scope.get("headers", [])).get(b'user-agent', b'').decode('utf-8', errors='ignore')
         is_bot = is_bot_user_agent(user_agent)
+        
+        # Senior Optimization: Don't record bot visits via WebSocket
+        if is_bot:
+            await self.send(text_data=json.dumps({"type": "visit_ignored", "reason": "bot"}))
+            return
 
         _log_instance, visitor_payload = await sync_to_async(record_visit)(
             path=path,

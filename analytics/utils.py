@@ -7,6 +7,11 @@ BOT_KEYWORDS = [
     'yandex', 'baiduspider', 'slurp', 'pingdom', 'uptime',
     'headless', 'python-requests', 'node-fetch', 'axios',
     'postman', 'curl', 'wget', 'go-http', 'libwww-perl',
+    'semrush', 'ahrefs', 'dotbot', 'rogerbot', 'exabot',
+    'mj12bot', 'twitterbot', 'facebookexternalhit', 'linkedinbot',
+    'slackbot', 'telegrambot', 'applebot', 'sogou', 'petalbot',
+    'bytebot', 'headless', 'scraping', 'selenium', 'playwright',
+    'phantomjs', 'check_http', 'nmap', 'sqlmap', 'nikto',
 ]
 
 

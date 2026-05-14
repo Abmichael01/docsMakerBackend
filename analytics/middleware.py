@@ -2,6 +2,9 @@ import uuid
 from .utils import is_bot_user_agent
 from .services import record_visit, update_presence
 import threading
+import hashlib
+from django.utils import timezone
+from django.core.cache import cache
 
 
 def resolve_request_user(request):
@@ -95,18 +98,26 @@ class VisitorTrackingMiddleware:
                 if resolved_user is not None and not getattr(getattr(request, 'user', None), 'is_authenticated', False):
                     request.user = resolved_user
                 
-                # Senior Optimization: Fire-and-Forget background thread.
-                # This ensures the user gets their response IMMEDIATELY
-                # without waiting for the Database write.
-                threading.Thread(
-                    target=record_visit,
-                    kwargs={
-                        "path": request.path,
-                        "request": request,
-                        "visitor_id": vuid,
-                    },
-                    daemon=True
-                ).start()
+                # Senior Optimization: Fast Deduplication Check (Redis)
+                # Check here BEFORE spawning a thread to save CPU/RAM/Threads.
+                # If they hit the same page today, we skip.
+                today = timezone.now().date().isoformat()
+                path_hash = hashlib.md5(request.path.encode()).hexdigest()[:10]
+                dedup_key = f"vlog:dedup:vlog:{vuid}:{path_hash}:{today}"
+                
+                if not cache.get(dedup_key):
+                    # Senior Optimization: Fire-and-Forget background thread.
+                    # This ensures the user gets their response IMMEDIATELY
+                    # without waiting for the Database write.
+                    threading.Thread(
+                        target=record_visit,
+                        kwargs={
+                            "path": request.path,
+                            "request": request,
+                            "visitor_id": vuid,
+                        },
+                        daemon=True
+                    ).start()
 
         response = self.get_response(request)
 
