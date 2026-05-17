@@ -1,0 +1,61 @@
+# ------------------------------------------------------------------------------
+#  Sharptoolz Celery Beat – Dokploy
+#  Schedules periodic tasks. RUN EXACTLY ONE OF THESE.
+# ------------------------------------------------------------------------------
+
+# -- Stage 1: Build deps --
+FROM python:3.11-slim-bullseye AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_IN_PROJECT=1 \
+    POETRY_VIRTUALENVS_CREATE=1 \
+    POETRY_CACHE_DIR=/tmp/poetry_cache
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    pkg-config \
+    python3-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install poetry>=2.0.0
+
+COPY pyproject.toml poetry.lock* ./
+RUN poetry lock && poetry install --no-root && rm -rf $POETRY_CACHE_DIR
+
+
+# -- Stage 2: Runtime --
+FROM python:3.11-slim-bullseye AS runtime
+
+ENV VIRTUAL_ENV=/app/.venv \
+    PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH="/app" \
+    PYTHONUNBUFFERED=1 \
+    CELERY_LOGLEVEL=info
+
+WORKDIR /app
+
+# Beat is light — only needs Postgres client and Python.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/.venv /app/.venv
+COPY . .
+
+# Beat doesn't accept connections; "healthy" = process is alive.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD pgrep -f "celery.*beat" >/dev/null || exit 1
+
+# Ensure django_celery_beat tables exist before scheduling, then start beat.
+# Safe to run repeatedly — migrate is idempotent.
+CMD python manage.py migrate django_celery_beat --noinput && \
+    exec celery -A serverConfig beat \
+    --loglevel="$CELERY_LOGLEVEL" \
+    --scheduler=django_celery_beat.schedulers:DatabaseScheduler

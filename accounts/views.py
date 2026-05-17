@@ -9,6 +9,7 @@ from rest_framework import status, viewsets
 from django.conf import settings
 from .serializers import *
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.throttling import ScopedRateThrottle
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.mail import send_mail
@@ -21,7 +22,9 @@ from django.conf import settings
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = [] 
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_register'
     def post(self, request):
         serializer = RegisterSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
@@ -40,7 +43,9 @@ class RegisterView(APIView):
     
 class LoginView(BaseLoginView):
     permission_classes = [AllowAny]
-    authentication_classes = [] 
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_login'
     def get_response(self): # type: ignore
         super().get_response()  # This sets the cookies or does other side-effects if needed
 
@@ -99,7 +104,9 @@ class LoginView(BaseLoginView):
 
 class ForgotPasswordView(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = [] 
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_password'
     def post(self, request):
         serializer = ForgotPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -120,7 +127,9 @@ class ForgotPasswordView(APIView):
 
 class ResetPasswordConfirmView(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = [] 
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_password'
     def post(self, request):
         serializer = ResetPasswordConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -129,6 +138,8 @@ class ResetPasswordConfirmView(APIView):
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_password'
 
     def post(self, request):
         serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
@@ -168,6 +179,8 @@ class LogoutView(APIView):
 class GoogleAuthView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_login'
 
     def post(self, request):
         access_token = request.data.get('access_token')
@@ -254,7 +267,9 @@ class GoogleAuthView(APIView):
 class RefreshTokenView(APIView):
     permission_classes = []
     authentication_classes = []
-    
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_login'
+
     def post(self, request):
         refresh_token = request.COOKIES.get('refresh_token')
 

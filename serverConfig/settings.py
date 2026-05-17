@@ -78,7 +78,9 @@ INSTALLED_APPS = [
     'corsheaders',
     
     'channels',
-    
+    'django_celery_beat',
+    'axes',
+
     #local apps
     "accounts",
     "api",
@@ -90,6 +92,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Rewrite REMOTE_ADDR from X-Forwarded-For FIRST so every other middleware
+    # (security, sessions, throttles, axes) sees the real client IP.
+    'serverConfig.middleware.TrustedProxyMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -102,6 +107,8 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'analytics.middleware.VisitorTrackingMiddleware',
+    # axes must be the LAST middleware so it sees auth failures after auth
+    'axes.middleware.AxesMiddleware',
 ]
 
 if DEBUG:
@@ -118,6 +125,12 @@ if ENV == "development":
 
 # Honor the 'X-Forwarded-Proto' header for request.is_secure()
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Number of trusted proxies between the client and Django.
+# 0 = no proxy (dev). 1 = single proxy hop (Cloudflare / one nginx).
+# Set higher only if you have multiple proxies you control.
+# Used by TrustedProxyMiddleware AND propagated to DRF throttles below.
+TRUSTED_PROXY_HOPS = int(os.getenv('TRUSTED_PROXY_HOPS', '1' if IS_PRODUCTION else '0'))
 
 
 ROOT_URLCONF = 'serverConfig.urls'
@@ -230,9 +243,19 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 MEDIA_URL = os.getenv('MEDIA_URL', '/media/')
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-# Add Cross-Origin-Resource-Policy header for development
+# Cross-origin / referrer
 SECURE_CROSS_ORIGIN_OPENER_POLICY = None
-SECURE_REFERRER_POLICY = 'no-referrer-when-downgrade'
+SECURE_REFERRER_POLICY = 'same-origin' if IS_PRODUCTION else 'no-referrer-when-downgrade'
+
+# Production-only hardening
+if IS_PRODUCTION:
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 365
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
+    assert not DEBUG, "DEBUG must be False in production"
 
 # Django 4.2+ Storages configuration
 STORAGES = {
@@ -330,18 +353,82 @@ REST_AUTH_SERIALIZERS = {
 }
 
 REST_FRAMEWORK = {
+    'NUM_PROXIES': TRUSTED_PROXY_HOPS,
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'accounts.authentication.JWTAuthenticationFromCookies',
     ),
+    'DEFAULT_THROTTLE_CLASSES': (
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        # Baseline limits — tune in env if needed
+        'anon': os.getenv('THROTTLE_ANON', '120/min'),
+        'user': os.getenv('THROTTLE_USER', '300/min'),
+        # Scoped throttles (per-view) — keep tight on sensitive endpoints
+        'auth_login':    os.getenv('THROTTLE_AUTH_LOGIN',    '5/min'),
+        'auth_register': os.getenv('THROTTLE_AUTH_REGISTER', '5/min'),
+        'auth_password': os.getenv('THROTTLE_AUTH_PASSWORD', '5/min'),
+        'wallet_write':  os.getenv('THROTTLE_WALLET_WRITE',  '20/min'),
+        'analytics_ingest': os.getenv('THROTTLE_ANALYTICS_INGEST', '120/min'),
+        'admin_read':    os.getenv('THROTTLE_ADMIN_READ',    '600/min'),
+    },
 }
 
-# AUTHENTICATION_BACKENDS = [
-#     'accounts.backends.EmailBackend',
-#     'django.contrib.auth.backends.ModelBackend'
-# ]
+# -----------------------------------------------------------------------------
+# Celery — broker + result backend on Redis.
+# Worker concurrency caps DB connections; size it to match Postgres budget.
+# -----------------------------------------------------------------------------
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = True
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_TIME_LIMIT = 60
+CELERY_TASK_SOFT_TIME_LIMIT = 45
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+
+# Rate-limit cache (django-ratelimit reads from default cache)
+RATELIMIT_USE_CACHE = "default"
+RATELIMIT_ENABLE = os.getenv("RATELIMIT_ENABLE", "True") == "True"
+
+# django-axes MUST sit at the top of AUTHENTICATION_BACKENDS so it can
+# intercept failed logins before any other backend authenticates.
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+# ---------------------------------------------------------------------------
+# django-axes — brute-force protection
+# Configured VPN-safe: lockouts apply to the USERNAME only, never the IP.
+# That way users sharing a VPN exit IP can't lock each other out.
+# ---------------------------------------------------------------------------
+AXES_ENABLED = os.getenv('AXES_ENABLED', 'True') == 'True'
+AXES_FAILURE_LIMIT = int(os.getenv('AXES_FAILURE_LIMIT', '5'))
+AXES_COOLOFF_TIME = timedelta(minutes=int(os.getenv('AXES_COOLOFF_MIN', '30')))
+# Lock by username only — NOT by IP. Critical for VPN/shared-IP users.
+AXES_LOCK_OUT_AT_FAILURE = True
+AXES_ONLY_USER_FAILURES = True
+AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP = False
+AXES_LOCK_OUT_BY_USER_OR_IP = False
+AXES_RESET_ON_SUCCESS = True
+# Use the IP the trusted-proxy middleware sets (real client IP).
+AXES_PROXY_COUNT = TRUSTED_PROXY_HOPS
+AXES_META_PRECEDENCE_ORDER = ['HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR']
+AXES_LOCKOUT_PARAMETERS = ['username']
+# Don't log out OTHER sessions of a locked account — just block new auth attempts.
+AXES_DISABLE_ACCESS_LOG = False
+AXES_VERBOSE = not IS_PRODUCTION
+AXES_CACHE = 'default'
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:5174",
@@ -377,8 +464,8 @@ CORS_ORIGIN_WHITELIST = [
     "https://api.sharptoolz.com",
 ]
 
-# Additional CORS settings
-CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins in development
+# Allow all origins ONLY in development. Production must use the explicit list.
+CORS_ALLOW_ALL_ORIGINS = not IS_PRODUCTION
 CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
 CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 
@@ -429,12 +516,14 @@ SESSION_COOKIE_PATH = '/'
 
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=2),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=2),
-    # 'ROTATE_REFRESH_TOKENS': False,
-    # 'BLACKLIST_AFTER_ROTATION': False,
-    'SIGNING_KEY': 'your-secret-key-here',  # use env var in prod
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.getenv('JWT_ACCESS_MIN', '30'))),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.getenv('JWT_REFRESH_DAYS', '7'))),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'SIGNING_KEY': os.getenv('JWT_SIGNING_KEY', SECRET_KEY),
 }
+if IS_PRODUCTION and (SIMPLE_JWT['SIGNING_KEY'] in (None, '', 'your-secret-key-here') or SECRET_KEY.startswith('django-insecure-')):
+    raise RuntimeError("JWT_SIGNING_KEY (or SECRET_KEY) must be set to a strong secret in production")
 
 SITE_ID = 1
 

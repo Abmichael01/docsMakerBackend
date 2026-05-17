@@ -1,10 +1,9 @@
 import uuid
+
 from .utils import is_bot_user_agent
-from .services import record_visit, update_presence
-import threading
-import hashlib
-from django.utils import timezone
-from django.core.cache import cache
+from .services import update_presence
+from .redis_tracking import incr_visit_counter, mark_seen
+from .tasks import record_visit_task
 
 
 def resolve_request_user(request):
@@ -38,7 +37,6 @@ def resolve_request_user(request):
         return None
 
 
-# Paths that should NOT contribute to visitor logs (avoid noise / recursion).
 _VISIT_LOG_SKIP_PREFIXES = (
     '/static/',
     '/media/',
@@ -46,10 +44,10 @@ _VISIT_LOG_SKIP_PREFIXES = (
     '/__debug__/',
     '/favicon.ico',
     '/api/u/p/',
-    '/api/analytics/',             # All analytics endpoints
-    '/api/auth/',                  # Auth is too noisy
+    '/api/analytics/',
+    '/api/auth/',
     '/api/token/',
-    '/_next/',                     # Next.js internal calls
+    '/_next/',
 )
 
 
@@ -59,12 +57,35 @@ def _should_record_visit(path):
     return not any(path.startswith(p) for p in _VISIT_LOG_SKIP_PREFIXES)
 
 
+def _build_attribution_payload(request):
+    """Snapshot just the bits of the request the worker needs (JSON-safe)."""
+    return {
+        "referrer": request.META.get('HTTP_REFERER'),
+        "user_agent": request.META.get('HTTP_USER_AGENT', '')[:1000],
+        "ip": request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
+              or request.META.get('REMOTE_ADDR'),
+        "query": request.META.get('QUERY_STRING', '')[:500],
+    }
+
+
 class VisitorTrackingMiddleware:
+    """
+    Redis-first request tracking.
+
+    Hot path per request:
+        - assign/persist a visitor cookie
+        - update presence (Redis only)
+        - increment a daily counter (Redis only)
+        - on FIRST sighting of this identity today, enqueue ONE Celery task
+          that writes a VisitorLog row in a worker process
+
+    No threads spawned. No Postgres connection opened from the request thread.
+    """
+
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        # 1. Identity Management (Standardized Persistent VUID)
         vuid = request.COOKIES.get('vux_id')
         new_vuid_created = False
         if not vuid:
@@ -75,53 +96,32 @@ class VisitorTrackingMiddleware:
         user_agent = request.META.get('HTTP_USER_AGENT', '')
         request.is_bot = is_bot_user_agent(user_agent)
 
-        if not request.is_bot:
-            # 2. Resolve user once (handles both session + DRF token auth).
-            #    DRF token auth runs at the view layer, so request.user is
-            #    AnonymousUser here for API calls — we look up the token directly.
+        if not request.is_bot and _should_record_visit(request.path):
             resolved_user = resolve_request_user(request)
             request.resolved_user = resolved_user
+            user_id = getattr(resolved_user, 'id', None) if resolved_user else None
+            is_auth = bool(user_id)
 
-            # 3. Active User Tracking (Presence) — every request keeps the
-            #    "online now" list accurate. Identified users are grouped by
-            #    username so multiple tabs/devices count as one person.
+            # 1. Realtime presence (Redis only).
             update_presence(vuid, user=resolved_user)
 
-            # 4. Server-side Visit Tracking — primary source of truth.
-            #    Frontend tracking is unreliable (ad blockers strip /analytics/
-            #    URLs), so we record visits server-side for any meaningful
-            #    request path. record_visit() dedups within 15 minutes per
-            #    (visitor, path) so this isn't write-amplified.
-            if _should_record_visit(request.path):
-                # Patch request.user so record_visit() picks up the resolved user
-                # (record_visit reads request.user via get_attribution_for_request).
-                if resolved_user is not None and not getattr(getattr(request, 'user', None), 'is_authenticated', False):
-                    request.user = resolved_user
-                
-                # Senior Optimization: Fast Deduplication Check (Redis)
-                # Check here BEFORE spawning a thread to save CPU/RAM/Threads.
-                # If they hit the same page today, we skip.
-                today = timezone.now().date().isoformat()
-                path_hash = hashlib.md5(request.path.encode()).hexdigest()[:10]
-                dedup_key = f"vlog:dedup:vlog:{vuid}:{path_hash}:{today}"
-                
-                if not cache.get(dedup_key):
-                    # Senior Optimization: Fire-and-Forget background thread.
-                    # This ensures the user gets their response IMMEDIATELY
-                    # without waiting for the Database write.
-                    threading.Thread(
-                        target=record_visit,
-                        kwargs={
-                            "path": request.path,
-                            "request": request,
-                            "visitor_id": vuid,
-                        },
-                        daemon=True
-                    ).start()
+            # 2. Daily counters (Redis only — cheap, never touches DB).
+            incr_visit_counter(authenticated=is_auth)
+
+            # 3. Only persist a VisitorLog row the FIRST time we see this
+            #    identity today. Everything after that is free.
+            if mark_seen(vuid, user_id=user_id):
+                record_visit_task.delay({
+                    "path": request.path,
+                    "visitor_id": vuid,
+                    "user_id": user_id,
+                    "is_bot": False,
+                    "attribution": _build_attribution_payload(request),
+                    "referrer": request.META.get('HTTP_REFERER'),
+                })
 
         response = self.get_response(request)
 
-        # 5. Persist the identity cookie for 1 year
         if new_vuid_created:
             response.set_cookie(
                 'vux_id',
@@ -132,4 +132,3 @@ class VisitorTrackingMiddleware:
             )
 
         return response
-

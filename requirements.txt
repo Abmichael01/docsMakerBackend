@@ -77,6 +77,15 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.1.0
 PyYAML==6.0.2
 redis==6.2.0
+celery==5.4.0
+django-celery-beat==2.6.0
+django-ratelimit==4.1.0
+django-axes==6.5.2
+django-ipware==7.0.1
+kombu==5.4.2
+billiard==4.2.1
+vine==5.1.0
+amqp==5.2.0
 referencing==0.37.0
 rembg==2.0.72
 removebg==0.4

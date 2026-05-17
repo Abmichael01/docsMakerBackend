@@ -127,13 +127,13 @@ def record_visit(*, path, attribution_payload=None, request=None, scope=None, re
         attribution = get_attribution_for_request(request, override_attribution=attribution_payload)
         user_obj = getattr(request, 'user', None)
         resolved_user = user_obj if (user_obj and user_obj.is_authenticated) else None
-        
+
         # Fallback to session_key (which includes IP) if no persistent ID exists
         resolved_visitor_id = visitor_id or getattr(request, 'vuid', None) or session_key
-        
+
         resolved_is_bot = getattr(request, 'is_bot', is_bot)
         user_agent = request.META.get('HTTP_USER_AGENT', '')[:1000]
-    else:
+    elif scope is not None:
         ip = get_client_ip(scope=scope)
         session_key = get_visitor_session_key(scope=scope)
         attribution = get_attribution_for_scope(scope, override_attribution=attribution_payload, referrer=referrer)
@@ -142,6 +142,23 @@ def record_visit(*, path, attribution_payload=None, request=None, scope=None, re
         resolved_is_bot = is_bot
         headers = dict(scope.get('headers', [])) if scope else {}
         user_agent = headers.get(b'user-agent', b'').decode('utf-8', errors='ignore')[:1000] if headers else ''
+    else:
+        # Worker-side path: called from a Celery task with a serialized payload.
+        # No request/scope is available — just use what the producer captured.
+        payload = attribution_payload or {}
+        ip = payload.get('ip')
+        session_key = None
+        attribution = normalize_attribution(payload, referrer=referrer)
+        resolved_user = None
+        if payload.get('user_id'):
+            try:
+                from django.contrib.auth import get_user_model
+                resolved_user = get_user_model().objects.filter(pk=payload['user_id']).first()
+            except Exception:
+                resolved_user = None
+        resolved_visitor_id = visitor_id
+        resolved_is_bot = bool(is_bot)
+        user_agent = (payload.get('user_agent') or '')[:1000]
 
     try:
         # Senior Optimization: Deduplication via Redis

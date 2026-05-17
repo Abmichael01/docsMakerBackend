@@ -1,0 +1,68 @@
+# ------------------------------------------------------------------------------
+#  Sharptoolz Celery Worker – Dokploy
+#  Runs background analytics tasks. Scale horizontally as needed.
+# ------------------------------------------------------------------------------
+
+# -- Stage 1: Build deps --
+FROM python:3.11-slim-bullseye AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_IN_PROJECT=1 \
+    POETRY_VIRTUALENVS_CREATE=1 \
+    POETRY_CACHE_DIR=/tmp/poetry_cache
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    pkg-config \
+    python3-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install poetry>=2.0.0
+
+COPY pyproject.toml poetry.lock* ./
+RUN poetry lock && poetry install --no-root && rm -rf $POETRY_CACHE_DIR
+
+
+# -- Stage 2: Runtime --
+FROM python:3.11-slim-bullseye AS runtime
+
+ENV VIRTUAL_ENV=/app/.venv \
+    PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH="/app" \
+    PYTHONUNBUFFERED=1 \
+    CELERY_CONCURRENCY=4 \
+    CELERY_LOGLEVEL=info \
+    CELERY_QUEUES=celery
+
+WORKDIR /app
+
+# Runtime libs (mirrors web image so tasks importing cairo/PIL/etc. work)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    libxml2-dev \
+    libxslt1-dev \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libasound2 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/.venv /app/.venv
+COPY . .
+
+# Worker health = can it reach the broker and respond to ping?
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD celery -A serverConfig inspect ping -d celery@$HOSTNAME || exit 1
+
+CMD celery -A serverConfig worker \
+    --loglevel="$CELERY_LOGLEVEL" \
+    --concurrency="$CELERY_CONCURRENCY" \
+    --queues="$CELERY_QUEUES" \
+    --max-tasks-per-child=500 \
+    -n "worker@%h"

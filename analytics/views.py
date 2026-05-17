@@ -2,6 +2,7 @@ from rest_framework.decorators import action
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser, AllowAny
+from rest_framework.throttling import ScopedRateThrottle
 from django.db.models import Count, Sum, Q
 from django.db.models.functions import TruncDate
 from django.utils import timezone
@@ -103,29 +104,47 @@ class CampaignViewSet(viewsets.ModelViewSet):
         })
 
 class LogVisitView(APIView):
+    """
+    Public ingest endpoint. We DO NOT call record_visit synchronously anymore —
+    that opens a Postgres connection on the request thread. Instead we enqueue
+    a Celery task so worker concurrency caps the DB pressure.
+    """
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'analytics_ingest'
 
     def post(self, request):
-        path = request.data.get('path', '')
-        attribution_payload = request.data.get('attribution') or {}
-        referrer = request.data.get('referrer')
-        visitor_id = request.data.get('visitor_id')
+        from .tasks import record_visit_task
+        from .redis_tracking import incr_visit_counter, mark_seen
 
+        path = request.data.get('path', '')
         if not path:
             return Response({"status": "ignored"})
 
-        _log_instance, visitor_payload = record_visit(
-            path=path,
-            attribution_payload=attribution_payload,
-            request=request,
-            referrer=referrer,
-            visitor_id=visitor_id,
-        )
+        vuid = (request.data.get('visitor_id')
+                or getattr(request, 'vuid', None)
+                or request.COOKIES.get('vux_id'))
+        user = getattr(request, 'user', None)
+        user_id = user.id if user and user.is_authenticated else None
+
+        # Always count; only persist on the first sighting of the day.
+        incr_visit_counter(authenticated=bool(user_id))
+        if mark_seen(vuid or 'anon', user_id=user_id):
+            record_visit_task.delay({
+                "path": path,
+                "visitor_id": vuid,
+                "user_id": user_id,
+                "is_bot": False,
+                "attribution": request.data.get('attribution') or {},
+                "referrer": request.data.get('referrer'),
+            })
 
         return Response({"status": "ok"})
 
 class AnalyticsDashboardView(APIView):
     permission_classes = [IsAdminUser]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'admin_read'
 
     def get(self, request):
         start_datetime, end_datetime, range_label, days = get_admin_date_range(
@@ -311,7 +330,7 @@ class AnalyticsDashboardView(APIView):
         ]
 
         unique_count = visitor_summary['unique_visitors'] or 0
-        sales_count = payment_summary['total_sales'] or 0
+        sales_count = revenue_summary['total_sales'] or 0
 
         response = Response({
             "chart_data": list(stats_map.values()),

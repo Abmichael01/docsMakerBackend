@@ -4,7 +4,7 @@ from django.core.cache import cache
 from django.utils import timezone
 from asgiref.sync import sync_to_async
 from .utils import get_persistent_visitor_id, get_visitor_session_key, is_bot_user_agent
-from .services import record_visit, ONLINE_SET_KEY, update_presence
+from .services import ONLINE_SET_KEY, update_presence
 
 PRESENCE_CACHE_KEY = "online_visitor_sessions"
 
@@ -152,8 +152,30 @@ class PresenceConsumer(AsyncWebsocketConsumer):
 
 
 class VisitorAnalyticsConsumer(AsyncWebsocketConsumer):
+    """
+    Public analytics socket. Anyone can connect, so we MUST cap how often a
+    single connection can send page_view events. We never write directly —
+    everything is enqueued to Celery.
+    """
+    PAGE_VIEW_LIMIT_PER_MIN = 60
+
     async def connect(self):
+        headers = dict(self.scope.get('headers', []))
+        ua = headers.get(b'user-agent', b'').decode('utf-8', errors='ignore')
+        if is_bot_user_agent(ua):
+            await self.close(code=4003)
+            return
+        self._page_view_count = 0
+        self._window_started = timezone.now().timestamp()
         await self.accept()
+
+    def _bump_and_check_rate(self) -> bool:
+        now = timezone.now().timestamp()
+        if now - self._window_started >= 60:
+            self._window_started = now
+            self._page_view_count = 0
+        self._page_view_count += 1
+        return self._page_view_count <= self.PAGE_VIEW_LIMIT_PER_MIN
 
     async def receive(self, text_data=None, bytes_data=None):
         if not text_data:
@@ -174,42 +196,33 @@ class VisitorAnalyticsConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({"type": "heartbeat_ack"}))
             return
 
+        if not self._bump_and_check_rate():
+            await self.send(text_data=json.dumps({"type": "rate_limited"}))
+            return
+
         path = payload.get("path", "")
         if not path:
             await self.send(text_data=json.dumps({"type": "error", "detail": "Path is required"}))
             return
 
-        attribution = payload.get("attribution") or {}
-        referrer = payload.get("referrer")
+        visitor_id = get_persistent_visitor_id(scope=self.scope)
         user = self.scope.get("user")
-        user_agent = dict(self.scope.get("headers", [])).get(b'user-agent', b'').decode('utf-8', errors='ignore')
-        is_bot = is_bot_user_agent(user_agent)
-        
-        # Senior Optimization: Don't record bot visits via WebSocket
-        if is_bot:
-            await self.send(text_data=json.dumps({"type": "visit_ignored", "reason": "bot"}))
-            return
+        user_id = user.id if user and getattr(user, 'is_authenticated', False) else None
 
-        _log_instance, visitor_payload = await sync_to_async(record_visit)(
-            path=path,
-            attribution_payload=attribution,
-            scope=self.scope,
-            referrer=referrer,
-            user=user,
-            visitor_id=get_persistent_visitor_id(scope=self.scope),
-            is_bot=is_bot,
-        )
+        from .redis_tracking import incr_visit_counter, mark_seen
+        from .tasks import record_visit_task
 
-        if visitor_payload:
-            await self.channel_layer.group_send(
-                "admin_activity",
-                {
-                    "type": "activity_event",
-                    "data": {
-                        "type": "new_visit",
-                        "visitor": visitor_payload,
-                    }
-                }
-            )
+        await sync_to_async(incr_visit_counter)(authenticated=bool(user_id))
+        first_today = await sync_to_async(mark_seen)(visitor_id or 'anon', user_id=user_id)
+
+        if first_today:
+            record_visit_task.delay({
+                "path": path,
+                "visitor_id": visitor_id,
+                "user_id": user_id,
+                "is_bot": False,
+                "attribution": payload.get("attribution") or {},
+                "referrer": payload.get("referrer"),
+            })
 
         await self.send(text_data=json.dumps({"type": "visit_logged", "path": path}))
