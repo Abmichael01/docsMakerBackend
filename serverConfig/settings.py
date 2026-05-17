@@ -247,14 +247,11 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 SECURE_CROSS_ORIGIN_OPENER_POLICY = None
 SECURE_REFERRER_POLICY = 'same-origin' if IS_PRODUCTION else 'no-referrer-when-downgrade'
 
-# Production-only hardening
-# SECURE_SSL_REDIRECT is OFF by default because Cloudflare in "Flexible" SSL
-# mode talks HTTP to origin, which creates a redirect loop (502). Cloudflare
-# already serves HTTPS to end users, so this is safe to leave off unless you
-# explicitly run CF in "Full" or "Full (strict)" mode AND want a belt-and-
-# braces redirect at the origin. Flip via env when ready.
+# Production-only hardening.
+# Note: SECURE_SSL_REDIRECT is intentionally NOT set — Cloudflare already
+# upgrades HTTP→HTTPS at the edge, so origin-side redirect is redundant and
+# breaks under CF "Flexible" SSL mode (redirect loop → 502).
 if IS_PRODUCTION:
-    SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False') == 'True'
     SECURE_HSTS_SECONDS = 60 * 60 * 24 * 365
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
