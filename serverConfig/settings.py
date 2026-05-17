@@ -413,17 +413,12 @@ AUTHENTICATION_BACKENDS = [
 AXES_ENABLED = os.getenv('AXES_ENABLED', 'True') == 'True'
 AXES_FAILURE_LIMIT = int(os.getenv('AXES_FAILURE_LIMIT', '5'))
 AXES_COOLOFF_TIME = timedelta(minutes=int(os.getenv('AXES_COOLOFF_MIN', '30')))
-# Lock by username only — NOT by IP. Critical for VPN/shared-IP users.
 AXES_LOCK_OUT_AT_FAILURE = True
-AXES_ONLY_USER_FAILURES = True
-AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP = False
-AXES_LOCK_OUT_BY_USER_OR_IP = False
 AXES_RESET_ON_SUCCESS = True
-# Use the IP the trusted-proxy middleware sets (real client IP).
-AXES_PROXY_COUNT = TRUSTED_PROXY_HOPS
-AXES_META_PRECEDENCE_ORDER = ['HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR']
+# v6 unified config: lock by username only — VPN-safe.
 AXES_LOCKOUT_PARAMETERS = ['username']
-# Don't log out OTHER sessions of a locked account — just block new auth attempts.
+AXES_IPWARE_PROXY_COUNT = TRUSTED_PROXY_HOPS
+AXES_IPWARE_META_PRECEDENCE_ORDER = ('HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR')
 AXES_DISABLE_ACCESS_LOG = False
 AXES_VERBOSE = not IS_PRODUCTION
 AXES_CACHE = 'default'
