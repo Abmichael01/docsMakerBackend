@@ -170,24 +170,19 @@ class PayoutRejectView(APIView):
 
         return Response({"detail": "Payout rejected.", "request": _serialize(req)})
 
+    FORFEIT_KEYWORDS = ("fraud", "abuse", "suspicious", "violation", "chargeback")
+
     def handle_rejection(self, req: WithdrawalRequest, reason: str) -> None:
-        """Decide what happens to the user's held referral balance on rejection.
+        """Refund the held referral balance unless the reason signals abuse.
 
-        The amount in `req.amount` was already deducted from `req.user.wallet.referral_balance`
-        when the request was submitted. Options:
+        Amount was debited from `referral_balance` on request submission
+        (see api/views/referrals.py:request_withdrawal). On rejection we either:
 
-          (a) Auto-refund: credit `req.amount` back to `req.user.wallet.referral_balance`.
-              Pros: best UX, no manual ops. Cons: a bad-actor user could spam requests.
-
-          (b) Keep funds held / forfeit on reject: do nothing here. User must contact
-              support. Pros: deters abuse. Cons: looks like theft if rejection is for
-              admin-side reasons (typo'd address etc.).
-
-          (c) Refund only if `reason` matches a whitelist (e.g. "wrong_address"),
-              forfeit if it matches a fraud reason. Middle ground.
-
-        TODO(user): implement the policy below.
+          - Forfeit: reason contains a fraud/abuse keyword → balance stays gone.
+            Admin can still manually credit via /admin/wallet/adjust if needed.
+          - Refund: default → credit the amount back to the user's referral_balance.
         """
-        raise NotImplementedError(
-            "handle_rejection: implement refund policy in api/views/payouts.py"
-        )
+        reason_lc = (reason or "").lower()
+        if any(keyword in reason_lc for keyword in self.FORFEIT_KEYWORDS):
+            return
+        req.user.wallet.credit_referral(req.amount)
