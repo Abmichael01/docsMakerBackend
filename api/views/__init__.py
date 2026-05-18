@@ -9,6 +9,7 @@ from .variables import TransformVariableViewSet
 from .settings import SiteSettingsViewSet
 from .referrals import ReferralViewSet
 from .wallet import WalletStatsView, WalletListView, WalletAdjustView, PendingRequestsView, ApproveRequestView, RejectRequestView, TransactionHistoryView
+from .payouts import PayoutListView, PayoutApproveView, PayoutRejectView
 from .ai_chat import AiChatView
 from .ai_chat.sessions import AiChatSessionViewSet
 from .contact import ContactView
