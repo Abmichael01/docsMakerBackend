@@ -5,6 +5,7 @@ from .views import (
     TutorialViewSet, TransformVariableViewSet, ReferralViewSet,
     DownloadDoc, IncrementDownloads, RemoveBackgroundView, AdminOverview, AdminUsers, AdminUserDetails, AdminDocuments,
     WalletStatsView, WalletListView, WalletAdjustView, PendingRequestsView, ApproveRequestView, RejectRequestView, TransactionHistoryView,
+    PayoutListView, PayoutApproveView, PayoutRejectView,
     AiChatView, AiChatSessionViewSet, ContactView,
 )
 from django.urls import path
@@ -47,6 +48,12 @@ urlpatterns = [
     path("admin/wallet/approve/", ApproveRequestView.as_view(), name="admin-wallet-approve"),
     path("admin/wallet/reject/", RejectRequestView.as_view(), name="admin-wallet-reject"),
     path("admin/wallet/transactions/", TransactionHistoryView.as_view(), name="admin-wallet-transactions"),
+
+    # Admin Referral Payout Requests
+    path("admin/payouts/", PayoutListView.as_view(), name="admin-payouts-list"),
+    path("admin/payouts/approve/", PayoutApproveView.as_view(), name="admin-payouts-approve"),
+    path("admin/payouts/reject/", PayoutRejectView.as_view(), name="admin-payouts-reject"),
+
     path("health/", health_check, name="health-check"),
 ]
 urlpatterns += router.urls
