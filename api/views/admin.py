@@ -170,6 +170,8 @@ class AdminUsers(APIView):
                 'staff_users': staff_users_count,
                 'new_users': new_users,
                 'total_purchases_users': purchases_stats,
+                'range_label': range_label,
+                'range_days': days,
             }
 
             # Pagination
