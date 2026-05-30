@@ -1,6 +1,7 @@
 import json
 import asyncio
 from django.conf import settings
+from django.db import close_old_connections
 from django.http import StreamingHttpResponse
 from django.views import View
 from django.utils.decorators import method_decorator
@@ -350,6 +351,11 @@ class AiChatView(View):
                 traceback.print_exc()
                 yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
                 yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            finally:
+                # Release the executor-thread DB connection promptly. Without
+                # this the connection stays parked for CONN_MAX_AGE (20s) per
+                # asgiref pool thread — under chat load that pins our budget.
+                await sync_to_async(close_old_connections)()
 
         response = StreamingHttpResponse(stream_generator(), content_type="text/event-stream")
         for k, v in [("Cache-Control", "no-cache, no-transform"), ("X-Accel-Buffering", "no"), ("Connection", "keep-alive"), ("X-Content-Type-Options", "nosniff"), ("Content-Encoding", "identity")]:

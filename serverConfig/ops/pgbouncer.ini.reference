@@ -1,0 +1,53 @@
+; /etc/pgbouncer/pgbouncer.ini  -- sharptoolz on Contabo VPS
+;
+; Replace HOST/DB/USER if your DATABASE_URL differs. The django app should
+; then point DATABASE_URL at port 6432 (PgBouncer) instead of 5432 (Postgres).
+;
+; Defaults below assume 4 vCPU / 8GB-ish VPS. Tune `default_pool_size`
+; relative to Postgres' `max_connections`:
+;     real_backends_used = default_pool_size + reserve_pool_size
+;     keep that well below Postgres' max_connections.
+
+[databases]
+sharptoolz = host=127.0.0.1 port=5432 dbname=sharptoolz
+
+[pgbouncer]
+listen_addr        = 127.0.0.1
+listen_port        = 6432
+unix_socket_dir    = /var/run/postgresql
+
+auth_type          = scram-sha-256
+auth_file          = /etc/pgbouncer/userlist.txt
+admin_users        = postgres
+stats_users        = postgres
+
+; -- Pooling ----------------------------------------------------------------
+; "transaction" gives best multiplexing — a Postgres backend is returned to
+; the pool at the end of each transaction, not at client disconnect. Django
+; must be configured with CONN_MAX_AGE=0 and DISABLE_SERVER_SIDE_CURSORS=True
+; when this mode is active.
+pool_mode          = transaction
+
+max_client_conn    = 400          ; total app-side connections we'll accept
+default_pool_size  = 25           ; real Postgres backends per (db,user)
+reserve_pool_size  = 5            ; burst capacity above default_pool_size
+reserve_pool_timeout = 3          ; secs a waiting client uses reserve pool
+
+; -- Lifetime / timeouts ----------------------------------------------------
+server_idle_timeout    = 60       ; trim idle real backends after 60s
+server_lifetime        = 1800     ; recycle real backends every 30min
+query_wait_timeout     = 30       ; max secs a client query waits for a slot
+client_idle_timeout    = 0        ; let the app/proxy manage idle clients
+
+; -- Django/psycopg2 compatibility -----------------------------------------
+; Django sets `extra_float_digits` and may pass `options` — PgBouncer rejects
+; non-standard startup params unless ignored.
+ignore_startup_parameters = extra_float_digits,options
+
+; -- Logging ----------------------------------------------------------------
+logfile           = /var/log/postgresql/pgbouncer.log
+pidfile           = /var/run/postgresql/pgbouncer.pid
+log_connections   = 0
+log_disconnections = 0
+log_pooler_errors = 1
+stats_period      = 60

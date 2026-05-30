@@ -1,0 +1,53 @@
+# ------------------------------------------------------------------------------
+#  PgBouncer for SharpToolz — deployable on Dokploy / Coolify
+#
+#  Uses `edoburu/pgbouncer`, which generates pgbouncer.ini and userlist.txt
+#  at container start from env vars. That means every knob below is set in
+#  the Dokploy "Environment" tab — no rebuilds needed to retune.
+#
+#  Required env vars (set in Dokploy):
+#    DB_HOST          host of your Postgres (e.g. "postgres" if PG is also
+#                     a Dokploy service, or "<contabo-ip>" if external)
+#    DB_PORT          5432 by default
+#    DB_USER          your app's PG user
+#    DB_PASSWORD      that user's password (plain — edoburu hashes it for us)
+#    DB_NAME          sharptoolz
+#
+#  Recommended env vars (with defaults):
+#    POOL_MODE             transaction
+#    MAX_CLIENT_CONN       400
+#    DEFAULT_POOL_SIZE     25
+#    RESERVE_POOL_SIZE     5
+#    SERVER_IDLE_TIMEOUT   60
+#    SERVER_LIFETIME       1800
+#    QUERY_WAIT_TIMEOUT    30
+#    AUTH_TYPE             scram-sha-256
+#    LISTEN_PORT           6432
+#    IGNORE_STARTUP_PARAMETERS  extra_float_digits,options
+#
+#  Then in your sharptoolz-web / -ws / -worker / -beat services, set:
+#    DATABASE_URL=postgres://<DB_USER>:<DB_PASSWORD>@sharptoolz-pgbouncer:6432/<DB_NAME>
+#  (replace sharptoolz-pgbouncer with your actual Dokploy service name)
+# ------------------------------------------------------------------------------
+
+FROM edoburu/pgbouncer:1.23.1
+
+# Defaults baked in — overridable from Dokploy env tab.
+ENV POOL_MODE=transaction \
+    MAX_CLIENT_CONN=400 \
+    DEFAULT_POOL_SIZE=25 \
+    RESERVE_POOL_SIZE=5 \
+    SERVER_IDLE_TIMEOUT=60 \
+    SERVER_LIFETIME=1800 \
+    QUERY_WAIT_TIMEOUT=30 \
+    AUTH_TYPE=scram-sha-256 \
+    LISTEN_PORT=6432 \
+    IGNORE_STARTUP_PARAMETERS=extra_float_digits,options \
+    LOG_CONNECTIONS=0 \
+    LOG_DISCONNECTIONS=0 \
+    LOG_POOLER_ERRORS=1
+
+EXPOSE 6432
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD nc -z 127.0.0.1 6432 || exit 1

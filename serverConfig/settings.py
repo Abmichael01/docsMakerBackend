@@ -60,7 +60,12 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-+#ds1yk1fdrx$=3&yf+!q$r9sy
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True" if IS_PRODUCTION else True
 
-ALLOWED_HOSTS = ['localhost', ".vercel.app", ".now.sh", ".vercel.sh", "127.0.0.1", "9bad-102-89-68-147.ngrok-free.app", "api.sharptoolz.com", "devapi.sharptoolz.com", "38.242.198.49", "testserver"]
+# ALLOWED_HOSTS is driven from the env so prod can change hosts without a code
+# deploy. Defaults cover local dev + tests; prod sets the real list via Dokploy.
+ALLOWED_HOSTS = [h.strip() for h in os.getenv(
+    "ALLOWED_HOSTS",
+    "localhost,127.0.0.1,testserver"
+).split(",") if h.strip()]
 
 # Application definition
 INSTALLED_APPS = [ 
@@ -86,9 +91,6 @@ INSTALLED_APPS = [
     "api",
     "wallet",
     "analytics",
-
-    # Debugging
-    "django_extensions",
 ]
 
 MIDDLEWARE = [
@@ -113,6 +115,7 @@ MIDDLEWARE = [
 
 if DEBUG:
     INSTALLED_APPS.append('debug_toolbar')
+    INSTALLED_APPS.append('django_extensions')
     # Should be after GZipMiddleware
     MIDDLEWARE.insert(MIDDLEWARE.index('django.middleware.gzip.GZipMiddleware') + 1, 'debug_toolbar.middleware.DebugToolbarMiddleware')
     INTERNAL_IPS = [

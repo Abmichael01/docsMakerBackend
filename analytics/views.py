@@ -44,31 +44,93 @@ class CampaignViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def stats(self, request):
         """
-        Get aggregated stats for all campaigns.
+        Aggregated stats for all campaigns.
+
+        Bulk-fetches all VisitorLog rows matching any campaign in ONE query,
+        grouped maximally on the six matcher fields, plus today's subtotal.
+        Per-campaign numbers are then reduced in Python — O(rows × campaigns)
+        but with zero DB round-trips inside the loop.
         """
         today = timezone.localdate()
-        campaigns = Campaign.objects.all()
-        total_sources = campaigns.count()
+        campaigns = list(Campaign.objects.all())
+        total_sources = len(campaigns)
 
-        combined_query = Q(pk__in=[])
-        for campaign_record in campaigns:
-            combined_query |= build_campaign_match_q(campaign_record)
+        if not total_sources:
+            return Response({
+                "total_sources": 0,
+                "total_traffic": 0,
+                "active_today": 0,
+                "campaigns": [],
+            })
 
-        campaign_visit_queryset = VisitorLog.objects.filter(combined_query, is_bot=False) if total_sources else VisitorLog.objects.none()
-        total_traffic = campaign_visit_queryset.count()
+        combined_visit_q = Q(pk__in=[])
+        combined_user_q = Q(pk__in=[])
+        for c in campaigns:
+            combined_visit_q |= build_campaign_match_q(c)
+            uq = Q(source=c.source or c.name)
+            if c.medium:
+                uq &= Q(medium=c.medium)
+            if c.campaign:
+                uq &= Q(campaign=c.campaign)
+            combined_user_q |= uq
+
+        match_fields = ('source', 'medium', 'campaign', 'content', 'term', 'source_platform')
+
+        visit_rows = list(
+            VisitorLog.objects
+            .filter(combined_visit_q, is_bot=False)
+            .values(*match_fields)
+            .annotate(
+                visits=Count('id'),
+                today_visits=Count('id', filter=Q(timestamp__date=today)),
+            )
+        )
+
+        user_rows = list(
+            User.objects
+            .filter(combined_user_q)
+            .values('source', 'medium', 'campaign')
+            .annotate(n=Count('id'))
+        )
+
+        def _row_matches(row, c):
+            """Row matches campaign iff every non-null campaign field equals the row's value."""
+            src = c.source or c.name
+            if row.get('source') != src:
+                return False
+            if (c.medium or 'custom') != row.get('medium'):
+                return False
+            for fname in ('campaign', 'content', 'term', 'source_platform'):
+                cv = getattr(c, fname)
+                if cv and row.get(fname) != cv:
+                    return False
+            return True
+
+        def _user_row_matches(row, c):
+            src = c.source or c.name
+            if row.get('source') != src:
+                return False
+            if c.medium and row.get('medium') != c.medium:
+                return False
+            if c.campaign and row.get('campaign') != c.campaign:
+                return False
+            return True
 
         breakdown = []
+        active_today = 0
         for c in campaigns:
-            visit_query = build_campaign_match_q(c)
-            c_visits = VisitorLog.objects.filter(visit_query, is_bot=False).count()
+            c_visits = 0
+            c_today = 0
+            for r in visit_rows:
+                if _row_matches(r, c):
+                    c_visits += r['visits']
+                    c_today += r['today_visits']
 
-            user_query = Q(source=c.source or c.name)
-            if c.medium:
-                user_query &= Q(medium=c.medium)
-            if c.campaign:
-                user_query &= Q(campaign=c.campaign)
+            c_users = sum(r['n'] for r in user_rows if _user_row_matches(r, c))
 
-            c_users = User.objects.filter(user_query).count()
+            if c_today > 0:
+                active_today += 1
+
             breakdown.append({
                 "id": c.id,
                 "name": c.name,
@@ -83,24 +145,16 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 "ref_code": c.ref_code,
                 "visits": c_visits,
                 "users": c_users,
-                "created_at": c.created_at
+                "created_at": c.created_at,
             })
 
-        active_today = sum(
-            1
-            for campaign_record in campaigns
-            if VisitorLog.objects.filter(
-                build_campaign_match_q(campaign_record),
-                is_bot=False,
-                timestamp__date=today,
-            ).exists()
-        )
+        total_traffic = sum(r['visits'] for r in visit_rows)
 
         return Response({
             "total_sources": total_sources,
             "total_traffic": total_traffic,
             "active_today": active_today,
-            "campaigns": breakdown
+            "campaigns": breakdown,
         })
 
 class LogVisitView(APIView):

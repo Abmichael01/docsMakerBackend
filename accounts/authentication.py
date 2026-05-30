@@ -1,14 +1,23 @@
 # accounts/authentication.py
+import hashlib
 import logging
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, AuthenticationFailed
 from django.utils.translation import gettext_lazy as _
 from django.contrib.auth.middleware import get_user
+from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.http import JsonResponse
 from django.contrib.auth.models import AnonymousUser
 from channels.db import database_sync_to_async
 from channels.middleware import BaseMiddleware
 from analytics.utils import is_bot_user_agent
+
+# Short-lived cache for resolved WS-auth users.
+# A reconnect storm of 10 attempts on the same access_token now costs 1 DB hit
+# (or 0, on hits within the TTL). TTL bounds staleness for revoked tokens.
+WS_AUTH_CACHE_TTL = 30  # seconds
+_WS_AUTH_SENTINEL_ANON = "anon"
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +53,7 @@ def _parse_cookies_from_headers(scope):
 
 @database_sync_to_async
 def get_user_from_jwt_cookie(scope):
-    # Senior Optimization: Identify bots immediately to save DB connections.
-    # Bots don't need authenticated WebSocket access.
+    # Identify bots immediately so we never even hit the DB for them.
     headers = dict(scope.get('headers', []))
     ua = headers.get(b'user-agent', b'').decode('utf-8', errors='ignore')
     if is_bot_user_agent(ua):
@@ -55,18 +63,35 @@ def get_user_from_jwt_cookie(scope):
     cookies = scope.get('cookies') or _parse_cookies_from_headers(scope)
     access_token = cookies.get('access_token')
     if not access_token:
-        logger.debug('[WS Auth] No access_token cookie found in WebSocket scope')
         return AnonymousUser()
+
+    # Cache by token-digest so a reconnect storm (10 attempts × N sockets per tab)
+    # against the same cookie costs at most 1 JWT-validate + 1 SELECT user.
+    cache_key = f"wsjwt:{hashlib.sha256(access_token.encode()).hexdigest()[:24]}"
+    cached = cache.get(cache_key)
+    if cached == _WS_AUTH_SENTINEL_ANON:
+        return AnonymousUser()
+    if cached:
+        User = get_user_model()
+        user = User.objects.filter(pk=cached, is_active=True).only(
+            'id', 'username', 'is_active', 'is_staff', 'is_superuser'
+        ).first()
+        if user:
+            return user
+        # cached pk no longer valid — fall through to re-validate
+
     try:
         auth = JWTAuthentication()
         validated_token = auth.get_validated_token(access_token)
         user = auth.get_user(validated_token)
         if user and user.is_active:
-            logger.debug('[WS Auth] Authenticated WebSocket user: %s', user.username)
+            cache.set(cache_key, user.pk, timeout=WS_AUTH_CACHE_TTL)
             return user
+        cache.set(cache_key, _WS_AUTH_SENTINEL_ANON, timeout=WS_AUTH_CACHE_TTL)
         return AnonymousUser()
     except Exception as e:
         logger.warning('[WS Auth] JWT validation failed for WebSocket: %s', e)
+        cache.set(cache_key, _WS_AUTH_SENTINEL_ANON, timeout=WS_AUTH_CACHE_TTL)
         return AnonymousUser()
 
 
