@@ -30,7 +30,7 @@
 #  (replace sharptoolz-pgbouncer with your actual Dokploy service name)
 # ------------------------------------------------------------------------------
 
-FROM edoburu/pgbouncer:1.23.1
+FROM edoburu/pgbouncer:v1.23.1-p3
 
 # Defaults baked in — overridable from Dokploy env tab.
 ENV POOL_MODE=transaction \
