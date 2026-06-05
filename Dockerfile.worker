@@ -57,8 +57,9 @@ COPY --from=builder /app/.venv /app/.venv
 COPY . .
 
 # Worker health = can it reach the broker and respond to ping?
-HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD celery -A serverConfig inspect ping -d celery@$HOSTNAME || exit 1
+# Node name MUST match the -n below (worker@%h) — pinging celery@ never replies.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD celery -A serverConfig inspect ping -d worker@$HOSTNAME || exit 1
 
 CMD celery -A serverConfig worker \
     --loglevel="$CELERY_LOGLEVEL" \

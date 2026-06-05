@@ -40,17 +40,18 @@ ENV VIRTUAL_ENV=/app/.venv \
 
 WORKDIR /app
 
-# Beat is light — only needs Postgres client and Python.
+# Beat is light — needs Postgres client, Python, and procps (for pgrep healthcheck).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    procps \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/.venv /app/.venv
 COPY . .
 
-# Beat doesn't accept connections; "healthy" = process is alive.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+# Beat doesn't accept connections; "healthy" = process is alive (needs procps).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD pgrep -f "celery.*beat" >/dev/null || exit 1
 
 # Ensure django_celery_beat tables exist before scheduling, then start beat.
