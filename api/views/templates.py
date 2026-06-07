@@ -132,6 +132,36 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
             queryset = queryset.defer('form_fields', 'svg_file')
         
         return queryset.order_by('-created_at')
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        stats = {
+            'total': queryset.count(),
+            'active': queryset.filter(is_active=True).count(),
+            'inactive': queryset.filter(is_active=False).count(),
+            'hot': queryset.filter(hot=True).count(),
+        }
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            response = self.get_paginated_response(serializer.data)
+            paginator_page = getattr(self.paginator, 'page', None)
+            response.data['current_page'] = paginator_page.number if paginator_page else 1
+            response.data['total_pages'] = paginator_page.paginator.num_pages if paginator_page else 1
+            response.data['stats'] = stats
+            return response
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'count': stats['total'],
+            'next': None,
+            'previous': None,
+            'current_page': 1,
+            'total_pages': 1,
+            'stats': stats,
+            'results': serializer.data,
+        })
     
     # Removed get_svg action in favor of direct svg_url in serializer
     
