@@ -22,6 +22,7 @@ IMPORTANT RULES:
     e.g. Error_Message.textarea.editable.showIf_Status[Error]
 """
 
+import re
 from typing import Optional, List
 
 # ============================================================================
@@ -32,7 +33,7 @@ from typing import Optional, List
 VALID_TYPES = [
     "text", "textarea", "upload", "file", "sign", "date",
     "gen", "number", "checkbox", "range", "color", "email",
-    "tel", "status", "password", "hide", "hide_checked", "hide_unchecked", "qrcode"
+    "tel", "status", "password", "hide", "hide_checked", "hide_unchecked", "qrcode", "barcode"
 ]
 # Note: "depends" is NOT in VALID_TYPES — it's an extension, not a field type.
 
@@ -45,7 +46,7 @@ FLAG_EXTENSIONS = [
 
 # Modifier prefixes (matched by startswith)
 VALID_MODIFIER_PREFIXES = [
-    "max_", "depends_", "select_", "link_", "date_", "gen_", "qrcode_", "grayscale_", "showIf_", "mode_",
+    "max_", "depends_", "select_", "link_", "date_", "gen_", "qrcode_", "barcode_", "grayscale_", "showIf_", "mode_",
 ]
 
 # ============================================================================
@@ -60,16 +61,16 @@ ALLOWED_AFTER = {
     "min":          ["text", "textarea", "gen", "number", "range", "max", "hide", "hide_checked", "hide_unchecked"],
     "editable":     ["text", "textarea", "gen", "email", "number", "date", "checkbox",
                      "upload", "tel", "password", "range", "color", "file", "status", "sign", "qrcode",
-                     "select", "depends", "hide", "hide_checked", "hide_unchecked", "qrcode"],
+                     "select", "depends", "hide", "hide_checked", "hide_unchecked", "qrcode", "barcode"],
     "tracking_id":  ["gen", "max", "min", "text", "number", "hide", "hide_checked", "hide_unchecked"],
     "link":         ["tracking_id"],
     "date_format":  ["date", "hide", "hide_checked", "hide_unchecked"],
     "gen_rule":     ["gen", "hide", "hide_checked", "hide_unchecked"],
-    "mode":         ["gen", "qrcode", "hide", "hide_checked", "hide_unchecked"],
+    "mode":         ["gen", "qrcode", "barcode", "hide", "hide_checked", "hide_unchecked"],
     "grayscale":    ["upload", "file", "depends", "hide", "hide_checked", "hide_unchecked"],
     "select":       ["editable"],  # track_ is checked separately
     "showIf":       ["text", "textarea", "gen", "email", "number", "date", "checkbox",
-                     "upload", "tel", "password", "range", "color", "file", "status", "sign", "qrcode",
+                     "upload", "tel", "password", "range", "color", "file", "status", "sign", "qrcode", "barcode",
                      "hide", "hide_checked", "hide_unchecked",
                      "editable", "max", "min", "tracking_id", "date_format", "gen_rule", "select"],
 }
@@ -114,7 +115,9 @@ def validate_svg_id(element_id: str) -> tuple[bool, Optional[str]]:
     if "." not in cleaned_id:
         return False, "💡 Add '.text' or another extension to make this an editable field!"
 
-    parts = cleaned_id.split(".")
+    # Split on dots that are NOT inside parentheses — generator-rule tokens
+    # (e.g. (dep_Order.Subtotal)) may contain dots and must stay one part.
+    parts = re.split(r"\.(?![^(]*\))", cleaned_id)
     base_id = parts[0]
 
     # 2. Validate Base ID
@@ -181,8 +184,10 @@ def validate_svg_id(element_id: str) -> tuple[bool, Optional[str]]:
         is_flag = is_flag_extension or part_base in FLAG_EXTENSIONS
 
         # A. Field Types (only if NOT recognised as a modifier)
-        # Note: gen_ and qrcode_ at position 1 also count as the "primary type carrier"
-        is_primary_carrier = i == 1 and (part.startswith("gen_") or part.startswith("qrcode_"))
+        # Note: gen_, qrcode_ and barcode_ at position 1 also count as the "primary type carrier"
+        is_primary_carrier = i == 1 and (
+            part.startswith("gen_") or part.startswith("qrcode_") or part.startswith("barcode_")
+        )
 
         if (not is_modifier_prefix and not is_flag and part_base in VALID_TYPES) or is_primary_carrier:
             is_whitelisted = True

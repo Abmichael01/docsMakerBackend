@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 FIELD_TYPES = [
     "text", "textarea", "checkbox", "date", "upload",
     "number", "email", "tel", "gen", "password",
-    "range", "color", "file", "status", "sign", "qrcode",
+    "range", "color", "file", "status", "sign", "qrcode", "barcode",
     "hide", "hide_checked", "hide_unchecked"
 ]
 
@@ -199,6 +199,31 @@ def get_extension_value(part: str, prefix: str) -> str:
     return part.replace(prefix, "")
 
 
+def _parse_barcode_carrier(value: str) -> Tuple[str, str, bool]:
+    """
+    Parse the value after 'barcode_': (symbology)(content rule), optional AUTO: prefix.
+
+    Single-carrier format, modelled on .qrcode_. Returns (symbology, rule, is_auto).
+    Examples:
+      "(pdf417)(dep_OrderId)"      -> ("pdf417", "(dep_OrderId)", False)
+      "AUTO:(code128)(rn[12])"     -> ("code128", "(rn[12])", True)
+      "(ean13)"                    -> ("ean13", "", False)
+      "pdf417"  (legacy, no parens)-> ("pdf417", "", False)
+    """
+    v = value or ""
+    is_auto = False
+    if v.startswith("AUTO:"):
+        is_auto = True
+        v = v[5:]
+    m = re.match(r"^\(([^)]*)\)(.*)$", v)
+    if m:
+        return m.group(1), m.group(2), is_auto
+    # Backward-compat: bare symbology with no parentheses.
+    sym_match = re.match(r"^[^(]*", v)
+    sym = sym_match.group(0) if sym_match else ""
+    return sym, v[len(sym):], is_auto
+
+
 # ============================================================================
 # SVG ID VALIDATION — extracted to svg_validator.py for clean code
 # ============================================================================
@@ -328,6 +353,7 @@ def parse_field_extensions(parts: List[str]) -> Dict[str, Any]:
         "tracking_role": None,
         "date_format": None,
         "generation_rule": None,
+        "symbology": None,  # bwip-js bcid for barcode fields (e.g. "code128", "ean13")
         "editable": False,
         "is_tracking_id": False,
         "requires_grayscale": False,
@@ -380,7 +406,18 @@ def parse_field_extensions(parts: List[str]) -> Dict[str, Any]:
             # Extract generation rule for QR codes
             result["generation_rule"] = get_extension_value(part, "qrcode_")
             result["field_type"] = "qrcode"
-        
+
+        elif part.startswith("barcode_"):
+            # Single-carrier format: barcode_(symbology)(content rule), optional AUTO:.
+            # Mirrors how .qrcode_ keeps everything in one carrier.
+            sym, rule, is_auto = _parse_barcode_carrier(get_extension_value(part, "barcode_"))
+            result["field_type"] = "barcode"
+            result["symbology"] = sym or None
+            if rule:
+                result["generation_rule"] = ("AUTO:" + rule) if is_auto else rule
+            elif is_auto:
+                result["generation_rule"] = "AUTO:"
+
         # Handle flag extensions
         elif part == "tracking_id":
             result["field_type"] = "gen"
@@ -485,6 +522,9 @@ def create_regular_field(base_id: str, element_id: str, extensions: Dict[str, An
         field["generationRule"] = extensions["generation_rule"]
         if extensions["generation_rule"].startswith("AUTO:"):
             field["generationMode"] = "auto"
+
+    if extensions.get("symbology"):
+        field["symbology"] = extensions["symbology"]
     
     if extensions.get("max_generation"):
         field["maxGeneration"] = extensions["max_generation"]
@@ -532,7 +572,7 @@ def parse_field_from_id(element_id: str, text_content: str = "") -> Optional[Dic
     KNOWN_FIELD_TYPES = {
         "text", "textarea", "select", "checkbox", "date", "upload",
         "file", "sign", "gen", "status", "hide", "number", "range",
-        "color", "email", "tel", "url", "password", "qrcode",
+        "color", "email", "tel", "url", "password", "qrcode", "barcode",
     }
 
     try:

@@ -86,6 +86,8 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
             for update in field_updates:
                 if update['id'] in field_map:
                     field_map[update['id']]['currentValue'] = update['value']
+                    if update.get('barcodeImage') is not None:
+                        field_map[update['id']]['barcodeImage'] = update['barcodeImage']
                 else:
                     # If it doesn't match a template field, still add it as a custom field
                     field_map[update['id']] = {
@@ -93,6 +95,8 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
                         'currentValue': update['value'],
                         'name': update['id'].replace('_', ' ').capitalize()
                     }
+                    if update.get('barcodeImage') is not None:
+                        field_map[update['id']]['barcodeImage'] = update['barcodeImage']
             instance.form_fields = list(field_map.values())
 
         self.charge_if_test_false(instance, validated_data, is_update=False)
@@ -110,9 +114,13 @@ class PurchasedTemplateSerializer(serializers.ModelSerializer):
             for update in field_updates:
                 if update['id'] in field_map:
                     field_map[update['id']]['currentValue'] = update['value']
+                    if update.get('barcodeImage') is not None:
+                        field_map[update['id']]['barcodeImage'] = update['barcodeImage']
                 else:
                     # New field (shouldn't happen often but for safety)
                     field_map[update['id']] = {'id': update['id'], 'currentValue': update['value']}
+                    if update.get('barcodeImage') is not None:
+                        field_map[update['id']]['barcodeImage'] = update['barcodeImage']
             instance.form_fields = list(field_map.values())
             instance.save(update_fields=['form_fields'])
 

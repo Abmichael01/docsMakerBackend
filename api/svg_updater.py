@@ -34,6 +34,22 @@ def _generate_qr_code(data: str) -> str:
     return f"data:image/png;base64,{img_str}"
 
 
+# Barcode symbologies whose aspect ratio must be preserved on injection (all 2D
+# matrices, MaxiCode, and the height-modulated postal codes). Mirrors the frontend
+# barcodeSymbologies catalog. Plain linear codes may stretch to fill their box.
+_BARCODE_FIXED_ASPECT = frozenset({
+    "qrcode", "microqr", "datamatrix", "gs1datamatrix", "gs1qrcode",
+    "azteccode", "pdf417", "micropdf417", "maxicode", "codablockf",
+    "dotcode", "hanxin",
+    "onecode", "postnet", "planet", "royalmail", "auspost", "japanpost", "kix",
+})
+
+
+def _barcode_keeps_aspect(symbology: str) -> bool:
+    """Whether a barcode symbology must NOT be stretched when injected."""
+    return bool(symbology) and symbology.lower() in _BARCODE_FIXED_ASPECT
+
+
 def _extract_from_dependency(depends_on: str, field_values: Dict[str, Any]) -> str:
     """
     Mirror frontend dependency extraction logic.
@@ -247,6 +263,12 @@ def update_svg_from_field_updates(
         field_id = field.get("id")
         value = computed_values.get(field_id, "")
 
+        # Barcode fields are baked client-side (single-source): the finished PNG
+        # lives in `barcodeImage`. Inject it directly — the backend never encodes
+        # a barcode. `currentValue` stays the human-readable source text.
+        if (field.get("type") or "").lower() == "barcode":
+            value = field.get("barcodeImage") or ""
+
         # Select fields - match frontend logic: hide all first, then show selected
         options = field.get("options")
         if options:
@@ -326,7 +348,7 @@ def update_svg_from_field_updates(
             tag_name = el.tag.split("}")[-1] if "}" in el.tag else el.tag
             
             is_image_tag = tag_name in {"image", "use"}
-            is_image_field = field_type in {"upload", "file", "sign", "qrcode"}
+            is_image_field = field_type in {"upload", "file", "sign", "qrcode", "barcode"}
             # Support .depends both as a type and as an extension in the ID for backward compatibility
             is_depends_field = field_type == "depends" or ".depends" in field_id
             
@@ -370,7 +392,12 @@ def update_svg_from_field_updates(
                     # Set both modern 'href' and legacy 'xlink:href' for max compatibility
                     el.set("href", value)
                     el.set("{http://www.w3.org/1999/xlink}href", value)
-                    el.set("preserveAspectRatio", "none")
+                    # 2D / postal barcodes must keep their aspect ratio or they
+                    # won't scan; everything else stretches to fill its box.
+                    if field_type == "barcode" and _barcode_keeps_aspect(field.get("symbology") or ""):
+                        el.set("preserveAspectRatio", "xMidYMid meet")
+                    else:
+                        el.set("preserveAspectRatio", "none")
             
             # 2. VISIBILITY SPECIAL CASES (Can apply to any tag)
             elif field_type == "hide" or field_type == "status":
