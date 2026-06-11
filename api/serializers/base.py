@@ -5,6 +5,9 @@ from api.utils import get_signed_url
 class FieldUpdateSerializer(serializers.Serializer):
     id = serializers.CharField()
     value = serializers.JSONField(required=False, allow_null=True)
+    # Baked barcode PNG (single-source): the frontend encodes the barcode and
+    # ships the finished image so the server-side render can inject it directly.
+    barcodeImage = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
 
 class ToolSerializer(serializers.ModelSerializer):
