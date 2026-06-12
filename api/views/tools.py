@@ -4,6 +4,6 @@ from ..serializers import ToolSerializer
 from ..permissions import IsAdminOrReadOnly
 
 class ToolViewSet(viewsets.ModelViewSet):
-    queryset = Tool.objects.all().order_by('name')
+    queryset = Tool.objects.select_related('tutorial').order_by('name')
     serializer_class = ToolSerializer
     permission_classes = [IsAdminOrReadOnly]

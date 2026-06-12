@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from ..models import Tool, Font, TransformVariable, SiteSettings
+from ..models import Tool, Font, TransformVariable, SiteSettings, Tutorial
 from api.utils import get_signed_url
 
 class FieldUpdateSerializer(serializers.Serializer):
@@ -11,9 +11,52 @@ class FieldUpdateSerializer(serializers.Serializer):
 
 
 class ToolSerializer(serializers.ModelSerializer):
+    tutorial = serializers.SerializerMethodField()
+
     class Meta:
         model = Tool
         fields = '__all__'
+
+    def get_tutorial(self, obj):
+        # Plain dict instead of TutorialSerializer to avoid a circular import
+        # (serializers/templates.py imports from this module).
+        tutorial = getattr(obj, 'tutorial', None)
+        if tutorial:
+            return {
+                'id': tutorial.id,
+                'url': tutorial.url,
+                'title': tutorial.title,
+                'is_featured': tutorial.is_featured,
+            }
+        return None
+
+    def _sync_tutorial(self, tool):
+        """Create/update/clear the tool's tutorial from tutorial_url/tutorial_title
+        in the request payload (same contract as TemplateSerializer)."""
+        request = self.context.get('request')
+        if not request:
+            return
+        tutorial_url = request.data.get('tutorial_url')
+        if tutorial_url is None:
+            return  # field absent: leave the tutorial untouched
+        tutorial_title = request.data.get('tutorial_title') or ''
+        if tutorial_url == '':
+            Tutorial.objects.filter(tool=tool).delete()
+            return
+        Tutorial.objects.update_or_create(
+            tool=tool,
+            defaults={'url': tutorial_url, 'title': tutorial_title},
+        )
+
+    def create(self, validated_data):
+        tool = super().create(validated_data)
+        self._sync_tutorial(tool)
+        return tool
+
+    def update(self, instance, validated_data):
+        tool = super().update(instance, validated_data)
+        self._sync_tutorial(tool)
+        return tool
 
 
 class TransformVariableSerializer(serializers.ModelSerializer):

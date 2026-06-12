@@ -15,15 +15,28 @@ class TutorialSerializer(serializers.ModelSerializer):
     template_name = serializers.CharField(source='template.name', read_only=True)
     template_tool = serializers.CharField(source='template.tool.id', read_only=True, allow_null=True)
     template_tool_name = serializers.CharField(source='template.tool.name', read_only=True, allow_null=True)
-    
+    tool_name = serializers.CharField(source='tool.name', read_only=True, allow_null=True)
+
     class Meta:
         model = Tutorial
-        fields = ['id', 'template', 'template_name', 'template_tool', 'template_tool_name', 'url', 'title', 'created_at', 'updated_at']
+        fields = [
+            'id', 'template', 'template_name', 'template_tool', 'template_tool_name',
+            'tool', 'tool_name', 'url', 'title', 'is_featured', 'created_at', 'updated_at'
+        ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        template = attrs.get('template', getattr(self.instance, 'template', None))
+        tool = attrs.get('tool', getattr(self.instance, 'tool', None))
+        if template and tool:
+            raise serializers.ValidationError(
+                'A tutorial can be linked to a template or a tool, not both.'
+            )
+        return attrs
 
 
 class TemplateSerializer(serializers.ModelSerializer):
-    tutorial = TutorialSerializer(read_only=True)
+    tutorial = serializers.SerializerMethodField()
     fonts = FontSerializer(many=True, read_only=True)
     font_ids = serializers.PrimaryKeyRelatedField(
         many=True,
@@ -49,7 +62,24 @@ class TemplateSerializer(serializers.ModelSerializer):
             'keywords', 'fonts', 'font_ids', 'tutorial', 'svg_url', 'tool_price', 
             'version', 'svg'
         ]
-    
+
+    def get_tutorial(self, obj):
+        """Resolve which tutorial the template usage page should show.
+
+        Rule: the template's own tutorial wins; if the template has none,
+        fall back to its tool's tutorial; if neither exists, return None
+        (the frontend hides the "Watch Tutorial" button when this is null).
+
+        NOTE: reverse OneToOne access raises RelatedObjectDoesNotExist when
+        no row exists — use getattr(obj, 'tutorial', None) instead of obj.tutorial.
+        """
+        tutorial = getattr(obj, 'tutorial', None)
+        if not tutorial and obj.tool:
+            tutorial = getattr(obj.tool, 'tutorial', None)
+        if tutorial:
+            return TutorialSerializer(tutorial).data
+        return None
+
     def get_version(self, obj):
         return int(obj.updated_at.timestamp())
     

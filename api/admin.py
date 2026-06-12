@@ -54,8 +54,9 @@ class SiteSettingsAdmin(admin.ModelAdmin):
 
 @admin.register(Tutorial)
 class TutorialAdmin(admin.ModelAdmin):
-    list_display = ('title', 'template', 'url')
-    search_fields = ('title', 'url')
+    list_display = ('title', 'template', 'tool', 'is_featured', 'url')
+    list_filter = ('is_featured',)
+    search_fields = ('title', 'url', 'template__name', 'tool__name')
 
 @admin.register(Font)
 class FontAdmin(admin.ModelAdmin):
