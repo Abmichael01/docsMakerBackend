@@ -31,7 +31,7 @@ class TemplateViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'keywords', 'tool__name', 'tool__description']
 
     def get_queryset(self):
-        queryset = Template.objects.select_related('tool', 'tutorial').prefetch_related('fonts')
+        queryset = Template.objects.select_related('tool', 'tool__tutorial', 'tutorial').prefetch_related('fonts')
         hot_param = self.request.query_params.get("hot")
         tool_param = self.request.query_params.get("tool")
 
@@ -114,7 +114,7 @@ class AdminTemplateViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'keywords', 'tool__name', 'tool__description']
     
     def get_queryset(self):
-        queryset = Template.objects.select_related('tool', 'tutorial').prefetch_related('fonts')
+        queryset = Template.objects.select_related('tool', 'tool__tutorial', 'tutorial').prefetch_related('fonts')
         hot_param = self.request.query_params.get("hot")
         tool_param = self.request.query_params.get("tool")
 

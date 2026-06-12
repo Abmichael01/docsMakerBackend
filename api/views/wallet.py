@@ -206,16 +206,22 @@ class TransactionHistoryView(APIView):
         status_filter = request.GET.get('status', 'all').strip().lower()
         page_size = int(request.GET.get('page_size', 20))
 
+        days_param = request.GET.get('days')
+        date_str = request.GET.get('date')
         start_datetime, end_datetime, range_label, days = get_admin_date_range(
-            days_param=request.GET.get('days'),
-            date_str=request.GET.get('date')
+            days_param=days_param,
+            date_str=date_str
         )
 
         transactions = Transaction.objects.select_related('wallet__user').filter(
             wallet__user__is_staff=False,
             wallet__user__is_superuser=False,
-            created_at__range=(start_datetime, end_datetime),
         )
+        # Only restrict the table when a range was explicitly requested;
+        # otherwise the default 1-day window silently empties the list
+        # and the paginator dead-ends at "Page 1 of 1".
+        if days_param or date_str:
+            transactions = transactions.filter(created_at__range=(start_datetime, end_datetime))
 
         if search:
             transactions = transactions.filter(

@@ -259,11 +259,26 @@ class PurchasedTemplate(models.Model):
         return f"{self.buyer.username} - {self.name}"
 
 class Tutorial(models.Model):
-    template = models.OneToOneField(Template, on_delete=models.CASCADE, related_name='tutorial')
+    # A tutorial is scoped to exactly one of: a template, a tool, or neither (general).
+    template = models.OneToOneField(Template, on_delete=models.CASCADE, related_name='tutorial', null=True, blank=True)
+    tool = models.OneToOneField(Tool, on_delete=models.CASCADE, related_name='tutorial', null=True, blank=True)
     url = models.URLField()
     title = models.CharField(max_length=255, blank=True)
+    is_featured = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-is_featured', '-created_at']
+        constraints = [
+            models.CheckConstraint(
+                check=~(models.Q(template__isnull=False) & models.Q(tool__isnull=False)),
+                name='tutorial_single_scope',
+            ),
+        ]
+
+    def __str__(self):
+        return self.title or self.url
 
 class Font(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

@@ -376,9 +376,11 @@ class AdminDocuments(APIView):
             search = request.GET.get('search', '').strip()
             doc_type = request.GET.get('type', 'all').strip().lower()
             
+            days_param = request.GET.get('days')
+            date_str = request.GET.get('date')
             start_datetime, end_datetime, range_label, days = get_admin_date_range(
-                days_param=request.GET.get('days'),
-                date_str=request.GET.get('date')
+                days_param=days_param,
+                date_str=date_str
             )
 
             queryset = (
@@ -402,7 +404,11 @@ class AdminDocuments(APIView):
             elif doc_type == 'test':
                 queryset = queryset.filter(test=True)
 
-            queryset = queryset.filter(created_at__range=(start_datetime, end_datetime))
+            # Only restrict the table when a range was explicitly requested;
+            # otherwise the default 1-day window silently empties the list
+            # and the paginator dead-ends at "Page 1 of 1".
+            if days_param or date_str:
+                queryset = queryset.filter(created_at__range=(start_datetime, end_datetime))
 
             stats = cache.get(f'admin_documents_stats_{range_label}')
             if stats is None:
