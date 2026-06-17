@@ -389,9 +389,18 @@ def update_svg_from_field_updates(
                     if field_type == "qrcode":
                         logger.info(f"[SVG-Updater] Setting QR code image for {field_id} (len: {len(value)})")
                     
+                    target_el = el
+                    if tag_name == "use":
+                        href_attr = el.get("href") or el.get("{http://www.w3.org/1999/xlink}href") or ""
+                        if href_attr.startswith("#"):
+                            referenced_id = href_attr[1:]
+                            referenced_els = element_map.get(referenced_id, [])
+                            if referenced_els:
+                                target_el = referenced_els[0]
+
                     # Set both modern 'href' and legacy 'xlink:href' for max compatibility
-                    el.set("href", value)
-                    el.set("{http://www.w3.org/1999/xlink}href", value)
+                    target_el.set("href", value)
+                    target_el.set("{http://www.w3.org/1999/xlink}href", value)
                     # 2D / postal barcodes must keep their aspect ratio or they
                     # won't scan; everything else stretches to fill its box.
                     if field_type == "barcode" and _barcode_keeps_aspect(field.get("symbology") or ""):
@@ -451,8 +460,21 @@ def update_svg_from_field_updates(
                         y = float(el.get("y", 0))
                         
                         if is_image_tag:
-                            w = float(el.get("width", 0))
-                            h = float(el.get("height", 0))
+                            w_val = el.get("width")
+                            h_val = el.get("height")
+                            if tag_name == "use" and (w_val is None or h_val is None):
+                                href_attr = el.get("href") or el.get("{http://www.w3.org/1999/xlink}href") or ""
+                                if href_attr.startswith("#"):
+                                    referenced_id = href_attr[1:]
+                                    referenced_els = element_map.get(referenced_id, [])
+                                    if referenced_els:
+                                        ref_el = referenced_els[0]
+                                        if w_val is None:
+                                            w_val = ref_el.get("width")
+                                        if h_val is None:
+                                            h_val = ref_el.get("height")
+                            w = float(w_val) if w_val is not None else 0
+                            h = float(h_val) if h_val is not None else 0
                             cx = x + w / 2
                             cy = y + h / 2
                         else:

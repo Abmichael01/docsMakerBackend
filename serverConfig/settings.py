@@ -369,15 +369,15 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_THROTTLE_RATES': {
         # Baseline limits — tune in env if needed
-        'anon': os.getenv('THROTTLE_ANON', '120/min'),
-        'user': os.getenv('THROTTLE_USER', '300/min'),
-        # Scoped throttles (per-view) — keep tight on sensitive endpoints
-        'auth_login':    os.getenv('THROTTLE_AUTH_LOGIN',    '5/min'),
-        'auth_register': os.getenv('THROTTLE_AUTH_REGISTER', '5/min'),
-        'auth_password': os.getenv('THROTTLE_AUTH_PASSWORD', '5/min'),
-        'wallet_write':  os.getenv('THROTTLE_WALLET_WRITE',  '20/min'),
-        'analytics_ingest': os.getenv('THROTTLE_ANALYTICS_INGEST', '120/min'),
-        'admin_read':    os.getenv('THROTTLE_ADMIN_READ',    '600/min'),
+        'anon': os.getenv('THROTTLE_ANON', '120/min' if IS_PRODUCTION else '1000/min'),
+        'user': os.getenv('THROTTLE_USER', '300/min' if IS_PRODUCTION else '1000/min'),
+        # Scoped throttles (per-view) — keep tight on sensitive endpoints in production
+        'auth_login':    os.getenv('THROTTLE_AUTH_LOGIN',    '5/min' if IS_PRODUCTION else '120/min'),
+        'auth_register': os.getenv('THROTTLE_AUTH_REGISTER', '5/min' if IS_PRODUCTION else '120/min'),
+        'auth_password': os.getenv('THROTTLE_AUTH_PASSWORD', '5/min' if IS_PRODUCTION else '120/min'),
+        'wallet_write':  os.getenv('THROTTLE_WALLET_WRITE',  '20/min' if IS_PRODUCTION else '120/min'),
+        'analytics_ingest': os.getenv('THROTTLE_ANALYTICS_INGEST', '120/min' if IS_PRODUCTION else '1000/min'),
+        'admin_read':    os.getenv('THROTTLE_ADMIN_READ',    '600/min' if IS_PRODUCTION else '2000/min'),
     },
 }
 
@@ -415,7 +415,7 @@ AUTHENTICATION_BACKENDS = [
 # Configured VPN-safe: lockouts apply to the USERNAME only, never the IP.
 # That way users sharing a VPN exit IP can't lock each other out.
 # ---------------------------------------------------------------------------
-AXES_ENABLED = os.getenv('AXES_ENABLED', 'True') == 'True'
+AXES_ENABLED = os.getenv('AXES_ENABLED', 'True' if IS_PRODUCTION else 'False') == 'True'
 AXES_FAILURE_LIMIT = int(os.getenv('AXES_FAILURE_LIMIT', '5'))
 AXES_COOLOFF_TIME = timedelta(minutes=int(os.getenv('AXES_COOLOFF_MIN', '30')))
 AXES_LOCK_OUT_AT_FAILURE = True
@@ -494,25 +494,7 @@ CSRF_COOKIE_PATH = '/'
 SESSION_COOKIE_SAMESITE = 'None'
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_PATH = '/' 
-
-# # JWT / Auth cookies
-# JWT_COOKIE_SAMESITE = 'Lax'
-# JWT_COOKIE_SECURE = False
-# JWT_COOKIE_HTTPONLY = True
-# JWT_COOKIE_PATH = '/'
-
-# # CSRF
-# CSRF_COOKIE_SAMESITE = 'Lax'
-# CSRF_COOKIE_SECURE = False
-# CSRF_COOKIE_HTTPONLY = False
-# CSRF_COOKIE_PATH = '/'
-
-# # Session (if used)
-# SESSION_COOKIE_SAMESITE = 'Lax'
-# SESSION_COOKIE_SECURE = False
-# SESSION_COOKIE_HTTPONLY = True
-# SESSION_COOKIE_PATH = '/'
+SESSION_COOKIE_PATH = '/'
 
 
 SIMPLE_JWT = {
