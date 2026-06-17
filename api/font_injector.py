@@ -20,6 +20,8 @@ STYLE_BLOCK_PATTERN = re.compile(r'<style[^>]*>(.*?)</style>', re.DOTALL | re.IG
 SVG_PATTERN = re.compile(r'(<svg[^>]*>)', re.IGNORECASE)
 FONT_FACE_BLOCK_PATTERN = re.compile(r'@font-face\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', re.IGNORECASE | re.DOTALL)
 FONT_FAMILY_IN_FONTFACE_PATTERN = re.compile(r'font-family\s*:\s*["\']([^"\']+)["\']', re.IGNORECASE)
+FONT_WEIGHT_IN_FONTFACE_PATTERN = re.compile(r'font-weight\s*:\s*([^;}]+)', re.IGNORECASE)
+FONT_STYLE_IN_FONTFACE_PATTERN = re.compile(r'font-style\s*:\s*([^;}]+)', re.IGNORECASE)
 URL_SRC_PATTERN = re.compile(r'src\s*:\s*url\s*\(\s*["\']?(https?://[^)"\'\s]+)', re.IGNORECASE)
 STYLE_PATTERN_IN_DEFS = re.compile(r'(<style[^>]*>)(<!\[CDATA\[)?(.*?)(\]\]>)?(</style>)', re.IGNORECASE | re.DOTALL)
 
@@ -39,6 +41,18 @@ def _normalize_font_key(name: Optional[str], weight: str = "normal", style: str 
     base_key = re.sub(r'[^a-z0-9]', '', name.lower())
     # Create unique key for family + weight + style combination
     return f"{base_key}_{weight}_{style}"
+
+
+def _extract_font_face_variant_key(font_face_block: str) -> str:
+    family_match = FONT_FAMILY_IN_FONTFACE_PATTERN.search(font_face_block)
+    if not family_match:
+        return ""
+
+    weight_match = FONT_WEIGHT_IN_FONTFACE_PATTERN.search(font_face_block)
+    style_match = FONT_STYLE_IN_FONTFACE_PATTERN.search(font_face_block)
+    weight = weight_match.group(1).strip().strip('\'"') if weight_match else "normal"
+    style = style_match.group(1).strip().strip('\'"') if style_match else "normal"
+    return _normalize_font_key(family_match.group(1), weight, style)
 
 
 def _extract_font_aliases(svg_content: str) -> dict:
@@ -124,7 +138,7 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
     alias_map = _extract_font_aliases(svg_content)
     
     # Generate @font-face declarations
-    font_faces: List[Tuple[str, str]] = []
+    font_faces: List[Tuple[str, str, str]] = []
     for font in fonts:
         font_family = font.name
         font_format = font.get_font_format()
@@ -164,15 +178,12 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
         if not font_url:
             continue
         
-        # Use explicit family if present, otherwise font.name
-        # Important: Group variants under the same family name
-        effective_family = font.family if font.family else font.name
-        
         # If we have a clean family name, use it. 
         # Otherwise fallback to matching logic which might grab the full name "Roboto Bold" as family
         if font.family:
-             css_family = font.family
+            css_family = font.family
         else:
+            css_family = None
             # Try to find what SVG uses
             candidates = _get_font_candidates(font)
             # ... existing matching logic ...
@@ -185,7 +196,7 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
             
             if not css_family:
                 # If no family set and no match, default to name
-                 css_family = font.name
+                css_family = font.name
 
         weight = getattr(font, 'weight', 'normal')
         style = getattr(font, 'style', 'normal')
@@ -227,32 +238,31 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
             
             # Extract existing font-families from @font-face declarations ONLY (not from regular CSS)
             # This prevents skipping fonts that are used in CSS but don't have @font-face yet
-            existing_families = set()
-            url_based_families = set()  # Track which fonts use URLs (need replacement when embed_base64=True)
+            existing_variants = set()
+            url_based_variants = set()  # Track which fonts use URLs (need replacement when embed_base64=True)
             
             # Match @font-face blocks first, then extract font-family from within them
             # Use pre-compiled patterns for better performance
             for font_face_block in FONT_FACE_BLOCK_PATTERN.findall(existing_style):
-                for match in FONT_FAMILY_IN_FONTFACE_PATTERN.findall(font_face_block):
-                    family_key = _normalize_font_key(match)
-                    existing_families.add(family_key)
-                    
-                    # Check if this @font-face uses a URL (not base64)
-                    if URL_SRC_PATTERN.search(font_face_block):
-                        url_based_families.add(family_key)
+                variant_key = _extract_font_face_variant_key(font_face_block)
+                if not variant_key:
+                    continue
+                existing_variants.add(variant_key)
+
+                # Check if this @font-face uses a URL (not base64)
+                if URL_SRC_PATTERN.search(font_face_block):
+                    url_based_variants.add(variant_key)
             
             # When embed_base64=True, replace URL-based @font-face declarations
             # Otherwise, only add font-faces that don't already exist
-            if embed_base64 and url_based_families:
+            if embed_base64 and url_based_variants:
                 # Remove all @font-face blocks that use URLs and need to be replaced
                 modified_style = existing_style
                 for font_face_block in FONT_FACE_BLOCK_PATTERN.findall(existing_style):
-                    family_matches = FONT_FAMILY_IN_FONTFACE_PATTERN.findall(font_face_block)
-                    if family_matches:
-                        family_key = _normalize_font_key(family_matches[0])
-                        if family_key in url_based_families and family_key in unique_font_map:
-                            # This URL-based font will be replaced with base64
-                            modified_style = modified_style.replace(font_face_block, '', 1)
+                    variant_key = _extract_font_face_variant_key(font_face_block)
+                    if variant_key in url_based_variants and variant_key in unique_font_map:
+                        # This URL-based font will be replaced with base64
+                        modified_style = modified_style.replace(font_face_block, '', 1)
                 
                 # Now add all our fonts (new ones + replacements for removed URL-based ones)
                 missing_font_faces = []
@@ -301,4 +311,3 @@ def inject_fonts_into_svg(svg_content: str, fonts: List[Font], base_url: Optiona
         cache.set(cache_key, svg_content, 3600)
     
     return svg_content
-

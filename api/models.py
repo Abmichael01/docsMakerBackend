@@ -1,5 +1,6 @@
 import uuid
 import logging
+import os
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
@@ -291,6 +292,15 @@ class Font(models.Model):
 
     class Meta:
         ordering = ['name']
+
+    def get_font_format(self):
+        ext = os.path.splitext(self.font_file.name or "")[1].lower().lstrip(".")
+        return {
+            "ttf": "truetype",
+            "otf": "opentype",
+            "woff": "woff",
+            "woff2": "woff2",
+        }.get(ext, "truetype")
 
     def __str__(self):
         return self.name
