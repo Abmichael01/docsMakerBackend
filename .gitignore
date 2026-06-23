@@ -18,7 +18,6 @@ __pycache__/
 *.py[cod]
 
 # VSCode or JetBrains settings (optional)
-.vscode/
 .idea/
 
 # Logs
@@ -42,3 +41,6 @@ __pycache__/
 cloudflare-b2-worker/
 
 cloudflare-b2-worker/
+test_original.svg
+test_safe_optimized.svg
+test_optimized.svg
